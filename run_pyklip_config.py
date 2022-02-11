@@ -20,6 +20,7 @@ import os
 import re
 import sys
 import urllib
+import yaml
 
 from astropy.table import Table
 from scipy.interpolate import interp1d, RegularGridInterpolator
@@ -45,24 +46,29 @@ nircam = webbpsf.NIRCam()
 rad2mas = 180./np.pi*3600.*1000.
 mas2rad = np.pi/180./3600./1000.
 
+with open("config.yaml", "r") as stream:
+    try:
+        config = yaml.safe_load(stream)
+    except:
+        raise yaml.YAMLError
 
 # =============================================================================
 # PARAMETERS
 # =============================================================================
-idir = '/Users/acarter/Documents/DIRECT_IMAGING/JWST/HIFI_SIMS/NIRCam/20220209/jwst_s1s2_data/' # input directory with stage 2 calibrated data
-odir = '/Users/acarter/Documents/DIRECT_IMAGING/JWST/HIFI_SIMS/PIPELINE_REDUCE/TESTING/' # output directory for the plots and pyKLIP products
-transmissiondir = '/Users/acarter/Documents/DIRECT_IMAGING/JWST/HIFI_SIMS/ANCILLARY/transmissions/' # directory containing the transmission functions from https://jwst-docs.stsci.edu/jwst-near-infrared-camera/nircam-instrumentation/nircam-coronagraphic-occulting-masks-and-lyot-stops
-psfmaskdir = '../psfmasks/' # directory for the PSF masks (will be downloaded automatically from CRDS)
-use_psfmask = True # if true use PSF masks from CRDS, if false use transmission functions
-offsetpsfdir = '../offsetpsfs/' # directory for the offset PSFs (will be generated automatically using WebbPSF)
+idir = config['idir'] # input directory with stage 2 calibrated data
+odir = config['odir'] # output directory for the plots and pyKLIP products
+transmissiondir = config['transmissiondir'] # directory containing the transmission functions from https://jwst-docs.stsci.edu/jwst-near-infrared-camera/nircam-instrumentation/nircam-coronagraphic-occulting-masks-and-lyot-stops
+psfmaskdir = config['psfmaskdir'] # directory for the PSF masks (will be downloaded automatically from CRDS)
+use_psfmask = config['use_psfmask'] # if true use PSF masks from CRDS, if false use transmission functions
+offsetpsfdir = config['offsetpsfdir'] # directory for the offset PSFs (will be generated automatically using WebbPSF)
 
-mode = ['RDI'] # list of modes for pyKLIP, will loop through all
-annuli = [1] # list of number of annuli for pyKLIP, will loop through all
-subsections = [1] # list of number of subsections for pyKLIP, will loop through all
-numbasis = [1, 2, 5, 10, 20, 50, 100] # list of number of basis vectors for pyKLIP, will loop through all
-verbose = True # if true print status updates
+mode = config['mode'] # list of modes for pyKLIP, will loop through all
+annuli = config['annuli'] # list of number of annuli for pyKLIP, will loop through all
+subsections = config['subsections'] # list of number of annuli for pyKLIP, will loop through all
+numbasis = config['numbasis'] # list of number of basis vectors for pyKLIP, will loop through all
+verbose = config['verbose'] # if true print status updates
 
-fiducial_point_override = True # if true uses narrow end of the bar masks, if false use filter dependent position
+fiducial_point_override = config['fiducial_point_override'] # if true uses narrow end of the bar masks, if false use filter dependent position
 
 # Host star magnitude in each filter. Must contain one entry for each filter
 # used in the data in the input directory.
@@ -72,15 +78,16 @@ mstar = {'F250M': 6, # vegamag
          'F410M': 6, # vegamag
          'F444W': 6, # vegamag
          }
-ra_off = [418.] # mas; RA offset of the known companions in the same order as in the NIRCCoS config file
-de_off = [-698.] # mas; DEC offset of the known companions in the same order as in the NIRCCoS config file
-pa_ranges_bar = [(105.-15., 105.+15.), (285.-15., 285.+15.)] # deg; list of tuples defining the pizza slices that shall be considered when computing the contrast curves for the bar masks
 
-seps_inject_rnd = [5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 25., 30.0, 35.0, 40.0] # pix; list of separations at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
-pas_inject_rnd = [0., 45., 90., 135., 180., 225., 270., 315.] # deg; list of position angles at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
-seps_inject_bar = [2.0, 4.0, 6.0, 8.0, 10.0, 12.5, 15.0, 17.5, 20.0, 25.0, 30.0] # pix; list of separations at which fake planets shall be injected to compute the calibrated contrast curve for the bar masks
-pas_inject_bar = [45., 135., 225., 315.] # deg; list of position angles at which fake planets shall be injected to compute the calibrated contrast curve for the bar masks
-KL = -1 # index of the KL component for which the calibrated contrast curve and the companion properties shall be computed
+ra_off = config['ra_off'] # mas; RA offset of the known companions in the same order as in the NIRCCoS config file
+de_off = config['de_off'] # mas; DEC offset of the known companions in the same order as in the NIRCCoS config file
+pa_ranges_bar = config['pa_ranges_bar']# deg; list of tuples defining the pizza slices that shall be considered when computing the contrast curves for the bar masks
+
+seps_inject_rnd = config['seps_inject_rnd'] # pix; list of separations at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
+pas_inject_rnd = config['pas_inject_rnd'] # deg; list of position angles at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
+seps_inject_bar = config['seps_inject_bar'] # pix; list of separations at which fake planets shall be injected to compute the calibrated contrast curve for the bar masks
+pas_inject_bar = config['pas_inject_bar'] # deg; list of position angles at which fake planets shall be injected to compute the calibrated contrast curve for the bar masks
+KL = config['KL'] # index of the KL component for which the calibrated contrast curve and the companion properties shall be computed
 
 
 # =============================================================================
@@ -1790,7 +1797,7 @@ if __name__ == '__main__':
                      subsections=subsections,
                      numbasis=numbasis,
                      verbose=verbose)
-    #proc.run_pyklip()
+    proc.run_pyklip()
 
     proc.raw_contrast_curve(mstar,
                             ra_off=ra_off,

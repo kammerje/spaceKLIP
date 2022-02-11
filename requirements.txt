@@ -1,0 +1,9 @@
+# Required Packages
+astropy
+matplotlib
+numpy
+git+https://bitbucket.org/pyKLIP/pyklip.git@jwst
+pyyaml
+scipy
+webbpsf
+
