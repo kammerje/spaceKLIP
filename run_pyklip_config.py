@@ -35,7 +35,7 @@ import pyklip.fm as fm
 import pyklip.fmlib.fmpsf as fmpsf
 import pyklip.instruments.JWST as JWST
 import pyklip.klip as klip
-import pyklip.parallelized as parallelize
+import pyklip.parallelized as parallelized
 
 # Only required by old transmission model.
 # sys.path.append('/Users/jkammerer/Documents/Code/opticstools/opticstools')
@@ -386,7 +386,7 @@ class processor():
                         psflib_filepaths = np.array(self.obs[key]['FITSFILE'][ww_cal], dtype=str).tolist()
                         dataset = JWST.JWSTData(filepaths=filepaths,
                                                 psflib_filepaths=psflib_filepaths)
-                        parallelize.klip_dataset(dataset=dataset,
+                        parallelized.klip_dataset(dataset=dataset,
                                                   mode=mode,
                                                   outputdir=odir,
                                                   fileprefix=key,

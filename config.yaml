@@ -16,7 +16,7 @@ fiducial_point_override: True # if true uses narrow end of the bar masks, if fal
 
 ##### PSF Subtraction Settings #####
 mode: ['RDI']       # list of modes for pyKLIP, will loop through all
-annuli: [1]         # list of number of annuli for pyKLIP, will loop through all
+annuli: [2]         # list of number of annuli for pyKLIP, will loop through all
 subsections: [1]    # list of number of annuli for pyKLIP, will loop through all
 numbasis: [1, 2, 5, 10, 20, 50, 100] # list of number of basis vectors for pyKLIP, will loop through all
 
