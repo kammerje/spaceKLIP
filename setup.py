@@ -5,6 +5,10 @@ from setuptools import setup, find_packages
 with open('requirements.txt') as f:
     REQUIRES = f.read().splitlines()
 
+    print(REQUIRES)
+    exit()
+
+
 
 setup(name='pyKLIP_for_Webb',
       version='0.0.1',
