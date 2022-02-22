@@ -6,6 +6,7 @@ from astropy.table import Table
 from . import io
 from . import subtraction
 from . import contrast
+from . import companion
 
 class Params():
     """
@@ -288,6 +289,7 @@ class JWSTReduction(Reduction):
         sub = subtraction.klip_subtraction(self.params, self.obs)
         raw_contrast = contrast.raw_contrast_curve(self.params, self.obs)
         cal_contrast = contrast.calibrated_contrast_curve(self.params, self.obs)
+        extract_comps = companion.extract_companions(self.params, self.obs)
 
         return
     

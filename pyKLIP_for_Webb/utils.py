@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 
 import webbpsf
 
+rad2mas = 180./np.pi*3600.*1000.
+
 def get_offsetpsf(offsetpsfdir,
                   obs,
                   filt,

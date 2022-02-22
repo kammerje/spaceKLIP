@@ -1,3 +1,4 @@
+from . import companion
 from . import contrast
 from . import engine
 from . import io

@@ -14,8 +14,6 @@ import pyklip.parallelized as parallelized
 
 from . import utils
 
-rad2mas = 180./np.pi*3600.*1000.
-
 def raw_contrast_curve(params, obs): # vegamag
     """
     Compute the raw contrast curves. Known companions and the location of
@@ -81,7 +79,7 @@ def raw_contrast_curve(params, obs): # vegamag
                     mask = key[temp[3]+1:temp[4]]
                     subarr = key[temp[4]+1:]
                     wave = params.wave[filt] # m
-                    fwhm = wave/params.diam*rad2mas/pxsc # pix
+                    fwhm = wave/params.diam*utils.rad2mas/pxsc # pix
                     hdr = hdul[0].header
                     hdul.close()
                     
@@ -246,7 +244,7 @@ def calibrated_contrast_curve(params, obs, overwrite=False):
                     mask = key[temp[3]+1:temp[4]]
                     subarr = key[temp[4]+1:]
                     wave = params.wave[filt] # m
-                    fwhm = wave/params.diam*rad2mas/pxsc # pix
+                    fwhm = wave/params.diam*utils.rad2mas/pxsc # pix
                     hdul.close()
                     
                     # Load raw contrast curves. If overwrite is false,
