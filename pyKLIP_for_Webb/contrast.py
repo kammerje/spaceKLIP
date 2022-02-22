@@ -3,8 +3,14 @@ import sys, re, os
 import numpy as np
 import astropy.io.fits as pyfits
 import matplotlib.pyplot as plt
+from functools import partial
+from astropy.table import Table
+from scipy.optimize import least_squares
 
 import pyklip.klip as klip
+import pyklip.instruments.JWST as JWST
+import pyklip.fakes as fakes
+import pyklip.parallelized as parallelized
 
 from . import utils
 
@@ -149,16 +155,7 @@ def raw_contrast_curve(params, obs): # vegamag
     
     return None
 
-def cal_contrast_curve(self,
-                       mstar, # vegamag
-                       ra_off=[], # mas
-                       de_off=[], # mas
-                       seps_inject_rnd=[], # pix
-                       pas_inject_rnd=[], # deg
-                       seps_inject_bar=[], # pix
-                       pas_inject_bar=[], # deg
-                       KL=-1,
-                       overwrite=False):
+def calibrated_contrast_curve(params, obs, overwrite=False):
     """
     Compute the calibrated contrast curves. Injection and recovery tests
     are performed to estimate the algo & coronmsk throughput.
@@ -201,58 +198,62 @@ def cal_contrast_curve(self,
     overwrite: bool
         If true overwrite existing data.
     """
-    
-    if (self.verbose == True):
+    verbose = params.verbose
+
+    if (verbose == True):
         print('--> Computing calibrated contrast curve...')
     
     # Make inputs arrays.
-    seps_inject_rnd = np.array(seps_inject_rnd)
-    pas_inject_rnd = np.array(pas_inject_rnd)
-    seps_inject_bar = np.array(seps_inject_bar)
-    pas_inject_bar = np.array(pas_inject_bar)
+    seps_inject_rnd = np.array(params.seps_inject_rnd)
+    pas_inject_rnd = np.array(params.pas_inject_rnd)
+    seps_inject_bar = np.array(params.seps_inject_bar)
+    pas_inject_bar = np.array(params.pas_inject_bar)
     
     # Loop through all modes, numbers of annuli, and numbers of
     # subsections.
-    Nscenarios = len(self.mode)*len(self.annuli)*len(self.subsections)
+    Nscenarios = len(params.mode)*len(params.annuli)*len(params.subsections)
     counter = 1
-    for mode in self.mode:
-        for annuli in self.annuli:
-            for subsections in self.subsections:
+    params.truenumbasis = {}
+    for mode in params.mode:
+        for annuli in params.annuli:
+            for subsections in params.subsections:
                 
-                if (self.verbose == True):
+                if (verbose == True):
                     sys.stdout.write('\r--> Mode = '+mode+', annuli = %.0f, subsections = %.0f, scenario %.0f of %.0f' % (annuli, subsections, counter, Nscenarios))
                     sys.stdout.flush()
                 
                 # Define the input and output directories for each set of
                 # pyKLIP parameters.
-                idir = self.odir+mode+'_annu%.0f_subs%.0f/FITS/' % (annuli, subsections)
-                odir = self.odir+mode+'_annu%.0f_subs%.0f/CONS/' % (annuli, subsections)
+                idir = params.odir+mode+'_annu%.0f_subs%.0f/FITS/' % (annuli, subsections)
+                odir = params.odir+mode+'_annu%.0f_subs%.0f/CONS/' % (annuli, subsections)
                 if (not os.path.exists(odir)):
                     os.makedirs(odir)
                 
                 # Loop through all sets of observing parameters.
-                for i, key in enumerate(self.obs.keys()):
-                    ww_sci = np.where(self.obs[key]['TYP'] == 'SCI')[0]
-                    filepaths = np.array(self.obs[key]['FITSFILE'][ww_sci], dtype=str).tolist()
-                    ww_cal = np.where(self.obs[key]['TYP'] == 'CAL')[0]
-                    psflib_filepaths = np.array(self.obs[key]['FITSFILE'][ww_cal], dtype=str).tolist()
+                for i, key in enumerate(obs.keys()):
+                    params.truenumbasis[key] = [num for num in params.numbasis if (num <= params.maxnumbasis[key])]
+
+                    ww_sci = np.where(obs[key]['TYP'] == 'SCI')[0]
+                    filepaths = np.array(obs[key]['FITSFILE'][ww_sci], dtype=str).tolist()
+                    ww_cal = np.where(obs[key]['TYP'] == 'CAL')[0]
+                    psflib_filepaths = np.array(obs[key]['FITSFILE'][ww_cal], dtype=str).tolist()
                     hdul = pyfits.open(idir+key+'-KLmodes-all.fits')
                     data = hdul[0].data
-                    pxsc = self.obs[key]['PIXSCALE'][0] # mas
+                    pxsc = obs[key]['PIXSCALE'][0] # mas
                     cent = (hdul[0].header['PSFCENTX'], hdul[0].header['PSFCENTY']) # pix
                     temp = [s.start() for s in re.finditer('_', key)]
                     filt = key[temp[1]+1:temp[2]]
                     mask = key[temp[3]+1:temp[4]]
                     subarr = key[temp[4]+1:]
-                    wave = self.wave[filt] # m
-                    fwhm = wave/self.diam*rad2mas/pxsc # pix
+                    wave = params.wave[filt] # m
+                    fwhm = wave/params.diam*rad2mas/pxsc # pix
                     hdul.close()
                     
                     # Load raw contrast curves. If overwrite is false,
                     # check whether the calibrated contrast curves have
                     # been computed already.
-                    seps = np.load(odir+key+'-seps.npy')[KL] # arcsec
-                    cons = np.load(odir+key+'-cons.npy')[KL]
+                    seps = np.load(odir+key+'-seps.npy')[params.KL] # arcsec
+                    cons = np.load(odir+key+'-cons.npy')[params.KL]
                     if (overwrite == False):
                         try:
                             flux_all = np.load(odir+key+'-flux_all.npy') # MJy/sr
@@ -268,7 +269,7 @@ def cal_contrast_curve(self,
                     # 2D map of the total throughput, i.e., an integration
                     # time weighted average of the coronmsk transmission
                     # over the rolls.
-                    tottp = self.get_transmission(pxsc, filt, mask, subarr, odir, key)
+                    tottp = utils.get_transmission(params, obs, pxsc, filt, mask, subarr, odir, key)
                     
                     # The calibrated contrast curves have not been
                     # computed already.
@@ -278,12 +279,12 @@ def cal_contrast_curve(self,
                         # time weighted average of the unocculted offset
                         # PSF over the rolls (does account for pupil mask
                         # throughput).
-                        offsetpsf = self.get_offsetpsf(filt, mask, key)
+                        offsetpsf = utils.get_offsetpsf(params.offsetpsfdir, obs, filt, mask, key)
                         
                         # Convert the units and compute the injected
                         # fluxes. They need to be in the units of the data
                         # which is MJy/sr.
-                        Fstar = self.F0[filt]/10.**(mstar[filt]/2.5)/1e6*np.max(offsetpsf) # MJy; convert the host star brightness from vegamag to MJy
+                        Fstar = params.F0[filt]/10.**(params.mstar[filt]/2.5)/1e6*np.max(offsetpsf) # MJy; convert the host star brightness from vegamag to MJy
                         if (mask in ['MASKASWB', 'MASKALWB']):
                             cons_inject = np.interp(seps_inject_bar*pxsc/1000., seps, cons)*5. # inject at 5 times 5 sigma
                         else:
@@ -296,9 +297,9 @@ def cal_contrast_curve(self,
                         # fluxes into the injection and recovery routine.
                         good = np.isnan(flux_inject) == False
                         if (mask in ['MASKASWB', 'MASKALWB']):
-                            flux_all, seps_all, pas_all, flux_retr_all = self.inject_recover(filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, filt, mask, 10.*fwhm, flux_inject[good], seps_inject_bar[good], pas_inject_bar, KL, ra_off, de_off)
+                            flux_all, seps_all, pas_all, flux_retr_all = inject_recover(params, obs, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, filt, mask, 10.*fwhm, flux_inject[good], seps_inject_bar[good], pas_inject_bar, params.KL, params.ra_off, params.de_off)
                         else:
-                            flux_all, seps_all, pas_all, flux_retr_all = self.inject_recover(filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, filt, mask, 10.*fwhm, flux_inject[good], seps_inject_rnd[good], pas_inject_rnd, KL, ra_off, de_off)
+                            flux_all, seps_all, pas_all, flux_retr_all = inject_recover(params, obs, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, filt, mask, 10.*fwhm, flux_inject[good], seps_inject_rnd[good], pas_inject_rnd, params.KL, params.ra_off, params.de_off)
                         np.save(odir+key+'-flux_all.npy', flux_all) # MJy/sr
                         np.save(odir+key+'-seps_all.npy', seps_all) # pix
                         np.save(odir+key+'-pas_all.npy', pas_all) # deg
@@ -312,19 +313,19 @@ def cal_contrast_curve(self,
                     med_res = res.group_by('seps')
                     med_res = med_res.groups.aggregate(np.nanmedian)
                     p0 = np.array([1., 0., 1., 0.2, 15.])
-                    pp = least_squares(self.func_lnprob, p0, args=(med_res['seps'], med_res['tps']))
+                    pp = least_squares(func_lnprob, p0, args=(med_res['seps'], med_res['tps']))
                     # p0 = np.array([0., 1., 1.])
                     # pp = least_squares(self.growth_lnprob, p0, args=(med_res['seps']*pxsc/1000., med_res['tps']))
-                    corr_cons = cons/self.func(pp['x'], seps*1000./pxsc)
+                    corr_cons = cons/func(pp['x'], seps*1000./pxsc)
                     np.save(odir+key+'-pp.npy', pp['x'])
                     
                     # Plot.
                     f, ax = plt.subplots(1, 2, figsize=(2*6.4, 1*4.8))
                     extl = (data.shape[1]+1.)/2.*pxsc/1000. # arcsec
                     extr = (data.shape[1]-1.)/2.*pxsc/1000. # arcsec
-                    ax[0].imshow(np.log10(np.abs(data[KL])), origin='lower', cmap='inferno', extent=(extl, -extr, -extl, extr))
-                    for i in range(len(ra_off)):
-                        cc = plt.Circle((ra_off[i]/1000., de_off[i]/1000.), 10.*pxsc/1000., fill=False, edgecolor='green', linewidth=3)
+                    ax[0].imshow(np.log10(np.abs(data[params.KL])), origin='lower', cmap='inferno', extent=(extl, -extr, -extl, extr))
+                    for i in range(len(params.ra_off)):
+                        cc = plt.Circle((params.ra_off[i]/1000., params.de_off[i]/1000.), 10.*pxsc/1000., fill=False, edgecolor='green', linewidth=3)
                         ax[0].add_artist(cc)
                     for i in range(len(flux_all)):
                         ra = seps_all[i]*pxsc*np.sin(np.deg2rad(pas_all[i])) # mas
@@ -341,8 +342,8 @@ def cal_contrast_curve(self,
                     p1 = ax[1].imshow(tottp, origin='lower', cmap='viridis', vmin=0., vmax=1., extent=(extl, -extr, -extl, extr))
                     c1 = plt.colorbar(p1, ax=ax[1])
                     c1.set_label('Transmission', rotation=270, labelpad=20)
-                    for i in range(len(ra_off)):
-                        cc = plt.Circle((ra_off[i]/1000., de_off[i]/1000.), 10.*pxsc/1000., fill=False, edgecolor='green', linewidth=3)
+                    for i in range(len(params.ra_off)):
+                        cc = plt.Circle((params.ra_off[i]/1000., params.de_off[i]/1000.), 10.*pxsc/1000., fill=False, edgecolor='green', linewidth=3)
                         ax[1].add_artist(cc)
                     for i in range(len(flux_all)):
                         ra = seps_all[i]*pxsc*np.sin(np.deg2rad(pas_all[i])) # mas
@@ -366,7 +367,7 @@ def cal_contrast_curve(self,
                     f, ax = plt.subplots(1, 2, figsize=(2*6.4, 1*4.8))
                     ax[0].plot(med_res['seps'], med_res['tps'], color='mediumaquamarine', label='Median throughput')
                     ax[0].scatter(res['seps'], res['tps'], s=75, color='mediumaquamarine', alpha=0.5)
-                    ax[0].plot(xx, self.func(pp['x'], xx), color='teal', label='Best fit model')
+                    ax[0].plot(xx, func(pp['x'], xx), color='teal', label='Best fit model')
                     ax[0].set_xlim([xx[0], xx[-1]])
                     ax[0].set_ylim([0.0, 1.2])
                     ax[0].grid(axis='y')
@@ -388,12 +389,12 @@ def cal_contrast_curve(self,
                     plt.close()
                 counter += 1
     
-    if (self.verbose == True):
+    if (verbose == True):
         print('')
     
     return None
 
-
+ 
 def mask_companions(data,
                     pxsc, # mas
                     cent, # pix
@@ -482,3 +483,208 @@ def mask_bar(data,
         data_masked[:, mask] = data[:, mask]
     
     return data_masked
+
+
+def inject_recover(params,
+                   obs,
+                   filepaths,
+                   psflib_filepaths,
+                   mode,
+                   odir,
+                   key,
+                   annuli,
+                   subsections,
+                   pxsc, # mas
+                   filt,
+                   mask,
+                   mrad, # pix
+                   flux_inject=[], # MJy/sr
+                   seps_inject=[], # pix
+                   pas_inject=[], # deg
+                   KL=-1,
+                   ra_off=[], # mas
+                   de_off=[]): # mas
+    """
+    Inject fake companions and recover them by fitting a 2D Gaussian.
+    Makes sure that the injected fake companions are not too close to any
+    real companions and also that fake companions which are too close to
+    each other are injected into different fake datasets.
+    
+    TODO: recover fake companions by fitting an offset PSF instead of a 2D
+          Gaussian.
+    
+    TODO: currently uses WebbPSF to compute a theoretical offset PSF. It
+          should be possible to use PSF stamps extracted from the
+          astrometric confirmation images in the future.
+    
+    TODO: use a position dependent offset PSF from pyNRC instead of the
+          completely unocculted offset PSF from WebbPSF.
+    
+    Parameters
+    ----------
+    filepaths: list of str
+        List of stage 2 reduced science target files for the considered
+        observation.
+    psflib_filepaths: list of str
+        List of stage 2 reduced reference target files for the considered
+        observation.
+    mode: list of str
+        List of modes for pyKLIP, will loop through all.
+    odir: str
+        Output directory for the plots and pyKLIP products.
+    key: str
+        Dictionary key of the self.obs dictionary specifying the
+        considered observation.
+    annuli: list of int
+        List of number of annuli for pyKLIP, will loop through all.
+    subsections: list of int
+        List of number of subsections for pyKLIP, will loop through all.
+    pxsc: float
+        Pixel scale of the data.
+    filt: str
+        Filter name from JWST data header.
+    mask: str
+        Coronagraphic mask name from JWST data header.
+    mrad: float
+        Radius of the mask that is used to mask out the companions.
+    flux_inject: list of float
+        List of fluxes at which fake planets shall be injected.
+    seps_inject: list of float
+        List of separations at which fake planets shall be injected.
+    pas_inject: list of float
+        List of position angles at which fake planets shall be injected.
+    KL: int
+        Index of the KL component for which the fake companions shall be
+        injected.
+    ra_off: list of float
+        RA offset of the companions that shall be masked out.
+    de_off: list of float
+        DEC offset of the companions that shall be masked out.
+    
+    Returns
+    -------
+    
+    """
+    
+    # Sanitize inputs.
+    Nfl = len(flux_inject)
+    Nse = len(seps_inject)
+    Npa = len(pas_inject)
+    if (Nfl != Nse):
+        raise UserWarning('Injected fluxes need to match injected separations')
+    
+    # Create an output directory for the datasets with fake companions.
+    odir_temp = odir+'FITS/'
+    if (not os.path.exists(odir_temp)):
+        os.makedirs(odir_temp)
+    
+    # Offset PSF from WebbPSF, i.e., an integration time weighted average
+    # of the unocculted offset PSF over the rolls (normalized to a peak
+    # flux of 1).
+    offsetpsf = utils.get_offsetpsf(params.offsetpsfdir, obs, filt, mask, key)
+    offsetpsf /= np.max(offsetpsf)
+    
+    # Initialize outputs.
+    flux_all = [] # MJy/sr
+    seps_all = [] # pix
+    pas_all = [] # deg
+    flux_retr_all = [] # MJy/sr
+    done = []
+    
+    # Do not inject fake companions closer than mrad to any known
+    # companion.
+    for i in range(Nse):
+        for j in range(Npa):
+            ra = seps_inject[i]*pxsc*np.sin(np.deg2rad(pas_inject[j])) # mas
+            de = seps_inject[i]*pxsc*np.cos(np.deg2rad(pas_inject[j])) # mas
+            for k in range(len(ra_off)):
+                dist = np.sqrt((ra-ra_off[k])**2+(de-de_off[k])**2) # mas
+                if (dist < mrad*pxsc):
+                    done += [i*Npa+j]
+                    break
+    
+    # If not finished yet, create a new pyKLIP dataset into which fake
+    # companions will be injected.
+    finished = False
+    ctr = 0
+    while (finished == False):
+        dataset = JWST.JWSTData(filepaths=filepaths,
+                                psflib_filepaths=psflib_filepaths)
+        
+        # Inject fake companions. Make sure that no other fake companion
+        # closer than mrad will be injected into the same dataset.
+        todo = []
+        for i in range(Nse):
+            for j in range(Npa):
+                if (i*Npa+j not in done):
+                    ra = seps_inject[i]*pxsc*np.sin(np.deg2rad(pas_inject[j])) # mas
+                    de = seps_inject[i]*pxsc*np.cos(np.deg2rad(pas_inject[j])) # mas
+                    flag = True
+                    for k in range(len(todo)):
+                        jj = todo[k] % Npa
+                        ii = (todo[k]-jj)//Npa
+                        ra_temp = seps_inject[ii]*pxsc*np.sin(np.deg2rad(pas_inject[jj])) # mas
+                        de_temp = seps_inject[ii]*pxsc*np.cos(np.deg2rad(pas_inject[jj])) # mas
+                        dist = np.sqrt((ra-ra_temp)**2+(de-de_temp)**2) # mas
+                        if (dist < mrad*pxsc):
+                            flag = False
+                            break
+                    if (flag == True):
+                        todo += [i*Npa+j]
+                        done += [i*Npa+j]
+                        stamp = np.array([offsetpsf*flux_inject[i] for k in range(dataset.input.shape[0])]) # MJy/sr
+                        fakes.inject_planet(frames=dataset.input, centers=dataset.centers, inputflux=stamp, astr_hdrs=dataset.wcs, radius=seps_inject[i], pa=pas_inject[j], field_dependent_correction=partial(utils.correct_transmission, params=params))
+                        flux_all += [flux_inject[i]] # MJy/sr
+                        seps_all += [seps_inject[i]] # pix
+                        pas_all += [pas_inject[j]] # deg
+        
+        # Run pyKLIP.
+        parallelized.klip_dataset(dataset=dataset,
+                                  mode=mode,
+                                  outputdir=odir_temp,
+                                  fileprefix='FAKE_%04.0f_' % ctr+key,
+                                  annuli=annuli,
+                                  subsections=subsections,
+                                  movement=1,
+                                  numbasis=[params.truenumbasis[key][KL]],
+                                  calibrate_flux=False,
+                                  maxnumbasis=params.maxnumbasis[key],
+                                  psf_library=dataset.psflib,
+                                  highpass=False,
+                                  verbose=False)
+        
+        # Recover fake companions by fitting a 2D Gaussian.
+        klipdataset = odir_temp+'FAKE_%04.0f_' % ctr+key+'-KLmodes-all.fits'
+        with pyfits.open(klipdataset) as hdul:
+            outputfile = hdul[0].data[0]
+            outputfile_centers = [hdul[0].header['PSFCENTX'], hdul[0].header['PSFCENTY']]
+        for k in range(len(todo)):
+            jj = todo[k] % Npa
+            ii = (todo[k]-jj)//Npa
+            fake_flux = fakes.retrieve_planet_flux(frames=outputfile, centers=outputfile_centers, astr_hdrs=dataset.output_wcs[0], sep=seps_inject[ii], pa=pas_inject[jj], searchrad=5)
+            flux_retr_all += [fake_flux] # MJy/sr
+        ctr += 1
+        
+        # Check if finished, i.e., if all fake companions were injected.
+        # If not, continue with a new dataset.
+        if (len(done) == Nse*Npa):
+            finished = True
+    
+    # Make outputs arrays.
+    flux_all = np.array(flux_all) # MJy/sr
+    seps_all = np.array(seps_all) # pix
+    pas_all = np.array(pas_all) # deg
+    flux_retr_all = np.array(flux_retr_all) # MJy/sr
+    
+    return flux_all, seps_all, pas_all, flux_retr_all
+
+    
+def func(p,x):
+    
+    y = p[0]*(1.-np.exp(-(x-p[1])**2/(2*p[2]**2)))*(1-p[3]*np.exp(-(x-p[4])**2/(2*p[2]**2)))
+    y[x < p[1]] = 0.
+    
+    return y
+
+def func_lnprob(p,x,y):
+    return np.abs(y[:-1]-func(p, x[:-1]))

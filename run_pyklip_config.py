@@ -918,7 +918,7 @@ class processor():
                                                              input_wvs=input_wvs,
                                                              spectrallib=[guess_spec],
                                                              spectrallib_units='contrast',
-                                                             field_dependent_correction=self.correct_transmission)
+                                                             field_dependent_correction=correct_transmission)
                                 
                                 # Compute the forward modeled datasets.
                                 annulus = [[guess_sep-20., guess_sep+20.]] # pix

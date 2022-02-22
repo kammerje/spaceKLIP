@@ -287,6 +287,7 @@ class JWSTReduction(Reduction):
         """
         sub = subtraction.klip_subtraction(self.params, self.obs)
         raw_contrast = contrast.raw_contrast_curve(self.params, self.obs)
+        cal_contrast = contrast.calibrated_contrast_curve(self.params, self.obs)
 
         return
     
