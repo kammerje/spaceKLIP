@@ -6,7 +6,7 @@ import numpy as np
 import pyklip.instruments.JWST as JWST
 import pyklip.parallelized as parallelized
 
-def KLIPSubtraction(obs, params):
+def klip_subtraction(params, obs):
     """
     Run pyKLIP.
     

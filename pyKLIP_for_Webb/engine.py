@@ -5,10 +5,11 @@ from astropy.table import Table
 
 from . import io
 from . import subtraction
+from . import contrast
 
 class Params():
     """
-    Class to hold a variety of parameters for the pipeline stages.
+    Class to hold a variety of parameters for the reduction stages.
     """
     def __init__(self):
         return
@@ -18,13 +19,13 @@ class Params():
         # for debugging purposes.
         return
 
-class Pipeline():
+class Reduction():
     """
-    Generic Pipeline Class
+    Generic Reduction Class
     """
     def __init__(self, config_file):
         """
-        Initialise a generic pipeline class by reading a config file and 
+        Initialise a generic reduction class by reading a config file and 
         assigning parameters to a Params object:
         """
 
@@ -39,13 +40,13 @@ class Pipeline():
 
         return
 
-class JWSTPipeline(Pipeline):
+class JWSTReduction(Reduction):
     """
-    JWST Pipeline specific class.
+    JWST Reduction specific class.
     """
     def __init__(self, config_file):
         """
-        Initialize a JWST Pipeline Class
+        Initialize a JWST Reduction Class
         
         Note: this class only works with NIRCam so far.
         
@@ -65,15 +66,6 @@ class JWSTPipeline(Pipeline):
 
         # Get properties for JWST
         self.get_jwst_params()
-
-        # Host star magnitude in each filter. Must contain one entry for each filter
-        # used in the data in the input directory.
-        mstar = {'F250M': 6, # vegamag
-                 'F300M': 6, # vegamag
-                 'F356W': 6, # vegamag
-                 'F410M': 6, # vegamag
-                 'F444W': 6, # vegamag
-                 }
 
         # Create an astropy table for each unique set of observing parameters
         # (filter, coronagraph, ...). Save all information that is needed
@@ -291,9 +283,10 @@ class JWSTPipeline(Pipeline):
 
     def run(self):
         """
-        Run pipeline based on inputs from the config file. 
+        Run reduction based on inputs from the config file. 
         """
-        sub = subtraction.KLIPSubtraction(self.obs, self.params)
+        sub = subtraction.klip_subtraction(self.params, self.obs)
+        raw_contrast = contrast.raw_contrast_curve(self.params, self.obs)
 
         return
     
