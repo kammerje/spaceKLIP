@@ -6,6 +6,7 @@ from scipy.ndimage import rotate, shift
 from scipy.interpolate import RegularGridInterpolator
 
 import matplotlib.pyplot as plt
+import urllib
 
 import webbpsf
 
