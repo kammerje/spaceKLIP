@@ -2,6 +2,10 @@ import os
 
 import numpy as np
 import astropy.io.fits as pyfits
+import astropy.units as u
+from synphot import SourceSpectrum, SpectralElement, Observation
+from synphot.models import Empirical1D
+from synphot.units import convert_flux
 from scipy.ndimage import rotate, shift
 from scipy.interpolate import RegularGridInterpolator
 
@@ -9,6 +13,9 @@ import matplotlib.pyplot as plt
 import urllib
 
 import webbpsf
+import webbpsf_ext 
+
+
 
 rad2mas = 180./np.pi*3600.*1000.
 
@@ -245,3 +252,80 @@ def correct_transmission(stamp,
     transmission = transmission.reshape(stamp.shape)
     
     return transmission*stamp
+
+def get_stellar_magnitudes(params, obs):
+    # First find out if a file was provided correctly
+    if not os.path.isfile(params.sdir):
+        # Not a valid input
+        raise ValueError('Stellar directory not recognised, please supply a valid filepath.')
+
+    # Check if this is a Vizier VOTable, if so, use webbpsf_ext
+    if params.sdir[-4:] == '.vot':
+        # Pick an arbitrary bandpass+magnitude to normalise the initial SED. Exact choice
+        # doesn't matter as will be be refitting this model using the provided data. Important
+        # thing is the spectral type (user provided).
+        bp_k = webbpsf_ext.bp_2mass('k')
+        bp_mag = 5
+
+        # Magnitude value is arbitrary, as we will be using the Vizier photometry to renormalise and fit the SED. 
+        spec = webbpsf_ext.spectra.source_spectrum(name='Input Data + SED', sptype=params.spt, mag_val=bp_mag, bp=bp_k, votable_file=params.sdir)
+
+        # Want to adjust where we fit the spectrum based on the observing filter, just roughly split between NIRCam and MIRI
+        if 'NIRCAM' in list(obs.keys())[0]:
+            wlim = [1,5]
+        elif 'MIRI' in list(obs.keys())[0]:
+            wlim = [10, 20] 
+
+        # Fit the SED to the selected data
+        spec.fit_SED(x0=[1.0], wlim=wlim, use_err=False) #Don't use the error as it breaks things.
+        # spec.plot_SED()
+        # plt.show()
+
+        # Want to convert the flux to photlam so that it matches the per photon throughputs?
+        input_flux = u.Quantity(spec.sp_model.flux, str(spec.sp_model.fluxunits))
+        photlam_flux = convert_flux(spec.sp_model.wave, input_flux, out_flux_unit='photlam')
+
+        # Spectrum is originally from pysynphot (outdated), convert to synphot.
+        SED = SourceSpectrum(Empirical1D, points=spec.sp_model.wave << u.Unit(str(spec.sp_model.waveunits)), lookup_table=photlam_flux << u.Unit('photlam'))
+    # If not a VOTable, try to read it in. 
+    else:
+        try:
+            # Open file and grab wavelength and flux arrays
+            data = np.genfromtxt(params.sdir).transpose()
+            model_wave = data[0]
+            model_flux = data[1]
+
+            # Create a synphot spectrum
+            SED = SourceSpectrum(Empirical1D, points=model_wave << u.Unit('micron'), lookup_table=model_flux << u.Unit('Jy'))
+        except:
+            raise ValueError("Unable to read in provided file. Ensure format is in two columns with wavelength (microns), flux (Jy)")
+
+    ### Now, perform synthetic observations on the SED to get stellar magnitudes
+    # Get the filters used from the input datasets
+    instrument = list(obs.keys())[0].split('_')[0] #Get instrument of first filter
+    filters = [i.split('_')[2] for i in list(obs.keys())]
+    
+    # Calculate magnitude in each filter
+    mstar = {}
+    for filt in filters:
+        # Read in the bandpass correctly
+        bpstring = '/../resources/PCEs/{}/{}.txt'.format(instrument, filt)
+        bpfile = os.path.join(os.path.dirname(__file__) + bpstring)
+        
+        with open(bpfile) as bandpass_file:
+            bandpass_data = np.genfromtxt(bandpass_file).transpose()
+            bandpass_wave = bandpass_data[0] * 1e4 #Convert from microns to angstrom
+            bandpass_throughput = bandpass_data[1]
+
+        # Create the bandpass object
+        Bandpass = SpectralElement(Empirical1D, points=bandpass_wave, lookup_table=bandpass_throughput)
+
+        # Perform synthetic observation
+        Obs = Observation(SED, Bandpass, binset=Bandpass.waveset)
+        VegaSED = SourceSpectrum.from_vega()
+        magnitude = Obs.effstim(flux_unit='vegamag', vegaspec=VegaSED).value
+
+        # Add magnitude to dictionary
+        mstar[filt.upper()] = magnitude
+
+    return mstar

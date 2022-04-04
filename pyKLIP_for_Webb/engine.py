@@ -7,6 +7,7 @@ from . import io
 from . import subtraction
 from . import contrast
 from . import companion
+from . import utils
 
 class Params():
     """
@@ -168,6 +169,9 @@ class JWSTReduction(Reduction):
         # Find the maximum numbasis based on the number of available
         # calibrator frames.
         self.get_maxnumbasis()
+
+        # Gather magnitudes for the target star
+        self.params.mstar = utils.get_stellar_magnitudes(self.params, self.obs)
         
         return None
 
