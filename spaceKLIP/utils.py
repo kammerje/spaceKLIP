@@ -323,9 +323,11 @@ def get_stellar_magnitudes(params, obs):
         # Perform synthetic observation
         Obs = Observation(SED, Bandpass, binset=Bandpass.waveset)
         VegaSED = SourceSpectrum.from_vega()
-        magnitude = Obs.effstim(flux_unit='vegamag', vegaspec=VegaSED).value
+        magnitude = Obs.effstim(flux_unit='Jy', vegaspec=VegaSED).value
 
         # Add magnitude to dictionary
         mstar[filt.upper()] = magnitude
+    print(mstar)
+    exit()
 
     return mstar
