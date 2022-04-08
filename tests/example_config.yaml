@@ -62,7 +62,6 @@ pas_inject_bar: [45., 135., 225., 315.] # deg; list of position angles at which 
 ##### Companion Photometry / Astrometry Settings ######
 #######################################################
 do_companion: True
-
 nwalkers:  10
 nburn: 20
 nsteps: 80
