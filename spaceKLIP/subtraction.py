@@ -64,7 +64,7 @@ def klip_subtraction(meta):
                 # not exist yet.
                 for i, key in enumerate(meta.obs.keys()):
                     meta.truenumbasis[key] = [num for num in meta.numbasis if (num <= meta.maxnumbasis[key])]
-                    if meta.overwrite == False:
+                    if (meta.overwrite == False) and (os.path.exists(odir+'-KLmodes-all.fits')):
                         continue
                     ww_sci = np.where(meta.obs[key]['TYP'] == 'SCI')[0]
                     filepaths = np.array(meta.obs[key]['FITSFILE'][ww_sci], dtype=str).tolist()

@@ -63,9 +63,9 @@ pas_inject_bar: [45., 135., 225., 315.] # deg; list of position angles at which 
 #######################################################
 do_companion: True
 
-nwalkers:  100
-nburn: 200
-nsteps: 800
+nwalkers:  10
+nburn: 20
+nsteps: 80
 numthreads: 4
 
 
