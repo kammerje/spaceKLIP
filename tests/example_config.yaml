@@ -2,35 +2,54 @@
 ##### Configuration File for JWST Coronagraphy Pipeline #####
 #############################################################
 
+# TODO: Create readthedocs page that describe each setting in detail. 
+
+#######################
 ##### Directories #####
-idir: '/Users/acarter/Documents/DIRECT_IMAGING/JWST/HIFI_SIMS/NIRCam/20220209/jwst_s1s2_data/' # Input Directory
+#######################
+
+##### REQUIRED #####
+idir: '/Users/acarter/Documents/DIRECT_IMAGING/JWST/HIFI_SIMS/NIRCam/20220407/small_s1s2/' # Input Directory 
 odir: '/Users/acarter/Documents/DIRECT_IMAGING/JWST/HIFI_SIMS/PIPELINE_REDUCE/TESTING/' # Output Directory
-
 sdir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/HIP65426.vot' #VOT table or stellar model file.
-spt: 'A2V' # Spectral type of target, only necessary for VOTable. Keep it simple.
 
-transmissiondir: '/Users/acarter/Documents/DIRECT_IMAGING/JWST/HIFI_SIMS/ANCILLARY/transmissions/'
-psfmaskdir: '../psfmasks/'
-offsetpsfdir: '../offsetpsfs/' # directory for the offset PSFs (will be generated automatically using WebbPSF)
+##### OPTIONAL #####
+rundirs: ['2022_04_08_ADI_annu1_subs1_run3'] #Specify directory(ies) within odir of existing runs
+ancildir: None      # Specify directory to save ancillary files, if None then saved under odir/ANCILLARY/. 
 
+############################
 ##### General Settings #####
-verbose: True
+############################
+verbose: True 
+plotting: True    # Produce matplotlib plots
 use_psfmask: True # if true use PSF masks from CRDS, if false use transmission functions
 fiducial_point_override: True # if true uses narrow end of the bar masks, if false use filter dependent position
+overwrite: False   # Will overwrite existing files in a given directory
 
+########################################
+##### Star / Companion information #####
+########################################
+spt: 'A2V' # Spectral type of target, only necessary for VOTable. Keep it simple.
+ra_off: [418.] # mas; RA offset of the known companions in the same order as in the NIRCCoS config file
+de_off: [-698.] # mas; DEC offset of the known companions in the same order as in the NIRCCoS config file
+
+####################################
 ##### PSF Subtraction Settings #####
-mode: ['RDI']       # list of modes for pyKLIP, will loop through all
+####################################
+do_subtraction: True
+
+mode: ['ADI']       # list of modes for pyKLIP, will loop through all
 annuli: [1]         # list of number of annuli for pyKLIP, will loop through all
 subsections: [1]    # list of number of annuli for pyKLIP, will loop through all
 numbasis: [1, 2, 5, 10, 20, 50, 100] # list of number of basis vectors for pyKLIP, will loop through all
 
+###################################
 ##### Contrast Curve Settings #####
+###################################
+do_raw_contrast: True
+do_cal_contrast: True
+
 KL: -1 # index of the KL component for which the calibrated contrast curve and the companion properties shall be computed
-
-mstar: {'F250M': 6, 'F300M': 6, 'F356W': 6, 'F410M': 6, 'F444W': 6}
-
-ra_off: [418.] # mas; RA offset of the known companions in the same order as in the NIRCCoS config file
-de_off: [-698.] # mas; DEC offset of the known companions in the same order as in the NIRCCoS config file
 
 seps_inject_rnd: [5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 25., 30.0, 35.0, 40.0] # pix; list of separations at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
 pas_inject_rnd: [0., 45., 90., 135., 180., 225., 270., 315.] # deg; list of position angles at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
@@ -38,4 +57,16 @@ pas_inject_rnd: [0., 45., 90., 135., 180., 225., 270., 315.] # deg; list of posi
 pa_ranges_bar: [(105, 105), (285, 285)] # deg; list of tuples defining the pizza slices that shall be considered when computing the contrast curves for the bar masks
 seps_inject_bar: [2.0, 4.0, 6.0, 8.0, 10.0, 12.5, 15.0, 17.5, 20.0, 25.0, 30.0] # pix; list of separations at which fake planets shall be injected to compute the calibrated contrast curve for the bar masks
 pas_inject_bar: [45., 135., 225., 315.] # deg; list of position angles at which fake planets shall be injected to compute the calibrated contrast curve for the bar masks
+
+#######################################################
+##### Companion Photometry / Astrometry Settings ######
+#######################################################
+do_companion: True
+
+nwalkers:  100
+nburn: 200
+nsteps: 800
+numthreads: 4
+
+
 
