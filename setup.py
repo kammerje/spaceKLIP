@@ -5,7 +5,7 @@ from setuptools import setup, find_packages
 with open('requirements.txt') as f:
     REQUIRES = f.read().splitlines()
 
-setup(name='pyKLIP_for_Webb',
+setup(name='spaceKLIP',
       version='0.0.1',
       description='Reduction pipeline for JWST Coronagraphy',
       author='ERS-1386 Collaboration',
