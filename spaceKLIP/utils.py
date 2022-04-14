@@ -1,8 +1,10 @@
 import os, sys
 
-import numpy as np
+# import contextlib
 import astropy.io.fits as pyfits
 import astropy.units as u
+import numpy as np
+
 from synphot import SourceSpectrum, SpectralElement, Observation
 from synphot.models import Empirical1D
 from synphot.units import convert_flux
@@ -51,7 +53,7 @@ def get_offsetpsf(meta, filt, mask, key):
     offsetpsf = np.load(offsetpsfdir+filt+'_'+mask+'.npy')
     
     # Find the science target observations.
-    ww_sci = np.where(meta.obs[key]['TYP'] == 'SCI')[0]
+    ww_sci = np.where(meta.obs[key]['TYPE'] == 'SCI')[0]
     
     # Compute the derotated and integration time weighted average of the
     # offset PSF. Values outside of the PSF stamp are filled with zeros.
@@ -95,8 +97,8 @@ def gen_offsetpsf(offsetpsfdir, filt, mask):
     nircam.image_mask = None
     
     # Compute the offset PSF using WebbPSF and save it to the offsetpsfdir.
-    with contextlib.redirect_stdout(None): #Suppress poppy terminal printing
-        hdul = nircam.calc_psf(oversample=1)
+    # with contextlib.redirect_stdout(None): #Suppress poppy terminal printing
+    hdul = nircam.calc_psf(oversample=1)
     psf = hdul[0].data # PSF center is at (39, 39)
 
     hdul.close()
@@ -146,7 +148,7 @@ def get_transmission(meta, pxsc, filt, mask, subarr, odir, key):
         filt_temp = filt
     
     # Find the science target observations.
-    ww_sci = np.where(meta.obs[key]['TYP'] == 'SCI')[0]
+    ww_sci = np.where(meta.obs[key]['TYPE'] == 'SCI')[0]
     
     # Open the correct PSF mask. Download it from CRDS if it is not yet in the psfmaskdir.
     psfmask = meta.psfmask[filt_temp+'_'+mask+'_'+subarr]

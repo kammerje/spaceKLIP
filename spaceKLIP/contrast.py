@@ -1,10 +1,11 @@
-import sys, re, os
+import os, re, sys
 
-import numpy as np
 import astropy.io.fits as pyfits
 import matplotlib.pyplot as plt
-from functools import partial
+import numpy as np
+
 from astropy.table import Table
+from functools import partial
 from scipy.optimize import least_squares
 
 import pyklip.klip as klip
@@ -12,59 +13,47 @@ import pyklip.instruments.JWST as JWST
 import pyklip.fakes as fakes
 import pyklip.parallelized as parallelized
 
-from . import utils
-from . import plotting
 from . import io
+from . import plotting
+from . import utils
 
-def raw_contrast_curve(meta): # vegamag
+def raw_contrast_curve(meta):
     """
     Compute the raw contrast curves. Known companions and the location of
-    the bar mask in both rolls can be masked out.
-    
+    the bar mask in both rolls will be masked out.
+
     Note: currently masks a circle with a radius of 12 FWHM = ~12 lambda/D
           around known companions. This was found to be a sufficient but
           necessary value based on tests with simulated data.
-    
-    TODO: tries to convert MJy/sr to contrast using the host star
-          magnitude, but the results are wrong by a factor of ~5.
-    
+
     TODO: currently uses WebbPSF to compute a theoretical offset PSF. It
           should be possible to use PSF stamps extracted from the
           astrometric confirmation images to determine the pupil mask
           throughput.
-    
+
     Parameters
     ----------
-    mstar: dict of float
-        Host star magnitude in each filter. Must contain one entry for
-        each filter used in the data in the input directory.
-    ra_off: list of float
-        RA offset of the known companions.
-    de_off: list of float
-        DEC offset of the known companions.
-    pa_ranges_bar: list of tuple of float
-        List of tuples defining the pizza slices that shall be considered
-        when computing the contrast curves for the bar masks.
+    meta
     """
     verbose = meta.verbose
-    
-    if (verbose == True):
+
+    if verbose:
         print('--> Computing raw contrast curve...')
-    
+
     # Loop through directories of subtracted images
     for counter, rdir in enumerate(meta.rundirs):
-        if (verbose == True):
-            dirparts = rdir.split('/')[-2].split('_') #-2 because of trailing '/'
-            sys.stdout.write('\r--> Mode = {}, annuli = {}, subsections = {}, scenario {} of {}'.format(dirparts[3], dirparts[4], dirparts[5], counter+1, len(meta.rundirs)))
-            sys.stdout.flush()
-        
-        # Define the input and output directories for each set of pyKLIP parameters.
-        idir = rdir + 'SUBTRACTED/'
-        odir = rdir + 'CONTRAST/'
-        if (not os.path.exists(odir)):
+        if verbose:
+            dirparts = rdir.split('/')[-2].split('_') # -2 because of trailing '/'
+            print('--> Mode = {}, annuli = {}, subsections = {}, scenario {} of {}'.format(dirparts[3], dirparts[4], dirparts[5], counter+1, len(meta.rundirs)))
+
+        # Define the input and output directories for each set of pyKLIP
+        # parameters
+        idir = rdir+'SUBTRACTED/'
+        odir = rdir+'CONTRAST/'
+        if not os.path.exists(odir):
             os.makedirs(odir)
-        
-        # Loop through all sets of observing parameters.
+
+        # Loop through all sets of observing parameters
         for i, key in enumerate(meta.obs.keys()):
             hdul = pyfits.open(idir+key+'-KLmodes-all.fits')
             data = hdul[0].data
@@ -76,25 +65,20 @@ def raw_contrast_curve(meta): # vegamag
             subarr = key[temp[4]+1:]
             wave = meta.wave[filt] # m
             fwhm = wave/meta.diam*utils.rad2mas/pxsc # pix
-            hdr = hdul[0].header
+            head = hdul[0].header
             hdul.close()
-            
-            # Mask out known companions and the location of the
-            # bar mask in both rolls.
+
+            # Mask out known companions and the location of the bar mask in
+            # both rolls
             data_masked = mask_companions(data, pxsc, cent, 12.*fwhm, meta.ra_off, meta.de_off)
-            if (mask in ['MASKASWB', 'MASKALWB']):
+            if 'SWB' in mask or 'LWB' in mask:
                 data_masked = mask_bar(data_masked, cent, meta.pa_ranges_bar)
 
             if meta.plotting:
                 savefile = odir+key+'-mask.pdf'
                 plotting.plot_contrast_images(meta, data, data_masked, savefile=savefile, pxsc=pxsc)
 
-            # Convert the units and compute the contrast. Use an
-            # unocculted offset PSF from WebbPSF to obtain the
-            # peak count of the host star. The unocculted offset
-            # PSF from WebbPSF is normalized to an integrated
-            # source of 1 and takes into account the throughput
-            # of the pupil mask.
+            # Convert the units and compute the contrast
             offsetpsf = utils.get_offsetpsf(meta, filt, mask, key)
             Fstar = meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6*np.max(offsetpsf) # MJy; convert the host star brightness from vegamag to MJy
             Fdata = data_masked*pxsc**2/(180./np.pi*3600.*1000.)**2 # MJy; convert the data from MJy/sr to MJy
@@ -108,18 +92,15 @@ def raw_contrast_curve(meta): # vegamag
             cons = np.array(cons)
             np.save(odir+key+'-seps.npy', seps) # arcsec
             np.save(odir+key+'-cons.npy', cons)
-            
+
             if meta.plotting:
                 savefile = odir+key+'-cons_raw.pdf'
                 labels = []
                 for j in range(Fdata.shape[0]):
-                    labels.append(str(hdr['KLMODE{}'.format(j)])+' KL')
+                    labels.append(str(head['KLMODE{}'.format(j)])+' KL')
                 plotting.plot_contrast_raw(meta, seps, cons, labels=labels, savefile=savefile)
-        
-    if (verbose == True):
-        print('')
-    
-    return None
+
+    return
 
 def calibrated_contrast_curve(meta):
     """
@@ -199,9 +180,9 @@ def calibrated_contrast_curve(meta):
         for i, key in enumerate(meta.obs.keys()):
             meta.truenumbasis[key] = [num for num in meta.numbasis if (num <= meta.maxnumbasis[key])]
 
-            ww_sci = np.where(meta.obs[key]['TYP'] == 'SCI')[0]
+            ww_sci = np.where(meta.obs[key]['TYPE'] == 'SCI')[0]
             filepaths = np.array(meta.obs[key]['FITSFILE'][ww_sci], dtype=str).tolist()
-            ww_cal = np.where(meta.obs[key]['TYP'] == 'CAL')[0]
+            ww_cal = np.where(meta.obs[key]['TYPE'] == 'CAL')[0]
             psflib_filepaths = np.array(meta.obs[key]['FITSFILE'][ww_cal], dtype=str).tolist()
             hdul = pyfits.open(idir+key+'-KLmodes-all.fits')
             data = hdul[0].data

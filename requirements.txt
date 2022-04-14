@@ -1,4 +1,5 @@
 astropy
+astroquery
 matplotlib
 numpy
 pyyaml

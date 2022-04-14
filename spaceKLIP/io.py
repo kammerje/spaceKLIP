@@ -1,28 +1,27 @@
 from __future__ import division
 
-import yaml
-import json
-
 import numpy as np
+import json
+import yaml
+
 from astropy.table import Table
 
 def read_config(file):
     """
-    Read a .yaml configuration file that defines the code execution. 
+    Read a .yaml configuration file that defines the code execution.
 
     Parameters
     ----------
     file : str  
-        File path of .yaml configuration file
+        File path of .yaml configuration file.
 
     Returns
     -------
     config : dict
-        Dictionary of all configuration parameters
-
+        Dictionary of all configuration parameters.
     """
 
-    with open(file, "r") as stream:
+    with open(file, 'r') as stream:
         try:
             config = yaml.safe_load(stream)
         except:
@@ -31,7 +30,7 @@ def read_config(file):
     temp = config['pa_ranges_bar']
     Nval = len(temp)
     pa_ranges_bar = []
-    if (Nval % 2 != 0):
+    if Nval % 2 != 0:
         raise UserWarning('pa_ranges_bar needs to be list of 2-tuples')
     for i in range(Nval//2):
         pa_ranges_bar += [(float(temp[2*i][1:]), float(temp[2*i+1][:-1]))]
@@ -40,9 +39,9 @@ def read_config(file):
     return config
 
 def meta_to_json(meta, savefile='./MetaSave.txt'):
-    '''
-    Convert meta object to a dictionary and save into a json file
-    '''
+    """
+    Convert Meta object to a dictionary and save into a json file.
+    """
 
     # Need to convert astropy table to strings
     for i in meta.obs:
@@ -70,20 +69,18 @@ def meta_to_json(meta, savefile='./MetaSave.txt'):
                 if isinstance(j, np.generic):
                     l[j] = l[j].item()
             setattr(meta, i, l)
-                
 
     with open(savefile, 'w') as msavefile:
         json.dump(vars(meta), msavefile)
 
     return
 
-
-def read_metajson(filepath):
-    '''
-    Load a Meta save file as a json dictionary, don't convert
-    back into a class as it doesn't seem necessary yet. 
-    '''
-    with open(filepath) as f:
+def read_metajson(file):
+    """
+    Load a Meta save file as a json dictionary, don't convert back into a
+    class as it doesn't seem necessary yet.
+    """
+    with open(file) as f:
         metasave = json.load(f)
 
     return metasave
