@@ -27,6 +27,12 @@ def klip_subtraction(meta):
     """ 
     if (meta.verbose == True):
         print('--> Running pyKLIP...')
+
+    # Check if the image processing was performed and assign idir accordingly.
+    if meta.do_rampfit:
+        idir = meta.odir + 'RAMPFIT/'
+    else:
+        idir = meta.idir
     
     # Loop through all modes, numbers of annuli, and numbers of subsections.
     Nscenarios = len(meta.mode)*len(meta.annuli)*len(meta.subsections)
@@ -98,7 +104,4 @@ def klip_subtraction(meta):
                 #Increment counter
                 counter += 1
     
-    if (meta.verbose == True):
-        print('')
-    
-    return None
+    return 

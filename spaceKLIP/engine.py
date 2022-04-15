@@ -9,6 +9,8 @@ from . import subtraction
 from . import contrast
 from . import companion
 from . import utils
+from . import rampfit
+from . import imgprocess
 
 class Meta():
     """
@@ -73,95 +75,14 @@ class JWST(Pipeline):
         # Get properties for JWST
         self.get_jwst_meta()
 
-        # Create an astropy table for each unique set of observing parameters
-        # (filter, coronagraph, ...). Save all information that is needed
-        # later into this table. Finally, save all astropy tables into a
-        # dictionary called meta.obs.
-        ftyp = 'calints' # only consider files in the input directory that contain this string
-        fitsfiles = np.array([f for f in os.listdir(self.meta.idir) if ftyp in f and f.endswith('.fits')])
-        Nfitsfiles = len(fitsfiles)
-        
-        TARGPROP = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
-        TARG_RA = np.empty(Nfitsfiles) # deg
-        TARG_DEC = np.empty(Nfitsfiles) # deg
-        INSTRUME = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
-        DETECTOR = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
-        FILTER = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
-        PUPIL = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
-        CORONMSK = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
-        READPATT = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
-        NINTS = np.empty(Nfitsfiles, dtype=int)
-        NGROUPS = np.empty(Nfitsfiles, dtype=int)
-        NFRAMES = np.empty(Nfitsfiles, dtype=int)
-        EFFINTTM = np.empty(Nfitsfiles) # s
-        SUBARRAY = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
-        SUBPXPTS = np.empty(Nfitsfiles, dtype=int)
-        PIXSCALE = np.empty(Nfitsfiles) # mas
-        PA_V3 = np.empty(Nfitsfiles) # deg
-        HASH = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
-        for i in range(Nfitsfiles):
-            hdul = pyfits.open(self.meta.idir+fitsfiles[i])
-            head = hdul[0].header
-            TARGPROP[i] = head['TARGPROP']
-            TARG_RA[i] = head['TARG_RA'] # deg
-            TARG_DEC[i] = head['TARG_DEC'] # deg
-            INSTRUME[i] = head['INSTRUME']
-            DETECTOR[i] = head['DETECTOR']
-            FILTER[i] = head['FILTER']
-            PUPIL[i] = head['PUPIL']
-            CORONMSK[i] = head['CORONMSK']
-            READPATT[i] = head['READPATT']
-            NINTS[i] = head['NINTS']
-            NGROUPS[i] = head['NGROUPS']
-            NFRAMES[i] = head['NFRAMES']
-            EFFINTTM[i] = head['EFFINTTM'] # s
-            SUBARRAY[i] = head['SUBARRAY']
-            try:
-                SUBPXPTS[i] = head['SUBPXPTS']
-            except:
-                SUBPXPTS[i] = 1
-            if ('LONG' in DETECTOR[i]):
-                PIXSCALE[i] = self.meta.pxsc_lw # mas
-            else:
-                PIXSCALE[i] = self.meta.pxsc_sw # mas
-            head = hdul[1].header
-            PA_V3[i] = head['PA_V3'] # deg
-            HASH[i] = INSTRUME[i]+'_'+DETECTOR[i]+'_'+FILTER[i]+'_'+PUPIL[i]+'_'+CORONMSK[i]+'_'+SUBARRAY[i]
-            hdul.close()
-
-        HASH_unique = np.unique(HASH)
-        NHASH_unique = len(HASH_unique)
-        self.meta.obs = {}
-        for i in range(NHASH_unique):
-            ww = HASH == HASH_unique[i]
-            dpts = SUBPXPTS[ww]
-            dpts_unique = np.unique(dpts)
-            if ((len(dpts_unique) == 2) and (dpts_unique[0] == 1)):
-                ww_sci = np.where(dpts == dpts_unique[0])[0]
-                ww_cal = np.where(dpts == dpts_unique[1])[0]
-            else:
-                raise UserWarning('Science and reference PSFs are identified based on their number of dither positions, assuming that there is no dithering for the science PSFs')
-            tab = Table(names=('TYP', 'TARGPROP', 'TARG_RA', 'TARG_DEC', 'READPATT', 'NINTS', 'NGROUPS', 'NFRAMES', 'EFFINTTM', 'PIXSCALE', 'PA_V3', 'FITSFILE'), dtype=('S', 'S', 'f', 'f', 'S', 'i', 'i', 'i', 'f', 'f', 'f', 'S'))
-            for j in range(len(ww_sci)):
-                tab.add_row(('SCI', TARGPROP[ww][ww_sci][j], TARG_RA[ww][ww_sci][j], TARG_DEC[ww][ww_sci][j], READPATT[ww][ww_sci][j], NINTS[ww][ww_sci][j], NGROUPS[ww][ww_sci][j], NFRAMES[ww][ww_sci][j], EFFINTTM[ww][ww_sci][j], PIXSCALE[ww][ww_sci][j], PA_V3[ww][ww_sci][j], self.meta.idir+fitsfiles[ww][ww_sci][j]))
-            for j in range(len(ww_cal)):
-                tab.add_row(('CAL', TARGPROP[ww][ww_cal][j], TARG_RA[ww][ww_cal][j], TARG_DEC[ww][ww_cal][j], READPATT[ww][ww_cal][j], NINTS[ww][ww_cal][j], NGROUPS[ww][ww_cal][j], NFRAMES[ww][ww_cal][j], EFFINTTM[ww][ww_cal][j], PIXSCALE[ww][ww_cal][j], PA_V3[ww][ww_cal][j], self.meta.idir+fitsfiles[ww][ww_cal][j]))
-            self.meta.obs[HASH_unique[i]] = tab.copy()
-        
-        if (self.meta.verbose == True):
-            print('--> Identified %.0f observation sequences' % len(self.meta.obs))
-            for i, key in enumerate(self.meta.obs.keys()):
-                print('--> Sequence %.0f: ' % (i+1)+key)
-                print_table = copy.deepcopy(self.meta.obs[key])
-                print_table.remove_column('FITSFILE')
-                print_table.pprint(max_lines=100, max_width=1000)
-
-        # Find the maximum numbasis based on the number of available
-        # calibrator frames.
-        self.get_maxnumbasis()
-
-        # Gather magnitudes for the target star
-        self.meta.mstar = utils.get_stellar_magnitudes(self.meta)
+        # If we already have the calints files, get the observations.
+        if (self.meta.do_imgprocess != True) and (self.meta.do_rampfit != True):
+            self.extract_obs(self.meta.idir)
+            # Find the maximum numbasis based on the number of available
+            # calibrator frames.
+            self.get_maxnumbasis()
+            # Gather magnitudes for the target star
+            self.meta.mstar = utils.get_stellar_magnitudes(self.meta)
 
         return None
 
@@ -280,11 +201,106 @@ class JWST(Pipeline):
         
         return
 
+    def extract_obs(self, idir):
+        # Create an astropy table for each unique set of observing parameters
+        # (filter, coronagraph, ...). Save all information that is needed
+        # later into this table. Finally, save all astropy tables into a
+        # dictionary called meta.obs.
+        ftyp = 'calints' # only consider files in the input directory that contain this string
+        fitsfiles = np.array([f for f in os.listdir(idir) if ftyp in f and f.endswith('.fits')])
+        Nfitsfiles = len(fitsfiles)
+        
+        TARGPROP = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
+        TARG_RA = np.empty(Nfitsfiles) # deg
+        TARG_DEC = np.empty(Nfitsfiles) # deg
+        INSTRUME = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
+        DETECTOR = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
+        FILTER = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
+        PUPIL = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
+        CORONMSK = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
+        READPATT = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
+        NINTS = np.empty(Nfitsfiles, dtype=int)
+        NGROUPS = np.empty(Nfitsfiles, dtype=int)
+        NFRAMES = np.empty(Nfitsfiles, dtype=int)
+        EFFINTTM = np.empty(Nfitsfiles) # s
+        SUBARRAY = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
+        SUBPXPTS = np.empty(Nfitsfiles, dtype=int)
+        PIXSCALE = np.empty(Nfitsfiles) # mas
+        PA_V3 = np.empty(Nfitsfiles) # deg
+        HASH = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
+        for i in range(Nfitsfiles):
+            hdul = pyfits.open(idir+fitsfiles[i])
+            head = hdul[0].header
+            TARGPROP[i] = head['TARGPROP']
+            TARG_RA[i] = head['TARG_RA'] # deg
+            TARG_DEC[i] = head['TARG_DEC'] # deg
+            INSTRUME[i] = head['INSTRUME']
+            DETECTOR[i] = head['DETECTOR']
+            FILTER[i] = head['FILTER']
+            PUPIL[i] = head['PUPIL']
+            CORONMSK[i] = head['CORONMSK']
+            READPATT[i] = head['READPATT']
+            NINTS[i] = head['NINTS']
+            NGROUPS[i] = head['NGROUPS']
+            NFRAMES[i] = head['NFRAMES']
+            EFFINTTM[i] = head['EFFINTTM'] # s
+            SUBARRAY[i] = head['SUBARRAY']
+            try:
+                SUBPXPTS[i] = head['SUBPXPTS']
+            except:
+                SUBPXPTS[i] = 1
+            if ('LONG' in DETECTOR[i]):
+                PIXSCALE[i] = self.meta.pxsc_lw # mas
+            else:
+                PIXSCALE[i] = self.meta.pxsc_sw # mas
+            head = hdul[1].header
+            PA_V3[i] = head['PA_V3'] # deg
+            HASH[i] = INSTRUME[i]+'_'+DETECTOR[i]+'_'+FILTER[i]+'_'+PUPIL[i]+'_'+CORONMSK[i]+'_'+SUBARRAY[i]
+            hdul.close()
+
+        HASH_unique = np.unique(HASH)
+        NHASH_unique = len(HASH_unique)
+        self.meta.obs = {}
+        for i in range(NHASH_unique):
+            ww = HASH == HASH_unique[i]
+            dpts = SUBPXPTS[ww]
+            dpts_unique = np.unique(dpts)
+            if ((len(dpts_unique) == 2) and (dpts_unique[0] == 1)):
+                ww_sci = np.where(dpts == dpts_unique[0])[0]
+                ww_cal = np.where(dpts == dpts_unique[1])[0]
+            else:
+                raise UserWarning('Science and reference PSFs are identified based on their number of dither positions, assuming that there is no dithering for the science PSFs')
+            tab = Table(names=('TYP', 'TARGPROP', 'TARG_RA', 'TARG_DEC', 'READPATT', 'NINTS', 'NGROUPS', 'NFRAMES', 'EFFINTTM', 'PIXSCALE', 'PA_V3', 'FITSFILE'), dtype=('S', 'S', 'f', 'f', 'S', 'i', 'i', 'i', 'f', 'f', 'f', 'S'))
+            for j in range(len(ww_sci)):
+                tab.add_row(('SCI', TARGPROP[ww][ww_sci][j], TARG_RA[ww][ww_sci][j], TARG_DEC[ww][ww_sci][j], READPATT[ww][ww_sci][j], NINTS[ww][ww_sci][j], NGROUPS[ww][ww_sci][j], NFRAMES[ww][ww_sci][j], EFFINTTM[ww][ww_sci][j], PIXSCALE[ww][ww_sci][j], PA_V3[ww][ww_sci][j], idir+fitsfiles[ww][ww_sci][j]))
+            for j in range(len(ww_cal)):
+                tab.add_row(('CAL', TARGPROP[ww][ww_cal][j], TARG_RA[ww][ww_cal][j], TARG_DEC[ww][ww_cal][j], READPATT[ww][ww_cal][j], NINTS[ww][ww_cal][j], NGROUPS[ww][ww_cal][j], NFRAMES[ww][ww_cal][j], EFFINTTM[ww][ww_cal][j], PIXSCALE[ww][ww_cal][j], PA_V3[ww][ww_cal][j], idir+fitsfiles[ww][ww_cal][j]))
+            self.meta.obs[HASH_unique[i]] = tab.copy()
+        
+        if (self.meta.verbose == True):
+            print('--> Identified %.0f observation sequences' % len(self.meta.obs))
+            for i, key in enumerate(self.meta.obs.keys()):
+                print('--> Sequence %.0f: ' % (i+1)+key)
+                print_table = copy.deepcopy(self.meta.obs[key])
+                print_table.remove_column('FITSFILE')
+                print_table.pprint(max_lines=100, max_width=1000)
+
+        return
+
     def run(self):
         """
         Run reduction based on inputs from the config file. 
         """
-
+        if self.meta.do_rampfit:
+            ramp = rampfit.stsci_ramp_fitting(self.meta)
+        if self.meta.do_imgprocess:
+            img = imgprocess.stsci_image_processing(self.meta)
+            self.extract_obs(self.meta.odir+'IMGPROCESS/')
+            # Find the maximum numbasis based on the number of available
+            # calibrator frames.
+            self.get_maxnumbasis()
+            # Gather magnitudes for the target star
+            self.meta.mstar = utils.get_stellar_magnitudes(self.meta)
         if self.meta.do_subtraction:
             sub = subtraction.klip_subtraction(self.meta)
         if self.meta.do_raw_contrast:

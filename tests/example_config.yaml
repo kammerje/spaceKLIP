@@ -9,8 +9,8 @@
 #######################
 
 ##### REQUIRED #####
-idir: '/Users/acarter/Documents/DIRECT_IMAGING/JWST/HIFI_SIMS/NIRCam/20220407/small_s1s2/' # Input Directory 
-odir: '/Users/acarter/Documents/DIRECT_IMAGING/JWST/HIFI_SIMS/PIPELINE_REDUCE/TESTING/' # Output Directory
+idir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/HIFI_SIMS/NIRCam/20220407/small_uncal/' # Input Directory 
+odir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/HIFI_SIMS/PIPELINE_REDUCE/TESTING/' # Output Directory
 sdir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/HIP65426.vot' #VOT table or stellar model file.
 
 ##### OPTIONAL #####
@@ -33,12 +33,25 @@ spt: 'A2V' # Spectral type of target, only necessary for VOTable. Keep it simple
 ra_off: [418.] # mas; RA offset of the known companions in the same order as in the NIRCCoS config file
 de_off: [-698.] # mas; DEC offset of the known companions in the same order as in the NIRCCoS config file
 
+#################################
+##### Ramp Fitting Settings #####
+#################################
+do_rampfit: True
+
+skip_jump: True      #Whether to skip the jump detection step of the pipeline
+jump_threshold: 15   #Adjust the jump detection threshold if not skipped
+
+#####################################
+##### Image Processing Settings #####
+#####################################
+do_imgprocess: True #Required if do_rampfit == True
+
 ####################################
 ##### PSF Subtraction Settings #####
 ####################################
-do_subtraction: True
+do_subtraction: False
 
-mode: ['ADI']       # list of modes for pyKLIP, will loop through all
+mode: ['RDI']       # list of modes for pyKLIP, will loop through all
 annuli: [1]         # list of number of annuli for pyKLIP, will loop through all
 subsections: [1]    # list of number of annuli for pyKLIP, will loop through all
 numbasis: [1, 2, 5, 10, 20, 50, 100] # list of number of basis vectors for pyKLIP, will loop through all
@@ -46,8 +59,8 @@ numbasis: [1, 2, 5, 10, 20, 50, 100] # list of number of basis vectors for pyKLI
 ###################################
 ##### Contrast Curve Settings #####
 ###################################
-do_raw_contrast: True
-do_cal_contrast: True
+do_raw_contrast: False
+do_cal_contrast: False
 
 KL: -1 # index of the KL component for which the calibrated contrast curve and the companion properties shall be computed
 
@@ -61,7 +74,7 @@ pas_inject_bar: [45., 135., 225., 315.] # deg; list of position angles at which 
 #######################################################
 ##### Companion Photometry / Astrometry Settings ######
 #######################################################
-do_companion: True
+do_companion: False
 nwalkers:  10
 nburn: 20
 nsteps: 80
