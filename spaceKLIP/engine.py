@@ -75,7 +75,7 @@ class JWST(Pipeline):
         # Get properties for JWST
         self.get_jwst_meta()
 
-        # If we already have the calints files, get the observations.
+        # If we have already done Stage 1 and 2 of the pipeline files, get the observations.
         if (self.meta.do_imgprocess != True) and (self.meta.do_rampfit != True):
             self.extract_obs(self.meta.idir)
             # Find the maximum numbasis based on the number of available
@@ -231,6 +231,7 @@ class JWST(Pipeline):
         for i in range(Nfitsfiles):
             hdul = pyfits.open(idir+fitsfiles[i])
             head = hdul[0].header
+
             TARGPROP[i] = head['TARGPROP']
             TARG_RA[i] = head['TARG_RA'] # deg
             TARG_DEC[i] = head['TARG_DEC'] # deg

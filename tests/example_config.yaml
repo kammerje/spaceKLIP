@@ -9,12 +9,13 @@
 #######################
 
 ##### REQUIRED #####
-idir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/HIFI_SIMS/NIRCam/20220407/small_uncal/' # Input Directory 
-odir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/HIFI_SIMS/PIPELINE_REDUCE/TESTING/' # Output Directory
+ # Input Directory 
+idir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/HIFI_SIMS/NIRCam/20220407/small_uncal/'
+odir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/TESTING/' # Output Directory
 sdir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/HIP65426.vot' #VOT table or stellar model file.
 
 ##### OPTIONAL #####
-rundirs: ['2022_04_08_ADI_annu1_subs1_run3'] #Specify directory(ies) within odir of existing runs
+rundirs: ['2022_04_19_RDI_annu1_subs1_run2'] #Specify directory(ies) within odir of existing runs to calculate contrast cuvre / companion
 ancildir: None      # Specify directory to save ancillary files, if None then saved under odir/ANCILLARY/. 
 
 ############################
@@ -36,15 +37,15 @@ de_off: [-698.] # mas; DEC offset of the known companions in the same order as i
 #################################
 ##### Ramp Fitting Settings #####
 #################################
-do_rampfit: True
+do_rampfit: False
 
-skip_jump: True      #Whether to skip the jump detection step of the pipeline
-jump_threshold: 15   #Adjust the jump detection threshold if not skipped
+skip_jump: False     #Whether to skip the jump detection step of the pipeline
+jump_threshold: 20   #Adjust the jump detection threshold if not skipped
 
 #####################################
 ##### Image Processing Settings #####
 #####################################
-do_imgprocess: True #Required if do_rampfit == True
+do_imgprocess: True
 
 ####################################
 ##### PSF Subtraction Settings #####
@@ -76,9 +77,9 @@ pas_inject_bar: [45., 135., 225., 315.] # deg; list of position angles at which 
 #######################################################
 do_companion: False
 nwalkers:  10
-nburn: 20
-nsteps: 80
-numthreads: 4
+nburn: 1000
+nsteps: 2000
+numthreads: 10
 
 
 

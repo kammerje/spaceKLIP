@@ -1,7 +1,6 @@
 import os, sys
-sys.path.append('../')
+sys.path.append('.')
 
-import spaceKLIP
 from spaceKLIP.engine import JWST
 
 config_file = os.path.dirname(__file__)+'/example_config.yaml'

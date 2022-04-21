@@ -1,4 +1,4 @@
-import os, sys
+import os, sys, contextlib
 
 import numpy as np
 import astropy.io.fits as pyfits

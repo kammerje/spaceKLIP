@@ -173,7 +173,7 @@ def extract_companions(meta):
                 # TODO: until RDI is implemented for forward
                 # modeling, simply use the offset PSF with the
                 # correct coronagraphic mask transmission applied.
-                if (mode == 'RDI') or (mode == 'ADI'):
+                if mode == 'RDI':
                     fm_frame = np.zeros_like(fm_frame)
                     if ((fm_centx % 1. != 0.) or (fm_centy % 1. != 0.)):
                         raise UserWarning('Requires forward modeled PSF with integer center')
@@ -202,7 +202,7 @@ def extract_companions(meta):
                     # test = np.sum(np.array(test), axis=0)/totet
                     # test *= self.F0[filt]/10.**(mstar[filt]/2.5)/1e6/pxsc**2*(180./np.pi*3600.*1000.)**2 # MJy/sr
                     # fm_frame[fm_centy+int(guess_dy)-sy//2:fm_centy+int(guess_dy)+sy//2+1, fm_centx-int(guess_dx)-sx//2:fm_centx-int(guess_dx)+sx//2+1] = test # scale forward modeled PSF similar as in pyKLIP
-                elif ('RDI' in mode):
+                elif ('ADI' in mode):
                     raise UserWarning('Not implemented yet')
                 
                 if meta.plotting:
