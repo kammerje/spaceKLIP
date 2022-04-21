@@ -6,6 +6,8 @@ def stsci_image_processing(meta):
 	Use the JWST pipeline to process *rateints.fits files to *calints.fits files
 	"""
 
+	search = '*' + meta.imgproc_ext
+
 	# Figure out where to look for files
 	if meta.do_rampfit:
 		#Use the output directory that was just created
@@ -15,25 +17,25 @@ def stsci_image_processing(meta):
 		rdir = meta.idir
 
 	# Grab the files
-	files = glob.glob(rdir + '*rateints.fits')
+	files = glob.glob(rdir + search)
 	if len(files) == 0:
 		# Let's look for a 'RAMPFIT' subdir
 		if os.path.exists(rdir + 'RAMPFIT'):
 			print('Located RAMPFIT folder within input directory.')
-			rdir += 'RAMPFIT/*rateints.fits'
+			rdir += 'RAMPFIT/' + search
 			files = glob.glob(rdir)
 		
 		# If there are still no files, look in output directory
 		if (len(files) == 0) and ('/RAMPFIT/' not in rdir):
-			print('WARNING: No *rateints.fits files found in input directory, searching output directory.')
-			rdir = meta.odir + 'RAMPFIT/*rateints.fits'
+			print('WARNING: No {} files found in input directory, searching output directory.'.format(search))
+			rdir = meta.odir + 'RAMPFIT/' + search
 			files = glob.glob(rdir)
 
 		if len(files) == 0:
-			raise ValueError('WARNING: Unable to find any *rateints.fits files in specified input or output directories.')
+			raise ValueError('Unable to find any {} files in specified input or output directories.'.format(search))
 
 	if meta.verbose:
-		print('Found {} files in directory: {}'.format(len(files), rdir))
+		print('Found {} files under: {}'.format(len(files), rdir))
 
 	# Run the pipeline on every file
 	for file in files:

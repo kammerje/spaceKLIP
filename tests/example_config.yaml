@@ -39,6 +39,7 @@ de_off: [-698.] # mas; DEC offset of the known companions in the same order as i
 #################################
 do_rampfit: False
 
+ramp_ext: 'uncal.fits'
 skip_jump: False     #Whether to skip the jump detection step of the pipeline
 jump_threshold: 20   #Adjust the jump detection threshold if not skipped
 
@@ -47,11 +48,14 @@ jump_threshold: 20   #Adjust the jump detection threshold if not skipped
 #####################################
 do_imgprocess: True
 
+imgproc_ext: 'rateints.fits'
+
 ####################################
 ##### PSF Subtraction Settings #####
 ####################################
 do_subtraction: False
 
+sub_ext: 'calints.fits'
 mode: ['RDI']       # list of modes for pyKLIP, will loop through all
 annuli: [1]         # list of number of annuli for pyKLIP, will loop through all
 subsections: [1]    # list of number of annuli for pyKLIP, will loop through all

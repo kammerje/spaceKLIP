@@ -6,10 +6,11 @@ def stsci_ramp_fitting(meta):
 	Use the JWST pipeline to process *uncal.fits files to *rateints.fits files
 	"""
 
+	search = '*' + meta.ramp_ext
 	# Get all of the files in the input directory
-	files = glob.glob(meta.idir+'*uncal.fits')
+	files = glob.glob(meta.idir+search)
 	if len(files) == 0:
-		raise ValueError('Unable to locate any *uncal.fits files in directory {}'.format(meta.idir))
+		raise ValueError('Unable to locate any {} files in directory {}'.format(search, meta.idir))
 
 	# Run the pipeline on every file
 	for file in files:
