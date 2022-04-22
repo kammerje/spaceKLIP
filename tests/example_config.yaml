@@ -9,12 +9,13 @@
 #######################
 
 ##### REQUIRED #####
-idir: '/Users/acarter/Documents/DIRECT_IMAGING/JWST/HIFI_SIMS/NIRCam/20220407/small_s1s2/' # Input Directory 
-odir: '/Users/acarter/Documents/DIRECT_IMAGING/JWST/HIFI_SIMS/PIPELINE_REDUCE/TESTING/' # Output Directory
+ # Input Directory 
+idir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/HIFI_SIMS/NIRCam/20220407/small_uncal/'
+odir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/TESTING/' # Output Directory
 sdir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/HIP65426.vot' #VOT table or stellar model file.
 
 ##### OPTIONAL #####
-rundirs: ['2022_04_08_ADI_annu1_subs1_run3'] #Specify directory(ies) within odir of existing runs
+rundirs: ['2022_04_22_RDI_annu1_subs1_run4'] #Specify directory(ies) within odir of existing runs to calculate contrast cuvre / companion
 ancildir: None      # Specify directory to save ancillary files, if None then saved under odir/ANCILLARY/. 
 
 ############################
@@ -24,7 +25,7 @@ verbose: True
 plotting: True    # Produce matplotlib plots
 use_psfmask: True # if true use PSF masks from CRDS, if false use transmission functions
 fiducial_point_override: True # if true uses narrow end of the bar masks, if false use filter dependent position
-overwrite: False   # Will overwrite existing files in a given directory
+overwrite: True   # Will overwrite existing files in a given directory
 
 ########################################
 ##### Star / Companion information #####
@@ -33,12 +34,23 @@ spt: 'A2V' # Spectral type of target, only necessary for VOTable. Keep it simple
 ra_off: [418.] # mas; RA offset of the known companions in the same order as in the NIRCCoS config file
 de_off: [-698.] # mas; DEC offset of the known companions in the same order as in the NIRCCoS config file
 
+#################################
+##### Ramp Fitting Settings #####
+#################################
+ramp_ext: 'uncal.fits'
+skip_jump: False     #Whether to skip the jump detection step of the pipeline
+jump_threshold: 20   #Adjust the jump detection threshold if not skipped
+
+#####################################
+##### Image Processing Settings #####
+#####################################
+imgproc_ext: 'rateints.fits'
+
 ####################################
 ##### PSF Subtraction Settings #####
 ####################################
-do_subtraction: True
-
-mode: ['ADI']       # list of modes for pyKLIP, will loop through all
+sub_ext: 'calints.fits'
+mode: ['RDI']       # list of modes for pyKLIP, will loop through all
 annuli: [1]         # list of number of annuli for pyKLIP, will loop through all
 subsections: [1]    # list of number of annuli for pyKLIP, will loop through all
 numbasis: [1, 2, 5, 10, 20, 50, 100] # list of number of basis vectors for pyKLIP, will loop through all
@@ -46,9 +58,6 @@ numbasis: [1, 2, 5, 10, 20, 50, 100] # list of number of basis vectors for pyKLI
 ###################################
 ##### Contrast Curve Settings #####
 ###################################
-do_raw_contrast: True
-do_cal_contrast: True
-
 KL: -1 # index of the KL component for which the calibrated contrast curve and the companion properties shall be computed
 
 seps_inject_rnd: [5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 25., 30.0, 35.0, 40.0] # pix; list of separations at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
@@ -61,11 +70,10 @@ pas_inject_bar: [45., 135., 225., 315.] # deg; list of position angles at which 
 #######################################################
 ##### Companion Photometry / Astrometry Settings ######
 #######################################################
-do_companion: True
 nwalkers:  10
-nburn: 20
-nsteps: 80
-numthreads: 4
+nburn: 1000
+nsteps: 2000
+numthreads: 10
 
 
 

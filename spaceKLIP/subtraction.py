@@ -10,6 +10,7 @@ import pyklip.parallelized as parallelized
 import copy
 
 from . import io
+from . import utils
 
 def klip_subtraction(meta):
     """
@@ -27,7 +28,12 @@ def klip_subtraction(meta):
     """ 
     if (meta.verbose == True):
         print('--> Running pyKLIP...')
-    
+
+    files = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS', search=meta.sub_ext)
+
+    # Run some preparation steps on the meta object
+    meta = prepare_meta(meta, files)
+
     # Loop through all modes, numbers of annuli, and numbers of subsections.
     Nscenarios = len(meta.mode)*len(meta.annuli)*len(meta.subsections)
     counter = 1
@@ -98,7 +104,4 @@ def klip_subtraction(meta):
                 #Increment counter
                 counter += 1
     
-    if (meta.verbose == True):
-        print('')
-    
-    return None
+    return 

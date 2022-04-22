@@ -47,6 +47,13 @@ def raw_contrast_curve(meta): # vegamag
         when computing the contrast curves for the bar masks.
     """
     verbose = meta.verbose
+
+    # If necessary, build the obs dictionary etc
+    if not meta.done_subtraction:
+        basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS', search=meta.sub_ext)
+        meta = utils.prepare_meta(meta, basefiles)
+        # Set the subtraction flag for other stages
+        meta.done_subtraction = True
     
     if (verbose == True):
         print('--> Computing raw contrast curve...')
@@ -165,6 +172,13 @@ def calibrated_contrast_curve(meta):
         If true overwrite existing data.
     """
     verbose = meta.verbose
+
+    # If necessary, build the obs dictionary etc
+    if not meta.done_subtraction:
+        basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS', search=meta.sub_ext)
+        meta = utils.prepare_meta(meta, basefiles)
+        # Set the subtraction flag for other stages
+        meta.done_subtraction = True
 
     if (verbose == True):
         print('--> Computing calibrated contrast curve...')
