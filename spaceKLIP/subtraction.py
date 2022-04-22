@@ -10,6 +10,19 @@ import pyklip.parallelized as parallelized
 import copy
 
 from . import io
+from . import utils
+
+def prepare_meta(meta, files):
+    #Extract observations from created folder
+    meta = io.extract_obs(meta, files)
+
+    # Find the maximum numbasis based on the number of available
+    # calibrator frames.
+    meta = utils.get_maxnumbasis(meta)
+
+    # Gather magnitudes for the target star
+    meta.mstar = utils.get_stellar_magnitudes(meta)
+
 
 def klip_subtraction(meta):
     """
@@ -28,38 +41,11 @@ def klip_subtraction(meta):
     if (meta.verbose == True):
         print('--> Running pyKLIP...')
 
-    search = '*' + meta.sub_ext
+    files = io.get_working_files(meta, meta.do_imgprocess, subdir='IMGPROCESS', search=meta.sub_ext)
 
-    # Figure out where to look for files
-    if meta.do_imgprocess:
-        #Use the output directory that was just created
-        rdir = meta.odir + 'IMGPROCESS/'
-    else:
-        #Use the specified input directory
-        rdir = meta.idir
+    # Run some preparation steps on the meta object
+    prepare_meta(meta, files)
 
-    # Grab the files
-    files = glob.glob(rdir + search)
-    if len(files) == 0:
-        # Let's look for a 'IMGPROCESS' subdir
-        if os.path.exists(rdir + 'IMGPROCESS'):
-            print('Located IMGPROCESS folder within input directory.')
-            rdir += 'IMGPROCESS/' + search
-            files = glob.glob(rdir)
-        
-        # If there are still no files, look in output directory
-        if (len(files) == 0) and ('/IMGPROCESS/' not in rdir):
-            print('WARNING: No {} files found in input directory, searching output directory.'.format(search))
-            rdir = meta.odir + 'IMGPROCESS/' + search
-            files = glob.glob(rdir)
-
-        if len(files) == 0:
-            raise ValueError('Unable to find any {} files in specified input or output directories.'.format(search))
-
-    if meta.verbose:
-        print('Found {} files under: {}'.format(len(files), rdir))
-
-    
     # Loop through all modes, numbers of annuli, and numbers of subsections.
     Nscenarios = len(meta.mode)*len(meta.annuli)*len(meta.subsections)
     counter = 1

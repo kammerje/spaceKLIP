@@ -37,8 +37,6 @@ de_off: [-698.] # mas; DEC offset of the known companions in the same order as i
 #################################
 ##### Ramp Fitting Settings #####
 #################################
-do_rampfit: False
-
 ramp_ext: 'uncal.fits'
 skip_jump: False     #Whether to skip the jump detection step of the pipeline
 jump_threshold: 20   #Adjust the jump detection threshold if not skipped
@@ -46,15 +44,11 @@ jump_threshold: 20   #Adjust the jump detection threshold if not skipped
 #####################################
 ##### Image Processing Settings #####
 #####################################
-do_imgprocess: True
-
 imgproc_ext: 'rateints.fits'
 
 ####################################
 ##### PSF Subtraction Settings #####
 ####################################
-do_subtraction: False
-
 sub_ext: 'calints.fits'
 mode: ['RDI']       # list of modes for pyKLIP, will loop through all
 annuli: [1]         # list of number of annuli for pyKLIP, will loop through all
@@ -64,9 +58,6 @@ numbasis: [1, 2, 5, 10, 20, 50, 100] # list of number of basis vectors for pyKLI
 ###################################
 ##### Contrast Curve Settings #####
 ###################################
-do_raw_contrast: False
-do_cal_contrast: False
-
 KL: -1 # index of the KL component for which the calibrated contrast curve and the companion properties shall be computed
 
 seps_inject_rnd: [5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 25., 30.0, 35.0, 40.0] # pix; list of separations at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
@@ -79,7 +70,6 @@ pas_inject_bar: [45., 135., 225., 315.] # deg; list of position angles at which 
 #######################################################
 ##### Companion Photometry / Astrometry Settings ######
 #######################################################
-do_companion: False
 nwalkers:  10
 nburn: 1000
 nsteps: 2000

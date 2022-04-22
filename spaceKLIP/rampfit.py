@@ -21,7 +21,8 @@ def stsci_ramp_fitting(meta):
 		pipeline.save_results = True
 
 		# Set up directory to save into
-		pipeline.output_dir = meta.odir + 'RAMPFIT'
+		pipeline.output_dir = meta.odir + 'RAMPFIT/'
+
 		if os.path.exists(pipeline.output_dir) == False:
 			    os.mkdir(pipeline.output_dir)
 		pipeline.run(file)

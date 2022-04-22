@@ -319,3 +319,18 @@ def get_stellar_magnitudes(meta):
         mstar[filt.upper()] = magnitude
 
     return mstar
+
+def get_maxnumbasis(meta):
+    """
+    Find the maximum numbasis based on the number of available calibrator
+    frames.
+    """
+    
+    # The number of available calibrator frames can be found in the
+    # self.obs table.
+    meta.maxnumbasis = {}
+    for i, key in enumerate(meta.obs.keys()):
+        ww = meta.obs[key]['TYP'] == 'CAL'
+        meta.maxnumbasis[key] = np.sum(meta.obs[key]['NINTS'][ww], dtype=int)
+    
+    return meta
