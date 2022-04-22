@@ -15,6 +15,8 @@ import urllib
 import webbpsf
 import webbpsf_ext 
 
+from . import io
+
 rad2mas = 180./np.pi*3600.*1000.
 
 def get_offsetpsf(meta, filt, mask, key):
@@ -334,3 +336,17 @@ def get_maxnumbasis(meta):
         meta.maxnumbasis[key] = np.sum(meta.obs[key]['NINTS'][ww], dtype=int)
     
     return meta
+
+def prepare_meta(meta, files):
+    #Extract observations from created folder
+    meta = io.extract_obs(meta, files)
+
+    # Find the maximum numbasis based on the number of available
+    # calibrator frames.
+    meta = get_maxnumbasis(meta)
+
+    # Gather magnitudes for the target star
+    meta.mstar = get_stellar_magnitudes(meta)
+
+    return meta
+

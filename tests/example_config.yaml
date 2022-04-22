@@ -15,7 +15,7 @@ odir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/TESTING/' #
 sdir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/HIP65426.vot' #VOT table or stellar model file.
 
 ##### OPTIONAL #####
-rundirs: ['2022_04_19_RDI_annu1_subs1_run2'] #Specify directory(ies) within odir of existing runs to calculate contrast cuvre / companion
+rundirs: ['2022_04_22_RDI_annu1_subs1_run4'] #Specify directory(ies) within odir of existing runs to calculate contrast cuvre / companion
 ancildir: None      # Specify directory to save ancillary files, if None then saved under odir/ANCILLARY/. 
 
 ############################
@@ -25,7 +25,7 @@ verbose: True
 plotting: True    # Produce matplotlib plots
 use_psfmask: True # if true use PSF masks from CRDS, if false use transmission functions
 fiducial_point_override: True # if true uses narrow end of the bar masks, if false use filter dependent position
-overwrite: False   # Will overwrite existing files in a given directory
+overwrite: True   # Will overwrite existing files in a given directory
 
 ########################################
 ##### Star / Companion information #####

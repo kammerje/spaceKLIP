@@ -9,7 +9,7 @@ def stsci_image_processing(meta):
 	Use the JWST pipeline to process *rateints.fits files to *calints.fits files
 	"""
 
-	files = io.get_working_files(meta, meta.do_rampfit, subdir='RAMPFIT', search=meta.imgproc_ext)
+	files = io.get_working_files(meta, meta.done_rampfit, subdir='RAMPFIT', search=meta.imgproc_ext)
 
 	# Run the pipeline on every file
 	for file in files:

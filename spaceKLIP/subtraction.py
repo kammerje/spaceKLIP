@@ -12,18 +12,6 @@ import copy
 from . import io
 from . import utils
 
-def prepare_meta(meta, files):
-    #Extract observations from created folder
-    meta = io.extract_obs(meta, files)
-
-    # Find the maximum numbasis based on the number of available
-    # calibrator frames.
-    meta = utils.get_maxnumbasis(meta)
-
-    # Gather magnitudes for the target star
-    meta.mstar = utils.get_stellar_magnitudes(meta)
-
-
 def klip_subtraction(meta):
     """
     Run pyKLIP.
@@ -41,10 +29,10 @@ def klip_subtraction(meta):
     if (meta.verbose == True):
         print('--> Running pyKLIP...')
 
-    files = io.get_working_files(meta, meta.do_imgprocess, subdir='IMGPROCESS', search=meta.sub_ext)
+    files = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS', search=meta.sub_ext)
 
     # Run some preparation steps on the meta object
-    prepare_meta(meta, files)
+    meta = prepare_meta(meta, files)
 
     # Loop through all modes, numbers of annuli, and numbers of subsections.
     Nscenarios = len(meta.mode)*len(meta.annuli)*len(meta.subsections)

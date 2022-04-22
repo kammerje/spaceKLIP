@@ -50,6 +50,13 @@ def extract_companions(meta):
     
     if (meta.verbose == True):
         print('--> Extracting companion properties...')
+
+    # If necessary, build the obs dictionary etc
+    if not meta.done_subtraction:
+        basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS', search=meta.sub_ext)
+        meta = utils.prepare_meta(meta, basefiles)
+        # Set the subtraction flag for other stages
+        meta.done_subtraction = True
     
     # Loop through all modes, numbers of annuli, and numbers of
     # subsections.

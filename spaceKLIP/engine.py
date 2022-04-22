@@ -79,6 +79,14 @@ class JWST(Pipeline):
         # Get properties for JWST
         self.get_jwst_meta()
 
+        # Assign flags to track which stages have been performed
+        self.meta.done_rampfit = False
+        self.meta.done_imgprocess = False
+        self.meta.done_subtraction = False
+        self.meta.done_raw_contrast = False
+        self.meta.done_cal_contrast = False
+        self.meta.done_companion = False
+
         return None
 
     def get_jwst_meta(self):
@@ -98,7 +106,6 @@ class JWST(Pipeline):
             self.meta.ancildir = self.meta.odir + 'ANCILLARY/'
         self.meta.psfmaskdir = self.meta.ancildir  + 'psfmasks/'
         self.meta.offsetpsfdir = self.meta.ancildir  + 'offsetpsfs/'
-    
 
         # Effective wavelength of the NIRCam filters from the SVO Filter
         # Profile Service.
@@ -205,7 +212,7 @@ class JWST(Pipeline):
         Wrapper function for ramp fitting stage
         '''
         # Set meta flag to True if not already
-        self.meta.do_rampfit = True
+        self.meta.done_rampfit = True
 
         # Run ramp fitting
         ramp = rampfit.stsci_ramp_fitting(self.meta)
@@ -217,7 +224,7 @@ class JWST(Pipeline):
         Wrapper function for image processing stage
         '''
         # Set meta flag to True if not already
-        self.meta.do_imgprocess = True
+        self.meta.done_imgprocess = True
         
         #Run image processing
         img = imgprocess.stsci_image_processing(self.meta)
@@ -229,7 +236,7 @@ class JWST(Pipeline):
         Wrapper function for subtraction stage
         '''
         # Set meta flag to True if not already
-        self.meta.do_subtraction = True
+        self.meta.done_subtraction = True
 
         #Run subtraction
         sub = subtraction.klip_subtraction(self.meta)
@@ -240,7 +247,7 @@ class JWST(Pipeline):
         Wrapper function for raw contrast  stage
         '''
         # Set meta flag to True if not already
-        self.meta.do_raw_contrast = True
+        self.meta.done_raw_contrast = True
 
         #Run raw contrast calculation
         raw_contrast = contrast.raw_contrast_curve(self.meta)
@@ -251,17 +258,17 @@ class JWST(Pipeline):
         Wrapper function for calibrated contrast stage
         '''
         # Set meta flag to True if not already
-        self.meta.do_cal_contrast = True
+        self.meta.done_cal_contrast = True
         # Run calibrated contrast calculation
         cal_contrast = contrast.calibrated_contrast_curve(self.meta)
         return
 
-    def companions(self):
+    def companion(self):
         '''
         Wrapper function for companion stage
         '''
         # Set meta flag to True if not already
-        self.meta.do_companion = True
+        self.meta.done_companion = True
         #Run companion photometry / astrometry
         extract_comps = companion.extract_companions(self.meta)
         return
