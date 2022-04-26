@@ -26,23 +26,24 @@ def raw_contrast_curve(meta):
           around known companions. This was found to be a sufficient but
           necessary value based on tests with simulated data.
 
-    TODO: currently uses WebbPSF to compute a theoretical offset PSF. It
-          should be possible to use PSF stamps extracted from the
-          astrometric confirmation images to determine the pupil mask
-          throughput.
+    Note: assumes that the data is photometrically calibrated including pupil
+          mask and instrument throughput. Uses an offset PSF from WebbPSF that
+          is normalized to a total intensity of 1 to estimate the peak flux of
+          a PSF with respect to the source intensity.
 
     Parameters
     ----------
-    meta
+    meta : class
+        Meta class containing data and configuration information from
+        engine.py.
     """
-    verbose = meta.verbose
 
-    if verbose:
+    if meta.verbose:
         print('--> Computing raw contrast curve...')
 
     # Loop through directories of subtracted images
     for counter, rdir in enumerate(meta.rundirs):
-        if verbose:
+        if meta.verbose:
             dirparts = rdir.split('/')[-2].split('_') # -2 because of trailing '/'
             print('--> Mode = {}, annuli = {}, subsections = {}, scenario {} of {}'.format(dirparts[3], dirparts[4], dirparts[5], counter+1, len(meta.rundirs)))
 
@@ -76,7 +77,7 @@ def raw_contrast_curve(meta):
 
             if meta.plotting:
                 savefile = odir+key+'-mask.pdf'
-                plotting.plot_contrast_images(meta, data, data_masked, savefile=savefile, pxsc=pxsc)
+                plotting.plot_contrast_images(meta, data, data_masked, pxsc=pxsc, savefile=savefile)
 
             # Convert the units and compute the contrast
             offsetpsf = utils.get_offsetpsf(meta, filt, mask, key)
@@ -180,9 +181,9 @@ def calibrated_contrast_curve(meta):
         for i, key in enumerate(meta.obs.keys()):
             meta.truenumbasis[key] = [num for num in meta.numbasis if (num <= meta.maxnumbasis[key])]
 
-            ww_sci = np.where(meta.obs[key]['TYPE'] == 'SCI')[0]
+            ww_sci = np.where(meta.obs[key]['TYP'] == 'SCI')[0]
             filepaths = np.array(meta.obs[key]['FITSFILE'][ww_sci], dtype=str).tolist()
-            ww_cal = np.where(meta.obs[key]['TYPE'] == 'CAL')[0]
+            ww_cal = np.where(meta.obs[key]['TYP'] == 'CAL')[0]
             psflib_filepaths = np.array(meta.obs[key]['FITSFILE'][ww_cal], dtype=str).tolist()
             hdul = pyfits.open(idir+key+'-KLmodes-all.fits')
             data = hdul[0].data

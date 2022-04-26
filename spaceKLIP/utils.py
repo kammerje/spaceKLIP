@@ -1,31 +1,31 @@
+from __future__ import division
+
 import os, sys
 
-# import contextlib
 import astropy.io.fits as pyfits
 import astropy.units as u
+import matplotlib.pyplot as plt
 import numpy as np
+import urllib
 
 from synphot import SourceSpectrum, SpectralElement, Observation
 from synphot.models import Empirical1D
 from synphot.units import convert_flux
-from scipy.ndimage import rotate, shift
 from scipy.interpolate import RegularGridInterpolator
-
-import matplotlib.pyplot as plt
-import urllib
+from scipy.ndimage import rotate, shift
 
 import webbpsf
 import webbpsf_ext 
 
 rad2mas = 180./np.pi*3600.*1000.
 
-def get_offsetpsf(meta, filt, mask, key):
+def get_offsetpsf(meta, filt, mask, key, derotate=True):
     """
     Get a derotated and integration time weighted average of an offset PSF
     from WebbPSF. Try to load it from the offsetpsfdir and generate it if
-    it is not in there yet. This offset PSF is normalized to an integrated
-    source of 1 and takes into account the throughput of the pupil mask.
-    
+    it is not in there yet. This offset PSF is normalized to a
+    total intensity of 1.
+
     Parameters
     ----------
     filt: str
@@ -33,77 +33,81 @@ def get_offsetpsf(meta, filt, mask, key):
     mask: str
         Coronagraphic mask name from JWST data header.
     key: str
-        Dictionary key of the self.obs dictionary specifying the
-        considered observation.
-    
+        Dictionary key of the self.obs dictionary specifying the considered
+        observation.
+
     Returns
     -------
-    totop: array
-        Stamp of the derotated and integration time weighted average of
-        the offset PSF.
+    totpsf: array
+        Stamp of the derotated and integration time weighted average of the
+        offset PSF.
+
     """
-    
+
     offsetpsfdir = meta.offsetpsfdir
-    # Try to load the offset PSF from the offsetpsfdir and generate it if
-    # it is not in there yet.
-    if (not os.path.exists(offsetpsfdir)):
-        os.makedirs(offsetpsfdir)
-    if (not os.path.exists(offsetpsfdir+filt+'_'+mask+'.npy')):
+
+    # Try to load the offset PSF from the offsetpsfdir and generate it if it
+    # is not in there yet
+    if not os.path.exists(offsetpsfdir+filt+'_'+mask+'.npy'):
         gen_offsetpsf(offsetpsfdir, filt, mask)
     offsetpsf = np.load(offsetpsfdir+filt+'_'+mask+'.npy')
-    
-    # Find the science target observations.
-    ww_sci = np.where(meta.obs[key]['TYPE'] == 'SCI')[0]
-    
+
+    # Find the science target observations
+    ww_sci = np.where(meta.obs[key]['TYP'] == 'SCI')[0]
+
     # Compute the derotated and integration time weighted average of the
-    # offset PSF. Values outside of the PSF stamp are filled with zeros.
-    totop = np.zeros_like(offsetpsf)
-    totet = 0. # s
-    for i in range(len(ww_sci)):
-        inttm = meta.obs[key]['NINTS'][ww_sci[i]]*meta.obs[key]['EFFINTTM'][ww_sci[i]] # s
-        totop += inttm*rotate(offsetpsf.copy(), -meta.obs[key]['PA_V3'][ww_sci[i]], reshape=False, mode='constant', cval=0.)
-        totet += inttm # s
-    totop /= totet
+    # offset PSF, values outside of the PSF stamp are filled with zeros
+    if (derotate == True):
+        totpsf = np.zeros_like(offsetpsf)
+        totexp = 0. # s
+        for i in range(len(ww_sci)):
+            totint = meta.obs[key]['NINTS'][ww_sci[i]]*meta.obs[key]['EFFINTTM'][ww_sci[i]] # s
+            totpsf += totint*rotate(offsetpsf.copy(), -meta.obs[key]['PA_V3'][ww_sci[i]], reshape=False, mode='constant', cval=0.)
+            totexp += totint # s
+        totpsf /= totexp
+    else:
+        totpsf = offsetpsf
     
-    return totop
+    return totpsf
 
 def gen_offsetpsf(offsetpsfdir, filt, mask):
     """
-    Generate an offset PSF using WebbPSF. This offset PSF is normalized to
-    an integrated source of 1 and takes into account the throughput of the
-    pupil mask.
-    
+    Generate an offset PSF using WebbPSF. This offset PSF is normalized to a
+    total intensity of 1.
+
     Parameters
     ----------
     filt: str
         Filter name from JWST data header.
     mask: str
         Coronagraphic mask name from JWST data header.
+
     """
-    
+
     # Get NIRCam
     nircam = webbpsf.NIRCam()
 
-    # Apply the correct pupil mask, but no image mask (unocculted PSF).
+    # Apply the correct pupil mask, but no image mask (unocculted PSF)
     nircam.filter = filt
-    if (mask in ['MASKA210R', 'MASKA335R', 'MASKA430R']):
+    if mask in ['MASKA210R', 'MASKA335R', 'MASKA430R']:
         nircam.pupil_mask = 'MASKRND'
-    elif (mask in ['MASKASWB']):
+    elif mask in ['MASKASWB']:
         nircam.pupil_mask = 'MASKSWB'
-    elif (mask in ['MASKALWB']):
+    elif mask in ['MASKALWB']:
         nircam.pupil_mask = 'MASKLWB'
     else:
-        raise UserWarning()
+        raise UserWarning('Unknown coronagraph mask')
     nircam.image_mask = None
-    
-    # Compute the offset PSF using WebbPSF and save it to the offsetpsfdir.
-    # with contextlib.redirect_stdout(None): #Suppress poppy terminal printing
-    hdul = nircam.calc_psf(oversample=1)
+
+    # Compute the offset PSF using WebbPSF and save it to the offsetpsfdir
+    hdul = nircam.calc_psf(oversample=1, normalize='last')
     psf = hdul[0].data # PSF center is at (39, 39)
 
     hdul.close()
+    if not os.path.exists(offsetpsfdir):
+        os.makedirs(offsetpsfdir)
     np.save(offsetpsfdir+filt+'_'+mask+'.npy', psf)
-    
+
     return None
 
 def get_transmission(meta, pxsc, filt, mask, subarr, odir, key):
@@ -111,13 +115,13 @@ def get_transmission(meta, pxsc, filt, mask, subarr, odir, key):
     Write coronagraphic mask transmission into self.transmission. The
     output is a 2D transmission map containing the derotated and
     integration time weighted average of the PSF masks from CRDS.
-    
+
     TODO: assumes that (159.5, 159.5) is the center of the PSF masks from
           CRDS. This seems to be true for the round masks. For the bar
           masks, this needs to be confirmed. Then, uses the PSF position
           with respect to the NRCA4_MASKSWB and the NRCA5_MASKLWB subarray
           from pySIAF to shift the bar mask PSF masks to their new center.
-    
+
     Parameters
     ----------
     pxsc: float
@@ -133,40 +137,36 @@ def get_transmission(meta, pxsc, filt, mask, subarr, odir, key):
     key: str
         Dictionary key of the self.obs dictionary specifying the
         considered observation.
-    
+
     Returns
     -------
     tottp: array
         2D transmission map containing the derotated and integration time
         weighted average of the PSF masks from CRDS.
     """
-    
-    # Check if the fiducial point override is active.
-    if ((meta.fiducial_point_override == True) and (mask in ['MASKASWB', 'MASKALWB'])):
+
+    # Check if the fiducial point override is active
+    if meta.fiducial_point_override and mask in ['MASKASWB', 'MASKALWB']:
         filt_temp = 'narrow'
     else:
         filt_temp = filt
-    
-    # Find the science target observations.
-    ww_sci = np.where(meta.obs[key]['TYPE'] == 'SCI')[0]
-    
-    # Open the correct PSF mask. Download it from CRDS if it is not yet in the psfmaskdir.
-    psfmask = meta.psfmask[filt_temp+'_'+mask+'_'+subarr]
-    if (not os.path.exists(meta.psfmaskdir)):
-        os.makedirs(meta.psfmaskdir)
-    if (not os.path.exists(meta.psfmaskdir+psfmask+'.fits')):
-        urllib.request.urlretrieve('https://jwst-crds.stsci.edu/unchecked_get/references/jwst/'+psfmask+'.fits', meta.psfmaskdir+psfmask+'.fits')
-    hdul = pyfits.open(meta.psfmaskdir+psfmask+'.fits')
+
+    # Find the science target observations
+    ww_sci = np.where(meta.obs[key]['TYP'] == 'SCI')[0]
+
+    # Open the correct PSF mask
+    psfmask = meta.psfmask[key]
+    hdul = pyfits.open(psfmask)
     tp = hdul['SCI'].data[1:-1, 1:-1] # crop artifact at the edge
     hdul.close()
-    
+
     # Shift the bar mask PSF masks to their new center. Values outside of
     # the subarray are filled with zeros (i.e., no transmission).
-    if (mask in ['MASKASWB']):
+    if mask in ['MASKASWB']:
         tp = shift(tp, (0., -meta.offset_swb[filt_temp]*1000./pxsc), mode='constant', cval=0.)
-    elif (mask in ['MASKALWB']):
+    elif mask in ['MASKALWB']:
         tp = shift(tp, (0., -meta.offset_lwb[filt_temp]*1000./pxsc), mode='constant', cval=0.)
-    
+
     # Compute the derotated and integration time weighted average of the
     # PSF masks. Values outside of the subarray are filled with zeros
     # (i.e., no transmission). Then, create a regular grid interpolator
@@ -201,7 +201,6 @@ def get_transmission(meta, pxsc, filt, mask, subarr, odir, key):
     plt.close()
     
     return tottp
-
 
 def correct_transmission(stamp,
                          stamp_dx, # pix
@@ -240,6 +239,43 @@ def correct_transmission(stamp,
     transmission = transmission.reshape(stamp.shape)
     
     return transmission*stamp
+
+def field_dependent_correction(stamp,
+                               stamp_dx,
+                               stamp_dy,
+                               meta,
+                               key,
+                               inst):
+    """
+    
+    """
+    
+    # Find offset of PSF stamp.
+    sx, sy = stamp.shape # pix
+    if ((sx % 2 != 1) or (sy % 2 != 1)):
+        raise UserWarning('PSF stamp must have odd shape')
+    xc = stamp_dx[0, (sx-1)//2] # pix
+    yc = stamp_dy[(sy-1)//2, 0] # pix
+    
+    # Find the science target observations.
+    ww_sci = np.where(meta.obs[key]['TYP'] == 'SCI')[0]
+    
+    # 
+    offset_r = np.sqrt(xc**2+yc**2)*meta.obs[key]['PIXSCALE'][ww_sci[0]]/1000. # arcsec
+    offset_theta = np.rad2deg(np.arctan2(xc, yc)) # deg; counter-clockwise
+    inst.options['source_offset_r'] = offset_r # arcsec
+    inst.options['source_offset_theta'] = offset_theta # deg; counter-clockwise
+    fov_pixels = int(np.ceil(max(np.abs(xc), np.abs(yc))))+79
+    if (fov_pixels % 2 != 1):
+        fov_pixels += 1
+    hdul = inst.calc_psf(fov_pixels=fov_pixels, oversample=1, normalize='last')
+    offsetpsf = hdul[0].data
+    hdul.close()
+    offsetpsf = shift(offsetpsf, (-yc, xc))
+    sh = (fov_pixels-1)//2
+    stamp = offsetpsf[sh-38:sh+41, sh-39:sh+40]
+    
+    return stamp
 
 def get_stellar_magnitudes(meta):
     # First find out if a file was provided correctly

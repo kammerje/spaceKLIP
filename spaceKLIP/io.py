@@ -80,6 +80,7 @@ def read_metajson(file):
     Load a Meta save file as a json dictionary, don't convert back into a
     class as it doesn't seem necessary yet.
     """
+
     with open(file) as f:
         metasave = json.load(f)
 

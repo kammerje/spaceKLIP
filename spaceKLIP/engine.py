@@ -1,4 +1,4 @@
-import os
+import os, re
 
 import astropy.io.fits as pyfits
 import numpy as np
@@ -26,18 +26,22 @@ class Meta():
     A meta class to hold information throughout the pipeline process,
     including user inputs.
     """
+
     def __init__(self):
+
         return
 
     def save(self):
+        
         # TODO: write function that could save all of the used parameters for
-        # debugging purposes.
+        # debugging purposes
         return
 
 class Pipeline():
     """
     Generic Pipeline Class.
     """
+
     def __init__(self, config_file):
         """
         Initialize a generic pipeline class by reading a config file and
@@ -63,15 +67,12 @@ class JWST(Pipeline):
     """
     JWST specifc Pipeline class.
     """
+
     def __init__(self, config_file):
         """
         Initialize a JWST specific Pipeline Class.
 
         Note: this class only works with NIRCam so far.
-        
-        TODO: not all subarrays are assigned a PSF mask name from the CRDS yet.
-              The assignments for all subarrays can be found at
-              https://jwst-crds.stsci.edu/.
 
         Parameters
         ----------
@@ -113,6 +114,7 @@ class JWST(Pipeline):
         EFFINTTM = np.empty(Nfitsfiles) # s
         SUBARRAY = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
         SUBPXPTS = np.empty(Nfitsfiles, dtype=int)
+        APERNAME = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
         PIXSCALE = np.empty(Nfitsfiles) # mas
         PA_V3 = np.empty(Nfitsfiles) # deg
         HASH = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
@@ -137,6 +139,7 @@ class JWST(Pipeline):
                 SUBPXPTS[i] = head['SUBPXPTS']
             except:
                 SUBPXPTS[i] = 1
+            APERNAME[i] = head['APERNAME']
             if 'NIRCAM' in INSTRUME[i]:
                 if 'LONG' in DETECTOR[i]:
                     PIXSCALE[i] = nrc._pixelscale_long*1e3 # mas
@@ -167,11 +170,11 @@ class JWST(Pipeline):
                 ww_cal = np.where(dpts == dpts_unique[1])[0]
             else:
                 raise UserWarning('Science and reference PSFs are identified based on their number of dither positions, assuming that there is no dithering for the science PSFs')
-            tab = Table(names=('TYPE', 'TARGPROP', 'TARG_RA', 'TARG_DEC', 'READPATT', 'NINTS', 'NGROUPS', 'NFRAMES', 'EFFINTTM', 'PIXSCALE', 'PA_V3', 'FITSFILE'), dtype=('S', 'S', 'f', 'f', 'S', 'i', 'i', 'i', 'f', 'f', 'f', 'S'))
+            tab = Table(names=('TYP', 'TARGPROP', 'TARG_RA', 'TARG_DEC', 'READPATT', 'NINTS', 'NGROUPS', 'NFRAMES', 'EFFINTTM', 'APERNAME', 'PIXSCALE', 'PA_V3', 'FITSFILE'), dtype=('S', 'S', 'f', 'f', 'S', 'i', 'i', 'i', 'f', 'S', 'f', 'f', 'S'))
             for j in range(len(ww_sci)):
-                tab.add_row(('SCI', TARGPROP[ww][ww_sci][j], TARG_RA[ww][ww_sci][j], TARG_DEC[ww][ww_sci][j], READPATT[ww][ww_sci][j], NINTS[ww][ww_sci][j], NGROUPS[ww][ww_sci][j], NFRAMES[ww][ww_sci][j], EFFINTTM[ww][ww_sci][j], PIXSCALE[ww][ww_sci][j], PA_V3[ww][ww_sci][j], self.meta.idir+fitsfiles_use[ww][ww_sci][j]))
+                tab.add_row(('SCI', TARGPROP[ww][ww_sci][j], TARG_RA[ww][ww_sci][j], TARG_DEC[ww][ww_sci][j], READPATT[ww][ww_sci][j], NINTS[ww][ww_sci][j], NGROUPS[ww][ww_sci][j], NFRAMES[ww][ww_sci][j], EFFINTTM[ww][ww_sci][j], APERNAME[ww][ww_sci][j], PIXSCALE[ww][ww_sci][j], PA_V3[ww][ww_sci][j], self.meta.idir+fitsfiles_use[ww][ww_sci][j]))
             for j in range(len(ww_cal)):
-                tab.add_row(('CAL', TARGPROP[ww][ww_cal][j], TARG_RA[ww][ww_cal][j], TARG_DEC[ww][ww_cal][j], READPATT[ww][ww_cal][j], NINTS[ww][ww_cal][j], NGROUPS[ww][ww_cal][j], NFRAMES[ww][ww_cal][j], EFFINTTM[ww][ww_cal][j], PIXSCALE[ww][ww_cal][j], PA_V3[ww][ww_cal][j], self.meta.idir+fitsfiles_use[ww][ww_cal][j]))
+                tab.add_row(('CAL', TARGPROP[ww][ww_cal][j], TARG_RA[ww][ww_cal][j], TARG_DEC[ww][ww_cal][j], READPATT[ww][ww_cal][j], NINTS[ww][ww_cal][j], NGROUPS[ww][ww_cal][j], NFRAMES[ww][ww_cal][j], EFFINTTM[ww][ww_cal][j], APERNAME[ww][ww_cal][j], PIXSCALE[ww][ww_cal][j], PA_V3[ww][ww_cal][j], self.meta.idir+fitsfiles_use[ww][ww_cal][j]))
             self.meta.obs[HASH_unique[i]] = tab.copy()
             del tab
 
@@ -193,6 +196,24 @@ class JWST(Pipeline):
         # Get properties for JWST
         self.get_jwst_meta()
 
+        # Get the correct bar offset for each observing sequence.
+        self.meta.bar_offset = {}
+        for key in self.meta.obs.keys():
+            temp = [s.start() for s in re.finditer('_', key)]
+            filt = key[temp[1]+1:temp[2]].upper()
+            if ('MASKALWB' in key.upper()):
+                if ('NARROW' in self.meta.obs[key]['APERNAME'][0].upper()):
+                    self.meta.bar_offset[key] = self.meta.offset_lwb['narrow']
+                else:
+                    self.meta.bar_offset[key] = self.meta.offset_lwb[filt]
+            elif ('MASKASWB' in key.upper()):
+                if ('NARROW' in self.meta.obs[key]['APERNAME'][0].upper()):
+                    self.meta.bar_offset[key] = self.meta.offset_swb['narrow']
+                else:
+                    self.meta.bar_offset[key] = self.meta.offset_swb[filt]
+            else:
+                self.meta.bar_offset[key] = None
+
         return None
 
     def get_maxnumbasis(self):
@@ -205,7 +226,7 @@ class JWST(Pipeline):
         # self.meta.obs table
         self.meta.maxnumbasis = {}
         for i, key in enumerate(self.meta.obs.keys()):
-            ww = self.meta.obs[key]['TYPE'] == 'CAL'
+            ww = self.meta.obs[key]['TYP'] == 'CAL'
             self.meta.maxnumbasis[key] = np.sum(self.meta.obs[key]['NINTS'][ww], dtype=int)
         
         return
@@ -267,6 +288,7 @@ class JWST(Pipeline):
         """
         Get bar offset directly from SIAF.
         """
+
         if channel == 'SW':
             refapername = 'NRCA4_MASKSWB'
             apername = 'NRCA4_MASKSWB_'+filt.upper()
@@ -282,12 +304,13 @@ class JWST(Pipeline):
         """
         Run reduction based on inputs from the config file.
         """
+
         if self.meta.do_subtraction:
             sub = subtraction.klip_subtraction(self.meta)
         if self.meta.do_raw_contrast:
             raw_contrast = contrast.raw_contrast_curve(self.meta)
-        # if self.meta.do_cal_contrast:
-        #     cal_contrast = contrast.calibrated_contrast_curve(self.meta)
-        # if self.meta.do_companion:
-        #     extract_comps = companion.extract_companions(self.meta)
+        if self.meta.do_cal_contrast:
+            cal_contrast = contrast.calibrated_contrast_curve(self.meta)
+        if self.meta.do_companion:
+            extract_comps = companion.extract_companions(self.meta)
         return

@@ -18,12 +18,9 @@ def klip_subtraction(meta):
     ----------
     meta : class
         Meta class containing data and configuration information from
-        engine.py
-
-    Returns
-    -------
-    TBD
+        engine.py.
     """
+
     if meta.verbose:
         print('--> Running pyKLIP...')
 
@@ -66,9 +63,9 @@ def klip_subtraction(meta):
                     meta.truenumbasis[key] = [num for num in meta.numbasis if (num <= meta.maxnumbasis[key])]
                     if meta.overwrite == False and os.path.exists(odir+'-KLmodes-all.fits'):
                         continue
-                    ww_sci = np.where(meta.obs[key]['TYPE'] == 'SCI')[0]
+                    ww_sci = np.where(meta.obs[key]['TYP'] == 'SCI')[0]
                     filepaths = np.array(meta.obs[key]['FITSFILE'][ww_sci], dtype=str).tolist()
-                    ww_cal = np.where(meta.obs[key]['TYPE'] == 'CAL')[0]
+                    ww_cal = np.where(meta.obs[key]['TYP'] == 'CAL')[0]
                     psflib_filepaths = np.array(meta.obs[key]['FITSFILE'][ww_cal], dtype=str).tolist()
                     dataset = JWST.JWSTData(filepaths=filepaths,
                                             psflib_filepaths=psflib_filepaths)
