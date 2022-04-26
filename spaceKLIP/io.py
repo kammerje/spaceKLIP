@@ -132,13 +132,23 @@ def extract_obs(meta, fitsfiles_all):
         hdul = pyfits.open(file)
         head = hdul[0].header
 
-        TARGPROP[i] = head['TARGPROP']
+        # Have to hardcode some information for the MIRI data
+        if 'SGD' in file:
+            TARGPROP[i] = 'CALIBRATOR'
+            PUPIL = ''
+        elif 'HD141569' in file:
+            TARGPROP[i] = 'HD141569'
+            PUPIL[i] = ''
+        else:
+            # NIRCam
+            TARGPROP[i] = head['TARGPROP']
+            PUPIL[i] = head['PUPIL']
+        
         TARG_RA[i] = head['TARG_RA'] # deg
         TARG_DEC[i] = head['TARG_DEC'] # deg
         INSTRUME[i] = head['INSTRUME']
         DETECTOR[i] = head['DETECTOR']
         FILTER[i] = head['FILTER']
-        PUPIL[i] = head['PUPIL']
         CORONMSK[i] = head['CORONMSK']
         READPATT[i] = head['READPATT']
         NINTS[i] = head['NINTS']
