@@ -135,14 +135,20 @@ def extract_obs(meta, fitsfiles_all):
         # Have to hardcode some information for the MIRI data
         if 'SGD' in file:
             TARGPROP[i] = 'CALIBRATOR'
-            PUPIL = ''
+            PUPIL[i] = ''
+            SUBPXPTS[i] = 5
         elif 'HD141569' in file:
             TARGPROP[i] = 'HD141569'
             PUPIL[i] = ''
+            SUBPXPTS[i] = 1
         else:
             # NIRCam
             TARGPROP[i] = head['TARGPROP']
             PUPIL[i] = head['PUPIL']
+            try:
+                SUBPXPTS[i] = head['SUBPXPTS']
+            except:
+                SUBPXPTS[i] = 1
         
         TARG_RA[i] = head['TARG_RA'] # deg
         TARG_DEC[i] = head['TARG_DEC'] # deg
@@ -156,10 +162,7 @@ def extract_obs(meta, fitsfiles_all):
         NFRAMES[i] = head['NFRAMES']
         EFFINTTM[i] = head['EFFINTTM'] # s
         SUBARRAY[i] = head['SUBARRAY']
-        try:
-            SUBPXPTS[i] = head['SUBPXPTS']
-        except:
-            SUBPXPTS[i] = 1
+
         if ('LONG' in DETECTOR[i]):
             PIXSCALE[i] = meta.pxsc_lw # mas
         else:
