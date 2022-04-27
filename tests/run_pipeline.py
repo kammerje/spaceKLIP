@@ -1,5 +1,5 @@
 import os, sys
-sys.path.append('.')
+sys.path.append('..')
 
 from spaceKLIP.engine import JWST
 

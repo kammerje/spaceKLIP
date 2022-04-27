@@ -67,6 +67,7 @@ def raw_contrast_curve(meta):
             pxsc = meta.obs[key]['PIXSCALE'][0] # mas
             cent = (hdul[0].header['PSFCENTX'], hdul[0].header['PSFCENTY']) # pix
             temp = [s.start() for s in re.finditer('_', key)]
+            inst = key[:temp[0]]
             filt = key[temp[1]+1:temp[2]]
             mask = key[temp[3]+1:temp[4]]
             subarr = key[temp[4]+1:]
@@ -86,7 +87,7 @@ def raw_contrast_curve(meta):
                 plotting.plot_contrast_images(meta, data, data_masked, pxsc=pxsc, savefile=savefile)
 
             # Convert the units and compute the contrast
-            offsetpsf = utils.get_offsetpsf(meta, filt, mask, key)
+            offsetpsf = utils.get_offsetpsf(meta, inst, filt, mask, key)
             Fstar = meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6*np.max(offsetpsf) # MJy; convert the host star brightness from vegamag to MJy
             Fdata = data_masked*pxsc**2/(180./np.pi*3600.*1000.)**2 # MJy; convert the data from MJy/sr to MJy
             seps = [] # arcsec
@@ -201,6 +202,7 @@ def calibrated_contrast_curve(meta):
             pxsc = meta.obs[key]['PIXSCALE'][0] # mas
             cent = (hdul[0].header['PSFCENTX'], hdul[0].header['PSFCENTY']) # pix
             temp = [s.start() for s in re.finditer('_', key)]
+            inst = key[:temp[0]]
             filt = key[temp[1]+1:temp[2]]
             mask = key[temp[3]+1:temp[4]]
             subarr = key[temp[4]+1:]
@@ -238,7 +240,7 @@ def calibrated_contrast_curve(meta):
                 # time weighted average of the unocculted offset
                 # PSF over the rolls (does account for pupil mask
                 # throughput).
-                offsetpsf = utils.get_offsetpsf(meta, filt, mask, key)
+                offsetpsf = utils.get_offsetpsf(meta, inst, filt, mask, key)
                 
                 # Convert the units and compute the injected
                 # fluxes. They need to be in the units of the data
@@ -256,9 +258,9 @@ def calibrated_contrast_curve(meta):
                 # fluxes into the injection and recovery routine.
                 good = np.isnan(flux_inject) == False
                 if (mask in ['MASKASWB', 'MASKALWB']):
-                    flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, filt, mask, 10.*fwhm, flux_inject[good], seps_inject_bar[good], pas_inject_bar, meta.KL, meta.ra_off, meta.de_off)
+                    flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, inst, filt, mask, 10.*fwhm, flux_inject[good], seps_inject_bar[good], pas_inject_bar, meta.KL, meta.ra_off, meta.de_off)
                 else:
-                    flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, filt, mask, 10.*fwhm, flux_inject[good], seps_inject_rnd[good], pas_inject_rnd, meta.KL, meta.ra_off, meta.de_off)
+                    flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, inst, filt, mask, 10.*fwhm, flux_inject[good], seps_inject_rnd[good], pas_inject_rnd, meta.KL, meta.ra_off, meta.de_off)
                 np.save(odir+key+'-flux_all.npy', flux_all) # MJy/sr
                 np.save(odir+key+'-seps_all.npy', seps_all) # pix
                 np.save(odir+key+'-pas_all.npy', pas_all) # deg
@@ -393,6 +395,7 @@ def inject_recover(meta,
                    annuli,
                    subsections,
                    pxsc, # mas
+                   inst,
                    filt,
                    mask,
                    mrad, # pix
@@ -479,7 +482,7 @@ def inject_recover(meta,
     # Offset PSF from WebbPSF, i.e., an integration time weighted average
     # of the unocculted offset PSF over the rolls (normalized to a peak
     # flux of 1).
-    offsetpsf = utils.get_offsetpsf(meta, filt, mask, key)
+    offsetpsf = utils.get_offsetpsf(meta, inst, filt, mask, key)
     offsetpsf /= np.max(offsetpsf)
     
     # Initialize outputs.

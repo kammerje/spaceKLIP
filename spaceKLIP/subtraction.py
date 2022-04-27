@@ -28,7 +28,7 @@ def klip_subtraction(meta):
     files = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS', search=meta.sub_ext)
 
     # Run some preparation steps on the meta object
-    meta = prepare_meta(meta, files)
+    meta = utils.prepare_meta(meta, files)
 
     # Loop through all modes, numbers of annuli, and numbers of subsections.
     Nscenarios = len(meta.mode)*len(meta.annuli)*len(meta.subsections)
@@ -100,6 +100,6 @@ def klip_subtraction(meta):
 
                 # Increment counter
                 counter += 1
-   
-   return
+    
+    return
 

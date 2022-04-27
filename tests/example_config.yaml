@@ -10,12 +10,12 @@
 
 ##### REQUIRED #####
  # Input Directory 
-idir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/HIFI_SIMS/NIRCam/20220407/small_uncal/'
-odir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/TESTING/' # Output Directory
+idir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/HIFI_SIMS/MIRI/Elodie_20220420/'
+odir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/TESTING_MIRI/' # Output Directory
 sdir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/HIP65426.vot' #VOT table or stellar model file.
 
 ##### OPTIONAL #####
-rundirs: ['2022_04_22_RDI_annu1_subs1_run4'] #Specify directory(ies) within odir of existing runs to calculate contrast cuvre / companion
+rundirs: ['2022_04_27_RDI_annu1_subs1_run1'] #Specify directory(ies) within odir of existing runs to calculate contrast cuvre / companion
 ancildir: None      # Specify directory to save ancillary files, if None then saved under odir/ANCILLARY/. 
 
 ############################
@@ -70,10 +70,10 @@ pas_inject_bar: [45., 135., 225., 315.] # deg; list of position angles at which 
 #######################################################
 ##### Companion Photometry / Astrometry Settings ######
 #######################################################
-nwalkers:  10
-nburn: 1000
-nsteps: 2000
-numthreads: 10
+nwalkers:  100
+nburn: 100
+nsteps: 200
+numthreads: 2
 
 
 
