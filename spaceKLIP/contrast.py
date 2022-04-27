@@ -37,8 +37,14 @@ def raw_contrast_curve(meta):
         Meta class containing data and configuration information from
         engine.py.
     """
-
-    if meta.verbose:
+    # If necessary, build the obs dictionary etc
+    if not meta.done_subtraction:
+        basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS', search=meta.sub_ext)
+        meta = utils.prepare_meta(meta, basefiles)
+        # Set the subtraction flag for other stages
+        meta.done_subtraction = True
+    
+    if (meta.verbose == True):
         print('--> Computing raw contrast curve...')
 
     # Loop through directories of subtracted images
@@ -146,9 +152,14 @@ def calibrated_contrast_curve(meta):
     overwrite: bool
         If true overwrite existing data.
     """
-    verbose = meta.verbose
+    # If necessary, build the obs dictionary etc
+    if not meta.done_subtraction:
+        basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS', search=meta.sub_ext)
+        meta = utils.prepare_meta(meta, basefiles)
+        # Set the subtraction flag for other stages
+        meta.done_subtraction = True
 
-    if (verbose == True):
+    if (meta.verbose == True):
         print('--> Computing calibrated contrast curve...')
     
     # Make inputs arrays.
@@ -167,7 +178,7 @@ def calibrated_contrast_curve(meta):
         annuli = metasave['used_annuli']
         subsections = metasave['used_subsections']
 
-        if (verbose == True):
+        if (meta.verbose == True):
             sys.stdout.write('\r--> Mode = {}, annuli = {}, subsections = {}, scenario {} of {}'.format(mode, annuli, subsections, counter+1, len(meta.rundirs)))
             sys.stdout.flush()
 
@@ -284,7 +295,7 @@ def calibrated_contrast_curve(meta):
                 savefile=odir+key+'-cons_cal.pdf'
                 plotting.plot_contrast_calibrated(res, med_res, fit_thrput, seps, cons, corr_cons, savefile=savefile)
             
-    if (verbose == True):
+    if (meta.verbose == True):
         print('')
     
     return None

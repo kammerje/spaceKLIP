@@ -1,6 +1,5 @@
 from __future__ import division
-
-import os, sys
+import os, sys, contextlib
 
 import astropy.io.fits as pyfits
 import astropy.units as u
@@ -16,6 +15,8 @@ from scipy.ndimage import rotate, shift
 
 import webbpsf
 import webbpsf_ext 
+
+from . import io
 
 rad2mas = 180./np.pi*3600.*1000.
 
@@ -357,3 +358,31 @@ def get_stellar_magnitudes(meta):
         mstar[filt.upper()] = magnitude
 
     return mstar
+
+def get_maxnumbasis(meta):
+    """
+    Find the maximum numbasis based on the number of available calibrator
+    frames.
+    """
+    
+    # The number of available calibrator frames can be found in the
+    # self.obs table.
+    meta.maxnumbasis = {}
+    for i, key in enumerate(meta.obs.keys()):
+        ww = meta.obs[key]['TYP'] == 'CAL'
+        meta.maxnumbasis[key] = np.sum(meta.obs[key]['NINTS'][ww], dtype=int)
+    
+    return meta
+
+def prepare_meta(meta, files):
+    #Extract observations from created folder
+    meta = io.extract_obs(meta, files)
+
+    # Find the maximum numbasis based on the number of available
+    # calibrator frames.
+    meta = get_maxnumbasis(meta)
+
+    # Gather magnitudes for the target star
+    meta.mstar = get_stellar_magnitudes(meta)
+
+    return meta

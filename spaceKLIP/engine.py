@@ -20,6 +20,8 @@ from . import subtraction
 from . import contrast
 from . import companion
 from . import utils
+from . import rampfit
+from . import imgprocess
 
 class Meta():
     """
@@ -52,8 +54,11 @@ class Pipeline():
         self.meta = Meta()
 
         # Read in configuration parameters
+        if config_file == 'template':
+            tempstring = '/../tests/example_config.yaml'
+            config_file = os.path.join(os.path.dirname(__file__) + tempstring)
         config = io.read_config(config_file)
-        
+
         # Assign config parameters to class attributes
         for key in config:
             setattr(self.meta, key, config[key])
@@ -83,153 +88,18 @@ class JWST(Pipeline):
         # Intialize parent class
         super().__init__(config_file)
 
-        # Create an astropy table for each unique set of observing parameters
-        # (filter, coronagraph, ...). Save all information that is needed
-        # later into this table. Finally, save all astropy tables into a
-        # dictionary called meta.obs.
-        ftype = 'calints' # only consider files in the input directory that contain this string
-        fitsfiles_all = np.array([f for f in os.listdir(self.meta.idir) if ftype in f and f.endswith('.fits')])
-        fitsfiles_use = []
-        for i in range(len(fitsfiles_all)):
-            if pyfits.getheader(self.meta.idir+fitsfiles_all[i])['EXP_TYPE'] in ['NRC_IMAGE', 'NRC_CORON', 'MIR_IMAGE', 'MIR_LYOT', 'MIR_4QPM']:
-                fitsfiles_use += [fitsfiles_all[i]]
-        fitsfiles_use = np.array(fitsfiles_use)
-        Nfitsfiles = len(fitsfiles_use)
-
-        nrc = webbpsf.NIRCam()
-        mir = webbpsf.MIRI()
-
-        TARGPROP = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
-        TARG_RA = np.empty(Nfitsfiles) # deg
-        TARG_DEC = np.empty(Nfitsfiles) # deg
-        INSTRUME = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
-        DETECTOR = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
-        FILTER = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
-        PUPIL = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
-        CORONMSK = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
-        READPATT = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
-        NINTS = np.empty(Nfitsfiles, dtype=int)
-        NGROUPS = np.empty(Nfitsfiles, dtype=int)
-        NFRAMES = np.empty(Nfitsfiles, dtype=int)
-        EFFINTTM = np.empty(Nfitsfiles) # s
-        SUBARRAY = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
-        SUBPXPTS = np.empty(Nfitsfiles, dtype=int)
-        APERNAME = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
-        PIXSCALE = np.empty(Nfitsfiles) # mas
-        PA_V3 = np.empty(Nfitsfiles) # deg
-        HASH = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
-        for i in range(Nfitsfiles):
-            hdul = pyfits.open(self.meta.idir+fitsfiles_use[i])
-            head = hdul[0].header
-            TARGPROP[i] = head['TARGPROP']
-            TARG_RA[i] = head['TARG_RA'] # deg
-            TARG_DEC[i] = head['TARG_DEC'] # deg
-            INSTRUME[i] = head['INSTRUME']
-            DETECTOR[i] = head['DETECTOR']
-            FILTER[i] = head['FILTER']
-            PUPIL[i] = head['PUPIL']
-            CORONMSK[i] = head['CORONMSK']
-            READPATT[i] = head['READPATT']
-            NINTS[i] = head['NINTS']
-            NGROUPS[i] = head['NGROUPS']
-            NFRAMES[i] = head['NFRAMES']
-            EFFINTTM[i] = head['EFFINTTM'] # s
-            SUBARRAY[i] = head['SUBARRAY']
-            try:
-                SUBPXPTS[i] = head['SUBPXPTS']
-            except:
-                SUBPXPTS[i] = 1
-            APERNAME[i] = head['APERNAME']
-            if 'NIRCAM' in INSTRUME[i]:
-                if 'LONG' in DETECTOR[i]:
-                    PIXSCALE[i] = nrc._pixelscale_long*1e3 # mas
-                else:
-                    PIXSCALE[i] = nrc._pixelscale_short*1e3 # mas
-            elif 'MIRI' in INSTRUME[i]:
-                PIXSCALE[i] = mir.pixelscale*1e3 # mas
-            else:
-                raise UserWarning('Unknown instrument')
-            head = hdul[1].header
-            PA_V3[i] = head['ROLL_REF'] # deg (N over E)
-            HASH[i] = INSTRUME[i]+'_'+DETECTOR[i]+'_'+FILTER[i]+'_'+PUPIL[i]+'_'+CORONMSK[i]+'_'+SUBARRAY[i]
-            hdul.close()
-
-        del nrc
-        del mir
-
-        # Data is grouped according to unique hash
-        HASH_unique = np.unique(HASH)
-        NHASH_unique = len(HASH_unique)
-        self.meta.obs = {}
-        for i in range(NHASH_unique):
-            ww = HASH == HASH_unique[i]
-            dpts = SUBPXPTS[ww]
-            dpts_unique = np.unique(dpts)
-            if len(dpts_unique) == 2 and dpts_unique[0] == 1:
-                ww_sci = np.where(dpts == dpts_unique[0])[0]
-                ww_cal = np.where(dpts == dpts_unique[1])[0]
-            else:
-                raise UserWarning('Science and reference PSFs are identified based on their number of dither positions, assuming that there is no dithering for the science PSFs')
-            tab = Table(names=('TYP', 'TARGPROP', 'TARG_RA', 'TARG_DEC', 'READPATT', 'NINTS', 'NGROUPS', 'NFRAMES', 'EFFINTTM', 'APERNAME', 'PIXSCALE', 'PA_V3', 'FITSFILE'), dtype=('S', 'S', 'f', 'f', 'S', 'i', 'i', 'i', 'f', 'S', 'f', 'f', 'S'))
-            for j in range(len(ww_sci)):
-                tab.add_row(('SCI', TARGPROP[ww][ww_sci][j], TARG_RA[ww][ww_sci][j], TARG_DEC[ww][ww_sci][j], READPATT[ww][ww_sci][j], NINTS[ww][ww_sci][j], NGROUPS[ww][ww_sci][j], NFRAMES[ww][ww_sci][j], EFFINTTM[ww][ww_sci][j], APERNAME[ww][ww_sci][j], PIXSCALE[ww][ww_sci][j], PA_V3[ww][ww_sci][j], self.meta.idir+fitsfiles_use[ww][ww_sci][j]))
-            for j in range(len(ww_cal)):
-                tab.add_row(('CAL', TARGPROP[ww][ww_cal][j], TARG_RA[ww][ww_cal][j], TARG_DEC[ww][ww_cal][j], READPATT[ww][ww_cal][j], NINTS[ww][ww_cal][j], NGROUPS[ww][ww_cal][j], NFRAMES[ww][ww_cal][j], EFFINTTM[ww][ww_cal][j], APERNAME[ww][ww_cal][j], PIXSCALE[ww][ww_cal][j], PA_V3[ww][ww_cal][j], self.meta.idir+fitsfiles_use[ww][ww_cal][j]))
-            self.meta.obs[HASH_unique[i]] = tab.copy()
-            del tab
-
-        if self.meta.verbose:
-            print('--> Identified %.0f observation sequences' % len(self.meta.obs))
-            for i, key in enumerate(self.meta.obs.keys()):
-                print('--> Sequence %.0f: ' % (i+1)+key)
-                print_table = copy.deepcopy(self.meta.obs[key])
-                print_table.remove_column('FITSFILE')
-                print_table.pprint(max_lines=100, max_width=1000)
-
-        # Find the maximum numbasis based on the number of available
-        # calibrator frames
-        self.get_maxnumbasis()
-
-        # Gather magnitudes for the target star
-        self.meta.mstar = utils.get_stellar_magnitudes(self.meta)
+        # Assign flags to track which stages have been performed
+        self.meta.done_rampfit = False
+        self.meta.done_imgprocess = False
+        self.meta.done_subtraction = False
+        self.meta.done_raw_contrast = False
+        self.meta.done_cal_contrast = False
+        self.meta.done_companion = False
 
         # Get properties for JWST
         self.get_jwst_meta()
 
-        # Get the correct bar offset for each observing sequence.
-        self.meta.bar_offset = {}
-        for key in self.meta.obs.keys():
-            temp = [s.start() for s in re.finditer('_', key)]
-            filt = key[temp[1]+1:temp[2]].upper()
-            if ('MASKALWB' in key.upper()):
-                if ('NARROW' in self.meta.obs[key]['APERNAME'][0].upper()):
-                    self.meta.bar_offset[key] = self.meta.offset_lwb['narrow']
-                else:
-                    self.meta.bar_offset[key] = self.meta.offset_lwb[filt]
-            elif ('MASKASWB' in key.upper()):
-                if ('NARROW' in self.meta.obs[key]['APERNAME'][0].upper()):
-                    self.meta.bar_offset[key] = self.meta.offset_swb['narrow']
-                else:
-                    self.meta.bar_offset[key] = self.meta.offset_swb[filt]
-            else:
-                self.meta.bar_offset[key] = None
-
         return None
-
-    def get_maxnumbasis(self):
-        """
-        Find the maximum numbasis based on the number of available calibrator
-        frames.
-        """
-        
-        # The number of available calibrator frames can be found in the
-        # self.meta.obs table
-        self.meta.maxnumbasis = {}
-        for i, key in enumerate(self.meta.obs.keys()):
-            ww = self.meta.obs[key]['TYP'] == 'CAL'
-            self.meta.maxnumbasis[key] = np.sum(self.meta.obs[key]['NINTS'][ww], dtype=int)
-        
-        return
 
     def get_jwst_meta(self):
         """ 
@@ -300,17 +170,86 @@ class JWST(Pipeline):
 
         return sign*offset_arcsec
 
-    def run(self):
+    def run_all(self, skip_ramp=False, skip_imgproc=False, skip_sub=False, skip_rawcon=False, skip_calcon=False, skip_comps=False):
         """
-        Run reduction based on inputs from the config file.
+        Single function to run all pipeline stages in sequence.
         """
+        if not skip_ramp:
+            self.rampfit()
+        if not skip_imgproc:
+            self.imgprocess()
+        if not skip_sub:
+            self.subtraction()
+        if not skip_rawcon:
+            self.raw_contrast()
+        if not skip_calcon:
+            self.cal_contrast()
+        if not skip_comps:
+            self.companions()
+        return
+    
+    def rampfit(self):
+        '''
+        Wrapper function for ramp fitting stage
+        '''
+        # Set meta flag to True if not already
+        self.meta.done_rampfit = True
 
-        if self.meta.do_subtraction:
-            sub = subtraction.klip_subtraction(self.meta)
-        if self.meta.do_raw_contrast:
-            raw_contrast = contrast.raw_contrast_curve(self.meta)
-        if self.meta.do_cal_contrast:
-            cal_contrast = contrast.calibrated_contrast_curve(self.meta)
-        if self.meta.do_companion:
-            extract_comps = companion.extract_companions(self.meta)
+        # Run ramp fitting
+        ramp = rampfit.stsci_ramp_fitting(self.meta)
+
+        return 
+
+    def imgprocess(self):
+        '''
+        Wrapper function for image processing stage
+        '''
+        # Set meta flag to True if not already
+        self.meta.done_imgprocess = True
+        
+        #Run image processing
+        img = imgprocess.stsci_image_processing(self.meta)
+
+        return
+
+    def subtraction(self):
+        '''
+        Wrapper function for subtraction stage
+        '''
+        # Set meta flag to True if not already
+        self.meta.done_subtraction = True
+
+        #Run subtraction
+        sub = subtraction.klip_subtraction(self.meta)
+        return
+
+    def raw_contrast(self):
+        '''
+        Wrapper function for raw contrast  stage
+        '''
+        # Set meta flag to True if not already
+        self.meta.done_raw_contrast = True
+
+        #Run raw contrast calculation
+        raw_contrast = contrast.raw_contrast_curve(self.meta)
+        return
+
+    def cal_contrast(self):
+        '''
+        Wrapper function for calibrated contrast stage
+        '''
+        # Set meta flag to True if not already
+        self.meta.done_cal_contrast = True
+        # Run calibrated contrast calculation
+        cal_contrast = contrast.calibrated_contrast_curve(self.meta)
+        return
+
+    def companion(self):
+        '''
+        Wrapper function for companion stage
+        '''
+        # Set meta flag to True if not already
+        self.meta.done_companion = True
+        #Run companion photometry / astrometry
+        extract_comps = companion.extract_companions(self.meta)
         return
