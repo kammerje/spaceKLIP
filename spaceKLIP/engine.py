@@ -12,8 +12,6 @@ import webbpsf
 
 os.environ['CRDS_PATH'] = '../crds_cache'
 os.environ['CRDS_SERVER_URL'] = 'https://jwst-crds.stsci.edu'
-from jwst import datamodels
-from jwst.coron import AlignRefsStep
 
 from . import io
 from . import subtraction
@@ -135,14 +133,6 @@ class JWST(Pipeline):
             self.meta.F0[name] = filter_list['ZeroPoint'][i] # Jy
         del filter_list
 
-        # PSF mask names from the CRDS
-        step = AlignRefsStep()
-        self.meta.psfmask = {}
-        for key in self.meta.obs.keys():
-            model = datamodels.open(self.meta.obs[key]['FITSFILE'][0])            
-            self.meta.psfmask[key] = step.get_reference_file(model, 'psfmask')
-        del step
-
         # PSF position with respect to the NRCA4_MASKSWB and the NRCA5_MASKLWB
         # subarray, respectively, for each NIRCam filter, from pySIAF
         self.siaf = pysiaf.Siaf('NIRCAM')
@@ -158,7 +148,6 @@ class JWST(Pipeline):
         """
         Get bar offset directly from SIAF.
         """
-
         if channel == 'SW':
             refapername = 'NRCA4_MASKSWB'
             apername = 'NRCA4_MASKSWB_'+filt.upper()
@@ -244,7 +233,7 @@ class JWST(Pipeline):
         cal_contrast = contrast.calibrated_contrast_curve(self.meta)
         return
 
-    def companion(self):
+    def companions(self):
         '''
         Wrapper function for companion stage
         '''

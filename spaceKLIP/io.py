@@ -141,10 +141,12 @@ def extract_obs(meta, fitsfiles_all):
             TARGPROP[i] = 'CALIBRATOR'
             PUPIL[i] = ''
             SUBPXPTS[i] = 5
+            PA_V3[i] = 0
         elif 'HD141569' in file:
             TARGPROP[i] = 'HD141569'
             PUPIL[i] = ''
             SUBPXPTS[i] = 1
+            PA_V3[i] = file.split('/')[-1].split('_')[2][2:]
         else:
             # NIRCam
             TARGPROP[i] = head['TARGPROP']
@@ -166,44 +168,24 @@ def extract_obs(meta, fitsfiles_all):
         NFRAMES[i] = head['NFRAMES']
         EFFINTTM[i] = head['EFFINTTM'] # s
         SUBARRAY[i] = head['SUBARRAY']
-
-        APERNAME[i] = head['APERNAME']
-        try:
-            SUBPXPTS[i] = head['SUBPXPTS']
-        except:
-            SUBPXPTS[i] = 1
         
         # NIRCam specific settings
         if 'NIRCAM' in INSTRUME[i]:
+            APERNAME[i] = head['APERNAME']
             if 'LONG' in DETECTOR[i]:
                 PIXSCALE[i] = nrc._pixelscale_long*1e3 # mas
             else:
                 PIXSCALE[i] = nrc._pixelscale_short*1e3 # mas
-            # Get the correct bar offset for each observing sequence.
-            meta.bar_offset = {}
-            for key in meta.obs.keys():
-                temp = [s.start() for s in re.finditer('_', key)]
-                filt = key[temp[1]+1:temp[2]].upper()
-                if ('MASKALWB' in key.upper()):
-                    if ('NARROW' in meta.obs[key]['APERNAME'][0].upper()):
-                        meta.bar_offset[key] = meta.offset_lwb['narrow']
-                    else:
-                        meta.bar_offset[key] = meta.offset_lwb[filt]
-                elif ('MASKASWB' in key.upper()):
-                    if ('NARROW' in meta.obs[key]['APERNAME'][0].upper()):
-                        meta.bar_offset[key] = meta.offset_swb['narrow']
-                    else:
-                        meta.bar_offset[key] = meta.offset_swb[filt]
-                else:
-                    meta.bar_offset[key] = None
+            PA_V3[i] = head['ROLL_REF'] # deg
         # MIRI specific settings
         elif 'MIRI' in INSTRUME[i]:
+            APERNAME[i] = None
             PIXSCALE[i] = mir.pixelscale*1e3 # mas
-
         else:
             raise UserWarning('Unknown instrument')
+
         head = hdul[1].header
-        PA_V3[i] = head['PA_V3'] # deg
+        
         HASH[i] = INSTRUME[i]+'_'+DETECTOR[i]+'_'+FILTER[i]+'_'+PUPIL[i]+'_'+CORONMSK[i]+'_'+SUBARRAY[i]
         hdul.close()
 
@@ -226,7 +208,7 @@ def extract_obs(meta, fitsfiles_all):
             tab.add_row(('CAL', TARGPROP[ww][ww_cal][j], TARG_RA[ww][ww_cal][j], TARG_DEC[ww][ww_cal][j], READPATT[ww][ww_cal][j], NINTS[ww][ww_cal][j], NGROUPS[ww][ww_cal][j], NFRAMES[ww][ww_cal][j], EFFINTTM[ww][ww_cal][j], PIXSCALE[ww][ww_cal][j], PA_V3[ww][ww_cal][j], fitsfiles[ww][ww_cal][j]))
         meta.obs[HASH_unique[i]] = tab.copy()
         del tab
-    
+
     if (meta.verbose == True):
         print('--> Identified %.0f observation sequences' % len(meta.obs))
         for i, key in enumerate(meta.obs.keys()):

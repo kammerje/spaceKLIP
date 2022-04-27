@@ -100,6 +100,6 @@ def klip_subtraction(meta):
 
                 # Increment counter
                 counter += 1
-   
-   return
+    
+    return
 

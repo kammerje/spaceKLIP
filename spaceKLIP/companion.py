@@ -94,6 +94,7 @@ def extract_companions(meta):
             pxsc = meta.obs[key]['PIXSCALE'][0] # mas
             cent = (hdul[0].header['PSFCENTX'], hdul[0].header['PSFCENTY']) # pix
             temp = [s.start() for s in re.finditer('_', key)]
+            inst = key[:temp[0]]
             filt = key[temp[1]+1:temp[2]]
             mask = key[temp[3]+1:temp[4]]
             subarr = key[temp[4]+1:]
@@ -113,7 +114,7 @@ def extract_companions(meta):
             # Offset PSF from WebbPSF, i.e., an integration time weighted
             # average of the unocculted offset PSF over the rolls normalized
             # to a total intensity of 1
-            offsetpsf = utils.get_offsetpsf(meta, filt, mask, key, derotate=False)
+            offsetpsf = utils.get_offsetpsf(meta, inst, filt, mask, key, derotate=False)
             offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxsc**2*(180./np.pi*3600.*1000.)**2 # MJy/sr
             
             # # Get the correct instrument from WebbPSF.
@@ -253,6 +254,7 @@ def extract_companions(meta):
                                         data_center=[data_centx, data_centy],
                                         dr=4,
                                         exclusion_radius=12.*fwhm)
+
                 corr_len_guess = 3. # pix
                 corr_len_label = r'$l$'
                 fma.set_kernel('matern32', [corr_len_guess], [corr_len_label])                        
