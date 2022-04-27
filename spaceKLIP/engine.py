@@ -1,8 +1,19 @@
-import os
-import numpy as np
+import os, re
+
 import astropy.io.fits as pyfits
-from astropy.table import Table
+import numpy as np
 import copy
+
+from astropy.table import Table
+from astroquery.svo_fps import SvoFps
+
+import pysiaf
+import webbpsf
+
+os.environ['CRDS_PATH'] = '../crds_cache'
+os.environ['CRDS_SERVER_URL'] = 'https://jwst-crds.stsci.edu'
+from jwst import datamodels
+from jwst.coron import AlignRefsStep
 
 from . import io
 from . import subtraction
@@ -14,27 +25,32 @@ from . import imgprocess
 
 class Meta():
     """
-    A meta class to hold information throughout the pipeline process, including user inputs. 
+    A meta class to hold information throughout the pipeline process,
+    including user inputs.
     """
+
     def __init__(self):
+
         return
 
     def save(self):
-        # TODO, write function that could save all of the used parameters
-        # for debugging purposes.
+        
+        # TODO: write function that could save all of the used parameters for
+        # debugging purposes
         return
 
 class Pipeline():
     """
-    Generic Pipeline Class
+    Generic Pipeline Class.
     """
+
     def __init__(self, config_file):
         """
-        Initialise a generic pipeline class by reading a config file and saving inputs
-        to a Meta object. 
+        Initialize a generic pipeline class by reading a config file and
+        saving inputs to a Meta object.
         """
 
-        # Initialise Params object
+        # Initialize Meta object
         self.meta = Meta()
 
         # Read in configuration parameters
@@ -48,36 +64,29 @@ class Pipeline():
             setattr(self.meta, key, config[key])
 
         if self.meta.rundirs != None:
-            self.meta.rundirs = [self.meta.odir+rdir.replace('/','')+'/' for rdir in self.meta.rundirs]
-        
+            self.meta.rundirs = [self.meta.odir+rdir.replace('/', '')+'/' for rdir in self.meta.rundirs]
+
         return
 
 class JWST(Pipeline):
     """
     JWST specifc Pipeline class.
     """
+
     def __init__(self, config_file):
         """
-        Initialize a JWST specific Pipeline Class
-        
+        Initialize a JWST specific Pipeline Class.
+
         Note: this class only works with NIRCam so far.
-        
-        TODO: not all subarrays are assigned a PSF mask name from the CRDS yet.
-              The assignments for all subarrays can be found at
-              https://jwst-crds.stsci.edu/.
-        
+
         Parameters
         ----------
         config_file : str
-            Filepath to .yaml configuration file. 
-        
+            File path of .yaml configuration file.
         """
-        
-        # Intialise parent class
-        super().__init__(config_file)
 
-        # Get properties for JWST
-        self.get_jwst_meta()
+        # Intialize parent class
+        super().__init__(config_file)
 
         # Assign flags to track which stages have been performed
         self.meta.done_rampfit = False
@@ -87,111 +96,83 @@ class JWST(Pipeline):
         self.meta.done_cal_contrast = False
         self.meta.done_companion = False
 
+        # Get properties for JWST
+        self.get_jwst_meta()
+
         return None
 
     def get_jwst_meta(self):
         """ 
-        Define a range of parameters specific to JWST and its instruments
+        Define a range of parameters specific to JWST and its instruments.
         """
 
-        # Define telescope and instrument properties.
+        # Define telescope and instrument properties
         self.meta.diam = 6.5 # m; primary mirror diameter
         self.meta.iwa = 1. # pix; inner working angle
         self.meta.owa = 150. # pix; outer working angle
-        self.meta.pxsc_sw = 31.1 # mas; pixel scale of the short wavelength module
-        self.meta.pxsc_lw = 63. # mas; pixel scale of the long wavelength module
 
         # Ancillary directories
         if not os.path.isdir(self.meta.ancildir):
-            self.meta.ancildir = self.meta.odir + 'ANCILLARY/'
-        self.meta.psfmaskdir = self.meta.ancildir  + 'psfmasks/'
-        self.meta.offsetpsfdir = self.meta.ancildir  + 'offsetpsfs/'
+            self.meta.ancildir = self.meta.odir+'ANCILLARY/'
+        self.meta.psfmaskdir = self.meta.ancildir +'psfmasks/'
+        self.meta.offsetpsfdir = self.meta.ancildir+'offsetpsfs/'
 
-        # Effective wavelength of the NIRCam filters from the SVO Filter
-        # Profile Service.
-        self.meta.wave = {'F182M': 1.838899e-6, # m
-                     'F187N': 1.873722e-6, # m
-                     'F200W': 1.968088e-6, # m
-                     'F210M': 2.090846e-6, # m
-                     'F212N': 2.121193e-6, # m
-                     'F250M': 2.500588e-6, # m
-                     'F300M': 2.981837e-6, # m
-                     'F335M': 3.353823e-6, # m
-                     'F356W': 3.528743e-6, # m
-                     'F360M': 3.614837e-6, # m
-                     'F410M': 4.072309e-6, # m
-                     'F430M': 4.278486e-6, # m
-                     'F444W': 4.350440e-6, # m
-                     'F460M': 4.626991e-6, # m
-                     'F480M': 4.813906e-6, # m
-                     }
-        
-        # Filter zero point of the NIRCam filters from the SVO Filter Profile
-        # Service.
-        self.meta.F0 = {'F182M': 858.76, # Jy
-                   'F187N': 813.41, # Jy
-                   'F200W': 759.59, # Jy
-                   'F210M': 701.37, # Jy
-                   'F212N': 690.90, # Jy
-                   'F250M': 515.84, # Jy
-                   'F300M': 377.25, # Jy
-                   'F335M': 305.60, # Jy
-                   'F356W': 272.62, # Jy
-                   'F360M': 266.13, # Jy
-                   'F410M': 213.27, # Jy
-                   'F430M': 195.51, # Jy
-                   'F444W': 184.42, # Jy
-                   'F460M': 168.30, # Jy
-                   'F480M': 157.04, # Jy
-                   }
-        
-        # PSF mask names from the CRDS.
-        self.meta.psfmask = {'F250M_MASKA335R_SUB320A335R': 'jwst_nircam_psfmask_0066',
-                        'F300M_MASKA335R_SUB320A335R': 'jwst_nircam_psfmask_0054',
-                        'F356W_MASKA335R_SUB320A335R': 'jwst_nircam_psfmask_0002',
-                        'F410M_MASKA335R_SUB320A335R': 'jwst_nircam_psfmask_0067',
-                        'F444W_MASKA335R_SUB320A335R': 'jwst_nircam_psfmask_0075',
-                        'F356W_MASKA430R_SUB320A430R': 'jwst_nircam_psfmask_0065',
-                        'F444W_MASKA430R_SUB320A430R': 'jwst_nircam_psfmask_0004',
-                        'F250M_MASKALWB_SUB320ALWB': 'jwst_nircam_psfmask_0042',
-                        'F300M_MASKALWB_SUB320ALWB': 'jwst_nircam_psfmask_0045',
-                        'F335M_MASKALWB_SUB320ALWB': 'jwst_nircam_psfmask_0003',
-                        'F410M_MASKALWB_SUB320ALWB': 'jwst_nircam_psfmask_0048',
-                        'F430M_MASKALWB_SUB320ALWB': 'jwst_nircam_psfmask_0055',
-                        'F460M_MASKALWB_SUB320ALWB': 'jwst_nircam_psfmask_0058',
-                        'narrow_MASKALWB_SUB320ALWB': 'jwst_nircam_psfmask_0042',
-                        }
-        
-        # PSF position with respect to the NRCA4_MASKSWB and the
-        # NRCA5_MASKLWB subarray, respectively, for each NIRCam filter from
-        # pySIAF.
-        self.meta.offset_swb = {'F182M': -1.743, # arcsec
-                           'F187N': -1.544, # arcsec
-                           'F210M': -0.034, # arcsec
-                           'F212N': 0.144, # arcsec
-                           'F200W': 0.196, # arcsec
-                           'narrow': -8.053, # arcsec
-                           }
-        self.meta.offset_lwb = {'F250M': 6.565, # arcsec
-                           'F300M': 5.042, # arcsec
-                           'F277W': 4.917, # arcsec
-                           'F335M': 3.875, # arcsec
-                           'F360M': 3.057, # arcsec
-                           'F356W': 2.327, # arcsec
-                           'F410M': 1.622, # arcsec
-                           'F430M': 0.998, # arcsec
-                           'F460M': -0.094, # arcsec
-                           'F444W': -0.723, # arcsec
-                           'F480M': -0.854, # arcsec
-                           'narrow': 8.302, # arcsec
-                           }
-        
+        # Mean wavelengths and zero points of the JWST filters from the SVO
+        # Filter Profile Service
+        self.meta.wave = {}
+        self.meta.F0 = {}
+        filter_list = SvoFps.get_filter_list(facility='JWST', instrument='NIRCAM')
+        for i in range(len(filter_list)):
+            name = filter_list['filterID'][i]
+            name = name[name.rfind('.')+1:]
+            self.meta.wave[name] = filter_list['WavelengthMean'][i]/1e4*1e-6 # m
+            self.meta.F0[name] = filter_list['ZeroPoint'][i] # Jy
+        filter_list = SvoFps.get_filter_list(facility='JWST', instrument='MIRI')
+        for i in range(len(filter_list)):
+            name = filter_list['filterID'][i]
+            name = name[name.rfind('.')+1:]
+            self.meta.wave[name] = filter_list['WavelengthMean'][i]/1e4*1e-6 # m
+            self.meta.F0[name] = filter_list['ZeroPoint'][i] # Jy
+        del filter_list
+
+        # PSF mask names from the CRDS
+        step = AlignRefsStep()
+        self.meta.psfmask = {}
+        for key in self.meta.obs.keys():
+            model = datamodels.open(self.meta.obs[key]['FITSFILE'][0])            
+            self.meta.psfmask[key] = step.get_reference_file(model, 'psfmask')
+        del step
+
+        # PSF position with respect to the NRCA4_MASKSWB and the NRCA5_MASKLWB
+        # subarray, respectively, for each NIRCam filter, from pySIAF
+        self.siaf = pysiaf.Siaf('NIRCAM')
+        self.meta.offset_swb = {filt: self.get_bar_offset_from_siaf(filt, channel='SW')
+                                for filt in ['F182M', 'F187N', 'F210M', 'F212N', 'F200W', 'narrow']} # arcsec
+        self.meta.offset_lwb = {filt: self.get_bar_offset_from_siaf(filt, channel='LW')
+                                for filt in ['F250M', 'F300M', 'F277W', 'F335M', 'F360M', 'F356W', 'F410M', 'F430M', 'F460M', 'F480M', 'F444W', 'narrow']} # arcsec
+        del self.siaf
+
         return
+
+    def get_bar_offset_from_siaf(self, filt, channel='LW'):
+        """
+        Get bar offset directly from SIAF.
+        """
+
+        if channel == 'SW':
+            refapername = 'NRCA4_MASKSWB'
+            apername = 'NRCA4_MASKSWB_'+filt.upper()
+        else: # otherwise default to LW
+            refapername = 'NRCA5_MASKLWB'
+            apername = 'NRCA5_MASKLWB_'+filt.upper()
+        offset_arcsec = np.sqrt((self.siaf.apertures[refapername].V2Ref-self.siaf.apertures[apername].V2Ref)**2+(self.siaf.apertures[refapername].V3Ref-self.siaf.apertures[apername].V3Ref)**2)
+        sign = np.sign(self.siaf.apertures[refapername].V2Ref-self.siaf.apertures[apername].V2Ref)
+
+        return sign*offset_arcsec
 
     def run_all(self, skip_ramp=False, skip_imgproc=False, skip_sub=False, skip_rawcon=False, skip_calcon=False, skip_comps=False):
         """
-        Single function to run all pipeline stages in sequence based
-        on the "do_X" flags within the config file. 
+        Single function to run all pipeline stages in sequence.
         """
         if not skip_ramp:
             self.rampfit()

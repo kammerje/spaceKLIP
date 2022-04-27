@@ -1,15 +1,14 @@
 import matplotlib.pyplot as plt
-
 import numpy as np
 
+def plot_contrast_images(meta, data, data_masked, pxsc=None, savefile='./maskimage.pdf'):
+    """
+    Plot subtracted images to be used for contrast estimation, one with
+    companions marked, one with the masking adopted.
 
-def plot_contrast_images(meta, data, data_masked, savefile='./maskimage.pdf', pxsc=None):
-    '''
-    Plot subtracted images to be used for contrast estimation, one with companions 
-    marked, one with the masking adopted. 
-    '''
+    """
 
-    #Set some quick information depending on whether a pixel scale was passed
+    # Set some quick information depending on whether a pixel scale was passed
     if pxsc == None:
         extent=(-0.5, data.shape[1]-0.5, data.shape[1]-0.5, -0.5)
         pxsc = 1
@@ -18,9 +17,9 @@ def plot_contrast_images(meta, data, data_masked, savefile='./maskimage.pdf', px
         extl = (data.shape[1]+1.)/2.*pxsc/1000. # arcsec
         extr = (data.shape[1]-1.)/2.*pxsc/1000. # arcsec
         extent = (extl, -extr, -extl, extr)
-        xlabel, ylabel = '$\Delta$RA [arcsec]', '$\Delta$DEC [arcsec]'
+        xlabel, ylabel = '$\Delta$RA [arcsec]', '$\Delta$Dec [arcsec]'
 
-    # Initialise plots
+    # Initialize plots
     f, ax = plt.subplots(1, 2, figsize=(2*6.4, 1*4.8))
 
     # Plot subtracted image, circle input companion locations
@@ -36,12 +35,12 @@ def plot_contrast_images(meta, data, data_masked, savefile='./maskimage.pdf', px
     ax[1].imshow(np.log10(np.abs(data_masked[-1])), origin='lower', cmap='inferno', extent=extent)
     ax[1].set_xlabel(xlabel)
     ax[1].set_ylabel(ylabel)
-    if ('MASKASWB' in savefile) or ('MASKALWB' in savefile):
+    if 'SWB' in savefile or 'LWB' in savefile:
         ax[1].set_title('Companions & bar masked')
     else:
         ax[1].set_title('Companions masked')
     plt.tight_layout()
-    
+
     # Save and close plot
     plt.savefig(savefile)
     plt.close()
@@ -49,11 +48,11 @@ def plot_contrast_images(meta, data, data_masked, savefile='./maskimage.pdf', px
     return
 
 def plot_contrast_raw(meta, seps, cons, labels='default', savefile='./rawcontrast.pdf'):
-    '''
-    Plot raw contrast curves for different KL modes
-    '''
+    """
+    Plot raw contrast curves for different KL modes.
+    """
 
-    # Initialise figure
+    # Initialize figure
     plt.figure(figsize=(6.4, 4.8))
     ax = plt.gca()
 
@@ -69,7 +68,7 @@ def plot_contrast_raw(meta, seps, cons, labels='default', savefile='./rawcontras
         # Loop over contrast curves to plot
         for i in range(len(seps)):
             ax.plot(seps[i], cons[i], label=labels[i])
-    
+
     # Plot settings
     ax.set_yscale('log')
     ax.set_xlim([0., np.max(seps)]) # arcsec
@@ -79,7 +78,7 @@ def plot_contrast_raw(meta, seps, cons, labels='default', savefile='./rawcontras
     ax.set_title('Raw contrast curve')
     ax.legend(loc='upper right')
     plt.tight_layout()
-    
+
     # Save and close plot
     plt.savefig(savefile)
     plt.close()
@@ -172,7 +171,7 @@ def plot_contrast_calibrated(thrput, med_thrput, fit_thrput, con_seps, cons, cor
 
     return
 
-def plot_fm_psf(meta, fm_frame, guess_flux, data_frame, pxsc=None, savefile='./fmpsf.pdf'):
+def plot_fm_psf(meta, fm_frame, guess_flux, data_frame, pxsc=None, j=0, savefile='./fmpsf.pdf'):
     '''
     Plot forward model psf
     '''
@@ -192,8 +191,7 @@ def plot_fm_psf(meta, fm_frame, guess_flux, data_frame, pxsc=None, savefile='./f
     p0 = ax[0].imshow(fm_frame*guess_flux, origin='lower', cmap='inferno', extent=extent)
     c0 = plt.colorbar(p0, ax=ax[0])
     c0.set_label('DN', rotation=270, labelpad=20)
-    for j in range(len(meta.ra_off)):
-        cc = plt.Circle((meta.ra_off[j]/1000., meta.de_off[j]/1000.), 10.*pxsc/1000., fill=False, edgecolor='green', linewidth=3)
+    cc = plt.Circle((meta.ra_off[j]/1000., meta.de_off[j]/1000.), 10.*pxsc/1000., fill=False, edgecolor='green', linewidth=3)
     ax[0].add_artist(cc)
     ax[0].set_xlim([5., -5.])
     ax[0].set_ylim([-5., 5.])
@@ -203,8 +201,7 @@ def plot_fm_psf(meta, fm_frame, guess_flux, data_frame, pxsc=None, savefile='./f
     p1 = ax[1].imshow(data_frame, origin='lower', cmap='inferno', extent=extent)
     c1 = plt.colorbar(p1, ax=ax[1])
     c1.set_label('DN', rotation=270, labelpad=20)
-    for j in range(len(meta.ra_off)):
-        cc = plt.Circle((meta.ra_off[j]/1000., meta.de_off[j]/1000.), 10.*pxsc/1000., fill=False, edgecolor='green', linewidth=3)
+    cc = plt.Circle((meta.ra_off[j]/1000., meta.de_off[j]/1000.), 10.*pxsc/1000., fill=False, edgecolor='green', linewidth=3)
     ax[1].add_artist(cc)
     ax[1].set_xlim([5., -5.])
     ax[1].set_ylim([-5., 5.])

@@ -13,4 +13,4 @@ setup(name='spaceKLIP',
       license='MIT',
       install_requires=REQUIRES,
       packages=find_packages()
-    )
+     )
