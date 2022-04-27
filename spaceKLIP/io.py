@@ -1,31 +1,32 @@
 from __future__ import division
 
-import yaml
-import json
+import numpy as np
+import json, yaml
+
 import glob, os
 import copy
 
-import numpy as np
+import webbpsf
+
 from astropy.table import Table
 import astropy.io.fits as pyfits
 
 def read_config(file):
     """
-    Read a .yaml configuration file that defines the code execution. 
+    Read a .yaml configuration file that defines the code execution.
 
     Parameters
     ----------
     file : str  
-        File path of .yaml configuration file
+        File path of .yaml configuration file.
 
     Returns
     -------
     config : dict
-        Dictionary of all configuration parameters
-
+        Dictionary of all configuration parameters.
     """
 
-    with open(file, "r") as stream:
+    with open(file, 'r') as stream:
         try:
             config = yaml.safe_load(stream)
         except:
@@ -34,7 +35,7 @@ def read_config(file):
     temp = config['pa_ranges_bar']
     Nval = len(temp)
     pa_ranges_bar = []
-    if (Nval % 2 != 0):
+    if Nval % 2 != 0:
         raise UserWarning('pa_ranges_bar needs to be list of 2-tuples')
     for i in range(Nval//2):
         pa_ranges_bar += [(float(temp[2*i][1:]), float(temp[2*i+1][:-1]))]
@@ -77,24 +78,22 @@ def meta_to_json(input_meta, savefile='./MetaSave.txt'):
                 if isinstance(j, np.generic):
                     l[j] = l[j].item()
             setattr(meta, i, l)
-                
 
     with open(savefile, 'w') as msavefile:
         json.dump(vars(meta), msavefile)
 
     return
 
+def read_metajson(file):
+    """
+    Load a Meta save file as a json dictionary, don't convert back into a
+    class as it doesn't seem necessary yet.
+    """
 
-def read_metajson(filepath):
-    '''
-    Load a Meta save file as a json dictionary, don't convert
-    back into a class as it doesn't seem necessary yet. 
-    '''
-    with open(filepath) as f:
+    with open(file) as f:
         metasave = json.load(f)
 
     return metasave
-
 
 def extract_obs(meta, fitsfiles_all):
     # Create an astropy table for each unique set of observing parameters
@@ -107,6 +106,10 @@ def extract_obs(meta, fitsfiles_all):
         if pyfits.getheader(file)['EXP_TYPE'] in ['NRC_IMAGE', 'NRC_CORON', 'MIR_IMAGE', 'MIR_LYOT', 'MIR_4QPM']:
             fitsfiles += [file]
     fitsfiles = np.array(fitsfiles)
+
+    # Load WebbPSF NIRCam / MIRI classes
+    nrc = webbpsf.NIRCam()
+    mir = webbpsf.MIRI()
 
     Nfitsfiles = len(fitsfiles)
     
@@ -125,6 +128,7 @@ def extract_obs(meta, fitsfiles_all):
     EFFINTTM = np.empty(Nfitsfiles) # s
     SUBARRAY = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
     SUBPXPTS = np.empty(Nfitsfiles, dtype=int)
+    APERNAME = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
     PIXSCALE = np.empty(Nfitsfiles) # mas
     PA_V3 = np.empty(Nfitsfiles) # deg
     HASH = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
@@ -163,10 +167,41 @@ def extract_obs(meta, fitsfiles_all):
         EFFINTTM[i] = head['EFFINTTM'] # s
         SUBARRAY[i] = head['SUBARRAY']
 
-        if ('LONG' in DETECTOR[i]):
-            PIXSCALE[i] = meta.pxsc_lw # mas
+        APERNAME[i] = head['APERNAME']
+        try:
+            SUBPXPTS[i] = head['SUBPXPTS']
+        except:
+            SUBPXPTS[i] = 1
+        
+        # NIRCam specific settings
+        if 'NIRCAM' in INSTRUME[i]:
+            if 'LONG' in DETECTOR[i]:
+                PIXSCALE[i] = nrc._pixelscale_long*1e3 # mas
+            else:
+                PIXSCALE[i] = nrc._pixelscale_short*1e3 # mas
+            # Get the correct bar offset for each observing sequence.
+            meta.bar_offset = {}
+            for key in meta.obs.keys():
+                temp = [s.start() for s in re.finditer('_', key)]
+                filt = key[temp[1]+1:temp[2]].upper()
+                if ('MASKALWB' in key.upper()):
+                    if ('NARROW' in meta.obs[key]['APERNAME'][0].upper()):
+                        meta.bar_offset[key] = meta.offset_lwb['narrow']
+                    else:
+                        meta.bar_offset[key] = meta.offset_lwb[filt]
+                elif ('MASKASWB' in key.upper()):
+                    if ('NARROW' in meta.obs[key]['APERNAME'][0].upper()):
+                        meta.bar_offset[key] = meta.offset_swb['narrow']
+                    else:
+                        meta.bar_offset[key] = meta.offset_swb[filt]
+                else:
+                    meta.bar_offset[key] = None
+        # MIRI specific settings
+        elif 'MIRI' in INSTRUME[i]:
+            PIXSCALE[i] = mir.pixelscale*1e3 # mas
+
         else:
-            PIXSCALE[i] = meta.pxsc_sw # mas
+            raise UserWarning('Unknown instrument')
         head = hdul[1].header
         PA_V3[i] = head['PA_V3'] # deg
         HASH[i] = INSTRUME[i]+'_'+DETECTOR[i]+'_'+FILTER[i]+'_'+PUPIL[i]+'_'+CORONMSK[i]+'_'+SUBARRAY[i]
@@ -190,6 +225,7 @@ def extract_obs(meta, fitsfiles_all):
         for j in range(len(ww_cal)):
             tab.add_row(('CAL', TARGPROP[ww][ww_cal][j], TARG_RA[ww][ww_cal][j], TARG_DEC[ww][ww_cal][j], READPATT[ww][ww_cal][j], NINTS[ww][ww_cal][j], NGROUPS[ww][ww_cal][j], NFRAMES[ww][ww_cal][j], EFFINTTM[ww][ww_cal][j], PIXSCALE[ww][ww_cal][j], PA_V3[ww][ww_cal][j], fitsfiles[ww][ww_cal][j]))
         meta.obs[HASH_unique[i]] = tab.copy()
+        del tab
     
     if (meta.verbose == True):
         print('--> Identified %.0f observation sequences' % len(meta.obs))

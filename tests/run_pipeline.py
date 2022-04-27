@@ -9,7 +9,13 @@ if __name__ == '__main__':
 	pipe.run_all(skip_ramp=True, 
 				 skip_imgproc=True, 
 				 skip_sub=False, 
+<<<<<<< HEAD
 				 skip_rawcon=True, 
 				 skip_calcon=True, 
 				 skip_comps=True)
 		
+=======
+				 skip_rawcon=False, 
+				 skip_calcon=False, 
+				 skip_comps=False)
+>>>>>>> main
