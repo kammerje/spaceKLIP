@@ -1,4 +1,10 @@
 from __future__ import division
+
+
+# =============================================================================
+# IMPORTS
+# =============================================================================
+
 import os, sys, contextlib
 import re
 
@@ -25,6 +31,11 @@ import pyklip.instruments.JWST as JWST
 from . import io
 
 rad2mas = 180./np.pi*3600.*1000.
+
+
+# =============================================================================
+# MAIN
+# =============================================================================
 
 def get_offsetpsf(meta, inst, filt, mask, key, derotate=True):
     """
@@ -392,66 +403,133 @@ def get_maxnumbasis(meta):
     """
     Find the maximum numbasis based on the number of available calibrator
     frames.
+    
+    Parameters
+    ----------
+    meta : object of type meta
+        Meta object that contains all the metadata of the observations.
+    
+    Returns
+    -------
+    meta : object of type meta
+        Meta object that contains all the metadata of the observations.
+    
     """
     
-    # The number of available calibrator frames can be found in the
-    # self.obs table.
+    # Find the maximum numbasis based on the number of available calibrator
+    # frames.
     meta.maxnumbasis = {}
-    for i, key in enumerate(meta.obs.keys()):
+    for key in meta.obs.keys():
         ww = meta.obs[key]['TYP'] == 'CAL'
         meta.maxnumbasis[key] = np.sum(meta.obs[key]['NINTS'][ww], dtype=int)
     
     return meta
 
 def get_psfmasknames(meta):
-    # PSF mask names from the CRDS
+    """
+    Get the correct PSF mask for each concatenation using functionalities of
+    the JWST pipeline.
+    
+    Parameters
+    ----------
+    meta : object of type meta
+        Meta object that contains all the metadata of the observations.
+    
+    Returns
+    -------
+    meta : object of type meta
+        Meta object that contains all the metadata of the observations.
+    
+    """
+    
+    # Create an instance of the reference star alignment JWST pipeline step.
+    # This just serves as a dummy from which the get_reference_file function
+    # can be used to obtain any reference file type from the online CRDS
+    # database.
     step = AlignRefsStep()
+    
+    # Get the correct PSF mask for each concatenation.
     meta.psfmask = {}
     for key in meta.obs.keys():
-        model = datamodels.open(meta.obs[key]['FITSFILE'][0])            
+        model = datamodels.open(meta.obs[key]['FITSFILE'][0])
         meta.psfmask[key] = step.get_reference_file(model, 'psfmask')
     del step
-
+    
     return meta
 
 def get_bar_offset(meta):
-    # Get the correct bar offset for each observing sequence.
+    """
+    Get the correct bar offset for each concatenation from the meta object
+    which contains the pySIAF bar offsets for the different NIRCam bar mask
+    fiducial points in meta.offset_lwb and meta.offset_swb.
+    
+    Parameters
+    ----------
+    meta : object of type meta
+        Meta object that contains all the metadata of the observations.
+    
+    Returns
+    -------
+    meta : object of type meta
+        Meta object that contains all the metadata of the observations.
+    
+    """
+    
+    # Get the correct bar offset for each concatenation.
     meta.bar_offset = {}
     for key in meta.obs.keys():
-        temp = [s.start() for s in re.finditer('_', key)]
-        filt = key[temp[1]+1:temp[2]].upper()
-        if ('MASKALWB' in key.upper()):
-            if ('NARROW' in meta.obs[key]['APERNAME'][0].upper()):
-                meta.bar_offset[key] = meta.offset_lwb['narrow']
-            else:
-                meta.bar_offset[key] = meta.offset_lwb[filt]
-        elif ('MASKASWB' in key.upper()):
-            if ('NARROW' in meta.obs[key]['APERNAME'][0].upper()):
-                meta.bar_offset[key] = meta.offset_swb['narrow']
-            else:
-                meta.bar_offset[key] = meta.offset_swb[filt]
+        if (meta.instrume[key] == 'NIRCAM'):
+            if ('LWB' in meta.coronmsk[key]):
+                if ('NARROW' in meta.apername[key]):
+                    meta.bar_offset[key] = meta.offset_lwb['narrow']
+                else:
+                    meta.bar_offset[key] = meta.offset_lwb[meta.filter[key]]
+            elif ('SWB' in meta.coronmsk[key]):
+                if ('NARROW' in meta.apername[key]):
+                    meta.bar_offset[key] = meta.offset_swb['narrow']
+                else:
+                    meta.bar_offset[key] = meta.offset_swb[meta.filter[key]]
+            else: # round masks
+                meta.bar_offset[key] = None
         else:
             meta.bar_offset[key] = None
-
+    
     return meta
 
-def prepare_meta(meta, files):
-    #Extract observations from created folder
-    meta = io.extract_obs(meta, files)
-
-    # Find the maximum numbasis based on the number of available
-    # calibrator frames.
+def prepare_meta(meta, fitsfiles):
+    """
+    Find and write the metadata for the provided FITS files into the meta
+    object. This function overwrites any metadata that was previously stored
+    in the meta object.
+    
+    Parameters
+    ----------
+    meta : object of type meta
+        Meta object that contains all the metadata of the observations.
+    fitsfiles : list of str
+        List of the FITS files whose metadata shall be extracted.
+    
+    Returns
+    -------
+    meta : object of type meta
+        Meta object that contains all the metadata of the observations.
+    
+    """
+    
+    # Extract the metadata of the observations from the FITS files.
+    meta = io.extract_obs(meta, fitsfiles)
+    
+    # Find the maximum numbasis based on the number of available calibrator
+    # frames.
     meta = get_maxnumbasis(meta)
-
-    # Find the names of the PSF masks from CRDS
+    
+    # Find the names of the PSF masks from CRDS.
     meta = get_psfmasknames(meta)
-
-    #Get bar offsets for NIRCam
-    instrument = list(meta.obs.keys())[0].split('_')[0] #Just use first filter, NIRCam / MIRI run separately
-    if instrument == 'NIRCAM':
-        meta = get_bar_offset(meta)
-
-    # Gather magnitudes for the target star
+    
+    # Get the bar offsets for NIRCam from pySIAF.
+    meta = get_bar_offset(meta)
+    
+    # Compute the host star magnitude in the observed filters.
     meta.mstar = get_stellar_magnitudes(meta)
-
+    
     return meta

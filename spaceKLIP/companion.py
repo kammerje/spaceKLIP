@@ -157,7 +157,7 @@ def extract_companions(meta):
                 fmdataset = odir_temp+'FM_C%.0f-' % (j+1)+key+'-fmpsf-KLmodes-all.fits'
                 klipdataset = odir_temp+'FM_C%.0f-' % (j+1)+key+'-klipped-KLmodes-all.fits'
                 if meta.overwrite or (not os.path.exists(fmdataset) or not os.path.exists(klipdataset)):
-
+                    
                     # Initialize the forward modeling pyKLIP class
                     input_wvs = np.unique(dataset.wvs)
                     if (len(input_wvs) != 1):
