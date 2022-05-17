@@ -1,74 +1,94 @@
-import os, re
+from __future__ import division
+
+
+# =============================================================================
+# IMPORTS
+# =============================================================================
+
+import os
 
 import astropy.io.fits as pyfits
+import matplotlib.pyplot as plt
 import numpy as np
-import copy
 
-from astropy.table import Table
 from astroquery.svo_fps import SvoFps
 
 import pysiaf
-import webbpsf
-
-os.environ['CRDS_PATH'] = '../crds_cache'
-os.environ['CRDS_SERVER_URL'] = 'https://jwst-crds.stsci.edu'
 
 from . import io
+from . import rampfit
+from . import imgprocess
 from . import subtraction
 from . import contrast
 from . import companion
-from . import utils
-from . import rampfit
-from . import imgprocess
+
+
+# =============================================================================
+# MAIN
+# =============================================================================
 
 class Meta():
     """
     A meta class to hold information throughout the pipeline process,
     including user inputs.
+    
     """
-
+    
     def __init__(self):
-
-        return
-
-    def save(self):
         
-        # TODO: write function that could save all of the used parameters for
-        # debugging purposes
-        return
+        return None
+    
+    def save(self):
+        """
+        TODO: write function that could save all of the used parameters for
+        debugging purposes.
+        
+        """
+        
+        return None
 
 class Pipeline():
     """
-    Generic Pipeline Class.
+    Generic pipeline class.
+    
     """
-
-    def __init__(self, config_file):
+    
+    def __init__(self, config_file='template'):
         """
         Initialize a generic pipeline class by reading a config file and
-        saving inputs to a Meta object.
+        saving the inputs to a Meta object.
+        
+        Parameters
+        ----------
+        config_file : str
+            File path of the YAML configuration file containing the pipeline
+            setup parameters.
+        
         """
-
-        # Initialize Meta object
+        
+        # Initialize the meta object.
         self.meta = Meta()
-
-        # Read in configuration parameters
-        if config_file == 'template':
+        
+        # Read the configuration parameters.
+        if (config_file == 'template'):
             tempstring = '/../tests/example_config.yaml'
-            config_file = os.path.join(os.path.dirname(__file__) + tempstring)
+            config_file = os.path.join(os.path.dirname(__file__)+tempstring)
         config = io.read_config(config_file)
-
-        # Assign config parameters to class attributes
+        
+        # Assign the configuration parameters to meta class attributes.
         for key in config:
             setattr(self.meta, key, config[key])
-
-        if self.meta.rundirs != None:
+        
+        # Set up rundirs.
+        if (self.meta.rundirs != None):
             self.meta.rundirs = [self.meta.odir+rdir.replace('/', '')+'/' for rdir in self.meta.rundirs]
-
-        return
+        
+        return None
 
 class JWST(Pipeline):
     """
     JWST-specifc pipeline class.
+    
     """
     
     def __init__(self, config_file):
@@ -80,6 +100,7 @@ class JWST(Pipeline):
         config_file : str
             File path of the YAML configuration file containing the pipeline
             setup parameters.
+        
         """
         
         # Initialize the parent pipeline class.
@@ -179,86 +200,123 @@ class JWST(Pipeline):
         
         return sign*offset_arcsec
     
-    def run_all(self, skip_ramp=False, skip_imgproc=False, skip_sub=False, skip_rawcon=False, skip_calcon=False, skip_comps=False):
+    def run_all(self, skip_ramp=False, skip_imgproc=False, skip_sub=False,
+                skip_rawcon=False, skip_calcon=False, skip_comps=False):
         """
         Single function to run all pipeline stages in sequence.
+        
+        Parameters
+        ----------
+        skip_ramp : bool
+            Skip the ramp fitting (JWST stage 1) stage?
+        skip_imgproc : bool
+            Skip the image processing (JWST stage 2) stage?
+        skip_sub : bool
+            Skip the KLIP subtraction stage?
+        skip_rawcon : bool
+            Skip the raw contrast estimation stage?
+        skip_calcon : bool
+            Skip the calibrated contrast estimation stage?
+        skip_comps : bool
+            Skip the companion property extraction stage?
+        
         """
-        if not skip_ramp:
+        
+        if (not skip_ramp):
             self.rampfit()
-        if not skip_imgproc:
+        if (not skip_imgproc):
             self.imgprocess()
-        if not skip_sub:
+        if (not skip_sub):
             self.subtraction()
-        if not skip_rawcon:
+        if (not skip_rawcon):
             self.raw_contrast()
-        if not skip_calcon:
+        if (not skip_calcon):
             self.cal_contrast()
-        if not skip_comps:
+        if (not skip_comps):
             self.companions()
-        return
+        
+        return None
     
     def rampfit(self):
-        '''
-        Wrapper function for ramp fitting stage
-        '''
-        # Set meta flag to True if not already
+        """
+        Wrapper function for the ramp fitting stage.
+        
+        """
+        
+        # Set the meta flag to True.
         self.meta.done_rampfit = True
-
-        # Run ramp fitting
+        
+        # Run ramp fitting stage.
         ramp = rampfit.stsci_ramp_fitting(self.meta)
-
-        return 
-
+        
+        return None
+    
     def imgprocess(self):
-        '''
-        Wrapper function for image processing stage
-        '''
-        # Set meta flag to True if not already
+        """
+        Wrapper function for the image processing stage.
+        
+        """
+        
+        # Set the meta flag to True.
         self.meta.done_imgprocess = True
         
-        #Run image processing
+        # Run image processing stage.
         img = imgprocess.stsci_image_processing(self.meta)
-
-        return
-
+        
+        return None
+    
     def subtraction(self):
-        '''
-        Wrapper function for subtraction stage
-        '''
-        # Set meta flag to True if not already
+        """
+        Wrapper function for the KLIP subtraction stage.
+        
+        """
+        
+        # Set the meta flag to True.
         self.meta.done_subtraction = True
-
-        #Run subtraction
+        
+        # Run KLIP subtraction stage.
         sub = subtraction.klip_subtraction(self.meta)
-        return
-
+        
+        return None
+    
     def raw_contrast(self):
-        '''
-        Wrapper function for raw contrast  stage
-        '''
-        # Set meta flag to True if not already
+        """
+        Wrapper function for the raw contrast estimation stage.
+        
+        """
+        
+        # Set the meta flag to True.
         self.meta.done_raw_contrast = True
-
-        #Run raw contrast calculation
+        
+        # Run raw contrast estimation stage.
         raw_contrast = contrast.raw_contrast_curve(self.meta)
-        return
-
+        
+        return None
+    
     def cal_contrast(self):
-        '''
-        Wrapper function for calibrated contrast stage
-        '''
-        # Set meta flag to True if not already
+        """
+        Wrapper function for the calibrated contrast estimation stage.
+        
+        """
+        
+        # Set the meta flag to True.
         self.meta.done_cal_contrast = True
-        # Run calibrated contrast calculation
+        
+        # Run calibrated contrast estimation stage.
         cal_contrast = contrast.calibrated_contrast_curve(self.meta)
-        return
-
+        
+        return None
+    
     def companions(self):
-        '''
-        Wrapper function for companion stage
-        '''
-        # Set meta flag to True if not already
+        """
+        Wrapper function for the companion property extraction stage.
+        
+        """
+        
+        # Set the meta flag to True.
         self.meta.done_companion = True
-        #Run companion photometry / astrometry
+        
+        # Run companion property extraction stage.
         extract_comps = companion.extract_companions(self.meta)
-        return
+        
+        return None

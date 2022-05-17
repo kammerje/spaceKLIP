@@ -17,6 +17,8 @@ import astropy.io.fits as pyfits
 import webbpsf
 webbpsf.setup_logging(level='ERROR')
 
+rad2mas = 180./np.pi*3600.*1000.
+
 
 # =============================================================================
 # MAIN
@@ -160,6 +162,7 @@ def extract_obs(meta, fitsfiles_all):
     SUBPXPTS = np.empty(Nfitsfiles, dtype=int)
     APERNAME = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
     PIXSCALE = np.empty(Nfitsfiles) # mas
+    PIXAR_SR = np.empty(Nfitsfiles) # sr
     RA_REF = np.empty(Nfitsfiles) # deg
     DEC_REF = np.empty(Nfitsfiles) # deg
     ROLL_REF = np.empty(Nfitsfiles) # deg
@@ -217,6 +220,10 @@ def extract_obs(meta, fitsfiles_all):
             raise UserWarning('Unknown instrument')
         
         head = hdul['SCI'].header
+        try:
+            PIXAR_SR[i] = head['PIXAR_SR'] # sr
+        except:
+            PIXAR_SR[i] = PIXSCALE[i]**2/rad2mas**2 # sr
         RA_REF[i] = head['RA_REF'] # deg
         DEC_REF[i] = head['DEC_REF'] # deg
         if ('SGD' in file): # MIRI test data
@@ -244,6 +251,7 @@ def extract_obs(meta, fitsfiles_all):
     meta.subarray = {}
     meta.apername = {}
     meta.pixscale = {}
+    meta.pixar_sr = {}
     meta.obs = {}
     for i in range(NHASH_unique):
         ww = HASH == HASH_unique[i]
@@ -269,6 +277,7 @@ def extract_obs(meta, fitsfiles_all):
         meta.subarray[HASH_unique[i]] = SUBARRAY[ww][ww_sci][0]
         meta.apername[HASH_unique[i]] = APERNAME[ww][ww_sci][0]
         meta.pixscale[HASH_unique[i]] = PIXSCALE[ww][ww_sci][0]
+        meta.pixar_sr[HASH_unique[i]] = PIXAR_SR[ww][ww_sci][0]
         
         # These metadata are different for each observation within the
         # concatenation.
@@ -325,6 +334,6 @@ def get_working_files(meta, runcheck, subdir='RAMPFIT', search='uncal.fits'):
             raise ValueError('Unable to find any {} files in specified input or output directories.'.format(search))
 
     if meta.verbose:
-        print('Found {} files under: {}'.format(len(files), rdir))
+        print('--> Found {} files under: {}'.format(len(files), rdir))
 
     return files
