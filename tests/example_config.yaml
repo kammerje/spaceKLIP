@@ -15,7 +15,7 @@ odir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/20220606/' 
 sdir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/HIP65426.vot' #VOT table or stellar model file.
 
 ##### OPTIONAL #####
-rundirs: ['2022_04_27_RDI_annu1_subs1_run1'] #Specify directory(ies) within odir of existing runs to calculate contrast cuvre / companion
+rundirs: [] #'2022_06_06_RDI_annu1_subs1_run1'] #Specify directory(ies) within odir of existing runs to calculate contrast cuvre / companion
 ancildir: None      # Specify directory to save ancillary files, if None then saved under odir/ANCILLARY/. 
 
 ############################

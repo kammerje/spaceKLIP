@@ -62,6 +62,9 @@ class Pipeline():
             setattr(self.meta, key, config[key])
 
         if self.meta.rundirs != None:
+            print(self.meta.rundirs)
+            if len(self.meta.rundirs) == 0:
+                print('WARNING: No run directory(ies) specified, using all run directories in output directory. Are you sure you want to do this?')
             self.meta.rundirs = [self.meta.odir+rdir.replace('/', '')+'/' for rdir in self.meta.rundirs]
 
         return
