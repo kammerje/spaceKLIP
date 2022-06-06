@@ -176,7 +176,7 @@ def extract_obs(meta, fitsfiles_all):
                 PIXSCALE[i] = nrc._pixelscale_long*1e3 # mas
             else:
                 PIXSCALE[i] = nrc._pixelscale_short*1e3 # mas
-            PA_V3[i] = head['ROLL_REF'] # deg
+            PA_V3[i] = hdul[1].header['ROLL_REF'] # deg
         # MIRI specific settings
         elif 'MIRI' in INSTRUME[i]:
             APERNAME[i] = None

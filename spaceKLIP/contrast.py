@@ -48,7 +48,12 @@ def raw_contrast_curve(meta):
         print('--> Computing raw contrast curve...')
 
     # Loop through directories of subtracted images
-    for counter, rdir in enumerate(meta.rundirs):
+    for counter, rdir in enumerate(meta.rundirs): 
+        # Check if run directory actually exists
+        if not os.path.exists(rdir):
+            raise ValueError('Could not find provided run directory "{}"'.format(rdir))
+
+
         if meta.verbose:
             dirparts = rdir.split('/')[-2].split('_') # -2 because of trailing '/'
             print('--> Mode = {}, annuli = {}, subsections = {}, scenario {} of {}'.format(dirparts[3], dirparts[4], dirparts[5], counter+1, len(meta.rundirs)))
@@ -173,6 +178,10 @@ def calibrated_contrast_curve(meta):
     # subsections.
     meta.truenumbasis = {}
     for counter, rdir in enumerate(meta.rundirs):
+        # Check if run directory actually exists
+        if not os.path.exists(rdir):
+            raise ValueError('Could not find provided run directory "{}"'.format(rdir))
+
         # Get some information from the original meta file in the run directory
         metasave = io.read_metajson(rdir+'SUBTRACTED/MetaSave.json')
         mode = metasave['used_mode']

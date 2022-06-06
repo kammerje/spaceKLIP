@@ -63,6 +63,9 @@ def extract_companions(meta):
 
     # Loop through directories of subtracted images
     for counter, rdir in enumerate(meta.rundirs):
+        # Check if run directory actually exists
+        if not os.path.exists(rdir):
+            raise ValueError('Could not find provided run directory "{}"'.format(rdir))
 
         # Get the mode from the saved meta file
         metasave = io.read_metajson(rdir+'SUBTRACTED/MetaSave.json')
