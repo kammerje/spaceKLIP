@@ -1,4 +1,4 @@
-import os, re
+import glob, os, re
 
 import astropy.io.fits as pyfits
 import numpy as np
@@ -61,11 +61,13 @@ class Pipeline():
         for key in config:
             setattr(self.meta, key, config[key])
 
-        if self.meta.rundirs != None:
-            print(self.meta.rundirs)
+        # Assign run directories from output folder. These will be overwritten if subtraction if performed. 
+        if (self.meta.rundirs != None) or (len(self.meta.rundirs) == 0):
             if len(self.meta.rundirs) == 0:
-                print('WARNING: No run directory(ies) specified, using all run directories in output directory. Are you sure you want to do this?')
-            self.meta.rundirs = [self.meta.odir+rdir.replace('/', '')+'/' for rdir in self.meta.rundirs]
+                print('WARNING: No run directory(ies) specified, looping over all run directories in output directory. Are you sure you want to do this?')
+                self.meta.rundirs = [i+'/' for i in glob.glob(self.meta.odir+'*run*')]
+            else:
+                self.meta.rundirs = [self.meta.odir+rdir.replace('/', '')+'/' for rdir in self.meta.rundirs]
 
         return
 

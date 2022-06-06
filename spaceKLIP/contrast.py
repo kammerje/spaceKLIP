@@ -292,7 +292,7 @@ def calibrated_contrast_curve(meta):
             if meta.plotting:
                 # Plot injected locations
                 savefile=odir+key+'-cons_inj.pdf'
-                plotting.plot_injected_locs(meta, data, tottp, seps_all, pas_all, pxsc=None, savefile=savefile)
+                plotting.plot_injected_locs(meta, data, tottp, seps_all, pas_all, pxsc=pxsc, savefile=savefile)
 
                 # Plot calibrated contrast
                 fit_thrput = {}
