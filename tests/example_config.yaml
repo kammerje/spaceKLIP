@@ -9,9 +9,9 @@
 #######################
 
 ##### REQUIRED #####
- # Input Directory 
-idir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/HIFI_SIMS/NIRCam/20220407/small_uncal/'
-odir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/20220606/' # Output Directory
+# Input Directory 
+idir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/HIFI_SIMS/NIRCam/20220407/pynrc_data/'
+odir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/20220608/' # Output Directory
 sdir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/HIP65426.vot' #VOT table or stellar model file.
 
 ##### OPTIONAL #####
@@ -31,8 +31,8 @@ overwrite: True   # Will overwrite existing files in a given directory
 ##### Star / Companion information #####
 ########################################
 spt: 'A2V' # Spectral type of target, only necessary for VOTable. Keep it simple.
-ra_off: [418.] # mas; RA offset of the known companions in the same order as in the NIRCCoS config file
-de_off: [-698.] # mas; DEC offset of the known companions in the same order as in the NIRCCoS config file
+ra_off: [418.] # mas; RA offset of the known companions
+de_off: [-698.] # mas; DEC offset of the known companions 
 
 #################################
 ##### Ramp Fitting Settings #####

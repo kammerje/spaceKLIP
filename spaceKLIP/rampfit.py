@@ -23,7 +23,7 @@ def stsci_ramp_fitting(meta):
 		pipeline.output_dir = meta.odir + 'RAMPFIT/'
 
 		if os.path.exists(pipeline.output_dir) == False:
-			    os.mkdir(pipeline.output_dir)
+			os.makedirs(pipeline.output_dir)
 		pipeline.run(file)
 
 	return
