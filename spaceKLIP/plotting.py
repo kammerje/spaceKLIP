@@ -71,7 +71,7 @@ def plot_contrast_raw(meta, seps, cons, labels='default', savefile='./rawcontras
 
     # Plot settings
     ax.set_yscale('log')
-    ax.set_xlim([0., np.max(seps)]) # arcsec
+    ax.set_xlim([0., 5.]) # arcsec
     ax.grid(axis='y')
     ax.set_xlabel('Separation [arcsec]')
     ax.set_ylabel('Contrast [5$\sigma$]')
@@ -174,7 +174,7 @@ def plot_contrast_calibrated(thrput, med_thrput, fit_thrput, con_seps, cons, cor
 
     return
 
-def plot_fm_psf(meta, fm_frame, guess_flux, data_frame, pxsc=None, j=0, savefile='./fmpsf.pdf'):
+def plot_fm_psf(meta, fm_frame, data_frame, guess_flux, pxsc=None, j=0, savefile='./fmpsf.pdf'):
     '''
     Plot forward model psf
     '''
@@ -224,13 +224,13 @@ def plot_chains(chain, savefile):
     f, ax = plt.subplots(4, 1, figsize=(1*6.4, 2*4.8))
     ax[0].plot(chain[:, :, 0].T, color='black', alpha=1./3.)
     ax[0].set_xlabel('Steps')
-    ax[0].set_ylabel(r'$\Delta$RA [pix]')
+    ax[0].set_ylabel(r'$\Delta$RA [mas]')
     ax[1].plot(chain[:, :, 1].T, color='black', alpha=1./3.)
     ax[1].set_xlabel('Steps')
-    ax[1].set_ylabel(r'$\Delta$DEC [pix]')
+    ax[1].set_ylabel(r'$\Delta$Dec [mas]')
     ax[2].plot(chain[:, :, 2].T, color='black', alpha=1./3.)
     ax[2].set_xlabel('Steps')
-    ax[2].set_ylabel(r'$\alpha$')
+    ax[2].set_ylabel(r'$\alpha$ [sec/pri]')
     ax[3].plot(chain[:, :, 3].T, color='black', alpha=1./3.)
     ax[3].set_xlabel('Steps')
     ax[3].set_ylabel(r'$l$ [pix]')
@@ -238,4 +238,3 @@ def plot_chains(chain, savefile):
     plt.tight_layout()
     plt.savefig(savefile)
     plt.close()
-            

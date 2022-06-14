@@ -1,77 +1,186 @@
 from __future__ import division
-import os, sys, contextlib
-import re
+
+
+# =============================================================================
+# IMPORTS
+# =============================================================================
+
+import os
 
 import astropy.io.fits as pyfits
-import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
-import urllib
 
-from synphot import SourceSpectrum, SpectralElement, Observation
+import astropy.units as u
+
+from scipy.interpolate import RegularGridInterpolator
+from scipy.ndimage import fourier_shift, rotate, shift
+from scipy.optimize import minimize
+from synphot import Observation, SourceSpectrum, SpectralElement
 from synphot.models import Empirical1D
 from synphot.units import convert_flux
-from scipy.interpolate import RegularGridInterpolator
-from scipy.ndimage import rotate, shift
 
+import pyklip.instruments.JWST as JWST
 import webbpsf
 import webbpsf_ext 
 
 from jwst import datamodels
 from jwst.coron import AlignRefsStep
 
-import pyklip.instruments.JWST as JWST
-
 from . import io
 
 rad2mas = 180./np.pi*3600.*1000.
 
-def get_offsetpsf(meta, inst, filt, mask, key, derotate=True):
-    """
-    Get a derotated and integration time weighted average of an offset PSF
-    from WebbPSF. Try to load it from the offsetpsfdir and generate it if
-    it is not in there yet. This offset PSF is normalized to a
-    total intensity of 1.
 
+# =============================================================================
+# MAIN
+# =============================================================================
+
+def fourier_imshift(image, shift):
+    """
+    Fourier image shift. Adapted from JWST stage 3 pipeline.
+    
     Parameters
     ----------
-    inst: str
-        Instrument name 
-    filt: str
-        Filter name from JWST data header.
-    mask: str
-        Coronagraphic mask name from JWST data header.
-    key: str
-        Dictionary key of the self.obs dictionary specifying the considered
-        observation.
-
+    image : array
+        A 2D/3D image to be shifted.
+    shift : array
+        xshift, yshift.
+    
     Returns
     -------
-    totpsf: array
-        Stamp of the derotated and integration time weighted average of the
-        offset PSF.
-
+    offset : array
+        Shifted image.
+    
     """
+    
+    if (image.ndim == 2):
+        shift = np.asanyarray(shift)[:2]
+        offset_image = fourier_shift(np.fft.fftn(image), shift[::-1])
+        offset = np.fft.ifftn(offset_image).real
+    
+    elif (image.ndim == 3):
+        nslices = image.shape[0]
+        shift = np.asanyarray(shift)[:, :2]
+        if (shift.shape[0] != nslices):
+            raise ValueError('The number of provided shifts must be equal to the number of slices in the input image')
+        
+        offset = np.empty_like(image, dtype=float)
+        for k in range(nslices):
+            offset[k] = fourier_imshift(image[k], shift[k])
+    
+    else:
+        raise ValueError('Input image must be either a 2D or a 3D array')
+    
+    return offset
 
-    offsetpsfdir = meta.offsetpsfdir
+def shift_invpeak(shift, image):
+    """
+    Shift an image and compute the inverse of its peak count.
+    
+    Parameters
+    ----------
+    shift : array
+        xshift, yshift.
+    image : array
+        A 2D image to be shifted.
+    
+    Returns
+    -------
+    invpeak : float
+        Inverse of the peak count of the shifted image.
+    
+    """
+    
+    # Fourier shift the image.
+    offset = fourier_imshift(image, shift)
+    
+    # Compute the inverse of its peak count.
+    invpeak = 1./np.max(offset)
+    
+    return invpeak
 
+def recenter(image):
+    """
+    Recenter an image by shifting it around and minimizing the inverse of its
+    peak count (i.e., maximizing its peak count).
+    
+    Parameters
+    ----------
+    image : array
+        A 2D image to be recentered.
+    
+    Returns
+    -------
+    shift : array
+        xshift, yshift.
+    
+    """
+    
+    # Find the shift that recenters the image.
+    p0 = np.array([0., 0.])
+    shift = minimize(shift_invpeak,
+                     p0,
+                     args=(image))['x']
+    
+    return shift
+
+def get_offsetpsf(meta, key, recenter_offsetpsf=False, derotate=True):
+    """
+    Get a derotated and integration time weighted average of an offset PSF
+    from WebbPSF. Try to load it from the offsetpsfdir and generate it if it
+    is not in there, yet. The offset PSF will be normalized to a total
+    intensity of 1.
+    
+    Parameters
+    ----------
+    meta : object of type meta
+        Meta object that contains all the metadata of the observations.
+    key : str
+        Dictionary key of the meta.obs dictionary specifying the considered
+        concatenation.
+    recenter : bool
+        Recenter the offset PSF? The offset PSF from WebbPSF is not properly
+        centered because the wedge mirror that folds the light onto the
+        coronagraphic subarrays introduces a chromatic shift.
+    derotate : bool
+        Derotate (and integreation time weigh) the offset PSF?
+    
+    Returns
+    -------
+    totpsf : array
+        Derotated and integration time weighted average of the offset PSF.
+    
+    """
+    
     # Try to load the offset PSF from the offsetpsfdir and generate it if it
-    # is not in there yet
-    if not os.path.exists(offsetpsfdir+filt+'_'+mask+'.npy'):
+    # is not in there, yet.
+    offsetpsfdir = meta.offsetpsfdir
+    inst = meta.instrume[key]
+    filt = meta.filter[key]
+    mask = meta.coronmsk[key]
+    try:
+        offsetpsf = np.load(offsetpsfdir+filt+'_'+mask+'.npy')
+    except:
         gen_offsetpsf(offsetpsfdir, inst, filt, mask)
-    offsetpsf = np.load(offsetpsfdir+filt+'_'+mask+'.npy')
-
-    # Find the science target observations
+        offsetpsf = np.load(offsetpsfdir+filt+'_'+mask+'.npy')
+    
+    # Recenter the offset PSF.
+    if (recenter_offsetpsf == True):
+        shift = recenter(offsetpsf)
+        offsetpsf = fourier_imshift(offsetpsf, shift)
+    
+    # Find the science target observations.
     ww_sci = np.where(meta.obs[key]['TYP'] == 'SCI')[0]
-
-    # Compute the derotated and integration time weighted average of the
-    # offset PSF, values outside of the PSF stamp are filled with zeros
+    
+    # Derotate the offset PSF and coadd it weighted by the integration time of
+    # the different rolls.
     if (derotate == True):
         totpsf = np.zeros_like(offsetpsf)
         totexp = 0. # s
         for i in range(len(ww_sci)):
             totint = meta.obs[key]['NINTS'][ww_sci[i]]*meta.obs[key]['EFFINTTM'][ww_sci[i]] # s
-            totpsf += totint*rotate(offsetpsf.copy(), -meta.obs[key]['PA_V3'][ww_sci[i]], reshape=False, mode='constant', cval=0.)
+            totpsf += totint*rotate(offsetpsf.copy(), -meta.obs[key]['ROLL_REF'][ww_sci[i]], reshape=False, mode='constant', cval=0.)
             totexp += totint # s
         totpsf /= totexp
     else:
@@ -81,186 +190,194 @@ def get_offsetpsf(meta, inst, filt, mask, key, derotate=True):
 
 def gen_offsetpsf(offsetpsfdir, inst, filt, mask):
     """
-    Generate an offset PSF using WebbPSF. This offset PSF is normalized to a
-    total intensity of 1.
-
+    Generate an offset PSF using WebbPSF and save it in the offsetpsfdir. The
+    offset PSF will be normalized to a total intensity of 1.
+    
     Parameters
     ----------
-    filt: str
-        Filter name from JWST data header.
-    mask: str
-        Coronagraphic mask name from JWST data header.
-
-    """
-
-    if inst == 'NIRCAM':
-        # Get NIRCam
-        nircam = webbpsf.NIRCam()
-
-        # Apply the correct pupil mask, but no image mask (unocculted PSF)
-        if mask in ['MASKA210R', 'MASKA335R', 'MASKA430R']:
-            nircam.pupil_mask = 'MASKRND'
-        elif mask in ['MASKASWB']:
-            nircam.pupil_mask = 'MASKSWB'
-        elif mask in ['MASKALWB']:
-            nircam.pupil_mask = 'MASKLWB'
-        else:
-            raise UserWarning('Unknown coronagraph mask')
-        nircam.image_mask = None
-
-        wbpsf_inst = nircam
+    offsetpsfdir : str
+        Directory where the offset PSF shall be saved to.
+    inst : str
+        JWST instrument.
+    filt : str
+        JWST filter.
+    mask : str
+        JWST coronagraphic mask.
     
-    elif inst == 'MIRI':
-        # Get MIRI
+    """
+    
+    # NIRCam.
+    if (inst == 'NIRCAM'):
+        nircam = webbpsf.NIRCam()
+        
+        # Apply the correct pupil mask, but no image mask (unocculted PSF).
+        if (mask in ['MASKA210R', 'MASKA335R', 'MASKA430R']):
+            nircam.pupil_mask = 'MASKRND'
+        elif (mask in ['MASKALWB']):
+            nircam.pupil_mask = 'MASKLWB'
+        elif (mask in ['MASKASWB']):
+            nircam.pupil_mask = 'MASKSWB'
+        else:
+            raise UserWarning('Unknown coronagraphic mask')
+        nircam.image_mask = None
+        webbpsf_inst = nircam
+    
+    # MIRI.
+    elif (inst == 'MIRI'):
         miri = webbpsf.MIRI()
-        wbpsf_inst = miri
-
-    # Assign filter
-    wbpsf_inst.filter = filt
-    # Compute the offset PSF using WebbPSF and save it to the offsetpsfdir
-    hdul = wbpsf_inst.calc_psf(oversample=1, normalize='last')
-    psf = hdul[0].data # PSF center is at (39, 39)
-
+        webbpsf_inst = miri
+    
+    else:
+        raise UserWarning('Unknown instrument')
+    
+    # Assign the correct filter and compute the offset PSF.
+    webbpsf_inst.filter = filt
+    hdul = webbpsf_inst.calc_psf(oversample=1, normalize='last')
+    psf = hdul[0].data
     hdul.close()
-    if not os.path.exists(offsetpsfdir):
+    
+    # Save the offset PSF.
+    if (not os.path.exists(offsetpsfdir)):
         os.makedirs(offsetpsfdir)
     np.save(offsetpsfdir+filt+'_'+mask+'.npy', psf)
-
+    
     return None
 
-def get_transmission(meta, pxsc, filt, mask, subarr, odir, key):
+def get_transmission(meta, key, odir, derotate=False):
     """
-    Write coronagraphic mask transmission into self.transmission. The
-    output is a 2D transmission map containing the derotated and
-    integration time weighted average of the PSF masks from CRDS.
-
-    TODO: assumes that (159.5, 159.5) is the center of the PSF masks from
-          CRDS. This seems to be true for the round masks. For the bar
-          masks, this needs to be confirmed. Then, uses the PSF position
-          with respect to the NRCA4_MASKSWB and the NRCA5_MASKLWB subarray
-          from pySIAF to shift the bar mask PSF masks to their new center.
-
+    Get a derotated and integration time weighted average of a PSF mask and
+    write it to meta.transmission.
+    
+    Note: assumes that the center of the PSF mask is aligned with the position
+          of the host star PSF (except for the NIRCam bar masks).
+    
     Parameters
     ----------
-    pxsc: float
-        Pixel scale of the PSF masks from CRDS.
-    filt: str
-        Filter name from JWST data header.
-    mask: str
-        Coronagraphic mask name from JWST data header.
-    subarr: str
-        Subarray name from JWST data header.
-    odir: str
-        Output directory for the plots.
-    key: str
-        Dictionary key of the self.obs dictionary specifying the
-        considered observation.
-
+    meta : object of type meta
+        Meta object that contains all the metadata of the observations.
+    key : str
+        Dictionary key of the meta.obs dictionary specifying the considered
+        concatenation.
+    odir : str
+        Directory where the PSF mask plot shall be saved to.
+    derotate : bool
+        Derotate (and integreation time weigh) the PSF mask?
+    
     Returns
     -------
-    tottp: array
-        2D transmission map containing the derotated and integration time
-        weighted average of the PSF masks from CRDS.
+    totmsk : array
+        Derotated and integration time weighted average of the PSF mask.
+    
     """
-
-    # Check if the fiducial point override is active
-    if meta.fiducial_point_override and mask in ['MASKASWB', 'MASKALWB']:
-        filt_temp = 'narrow'
-    else:
-        filt_temp = filt
-
-    # Find the science target observations
+    
+    # Find the science target observations.
     ww_sci = np.where(meta.obs[key]['TYP'] == 'SCI')[0]
 
-    # Open the correct PSF mask
+    # Open the correct PSF mask. The assumption is that the center of the PSF
+    # mask is aligned with the position of the host star PSF (except for the
+    # NIRCam bar masks).
     psfmask = meta.psfmask[key]
     hdul = pyfits.open(psfmask)
-
-    if pxsc < 100:
-        # Must be NIRCam
+    inst = meta.instrume[key]
+    mask = meta.coronmsk[key]
+    pxsc = meta.pixscale[key] # mas
+    
+    # NIRCam.
+    if (inst == 'NIRCAM'):
         tp = hdul['SCI'].data[1:-1, 1:-1] # crop artifact at the edge
+    
+    # MIRI.
+    elif (inst == 'MIRI'):
+        tp, _ = JWST.trim_miri_data(hdul['SCI'].data[None, :, :], hdul['SCI'].data[None, :, :])
+        tp = tp[0, 1:-1, 1:-2]
+    
     else:
-        # Must be MIRI
-        tp, _ = JWST.trim_miri_data(hdul['SCI'].data[None,:,:], hdul['SCI'].data[None,:,:])
-        tp = tp[0,1:-1,1:-2]
-
+        raise UserWarning('Unknown instrument')
     hdul.close()
-
-    # Shift the bar mask PSF masks to their new center. Values outside of
-    # the subarray are filled with zeros (i.e., no transmission).
-    if mask in ['MASKASWB']:
-        tp = shift(tp, (0., -meta.offset_swb[filt_temp]*1000./pxsc), mode='constant', cval=0.)
-    elif mask in ['MASKALWB']:
-        tp = shift(tp, (0., -meta.offset_lwb[filt_temp]*1000./pxsc), mode='constant', cval=0.)
-
-    # Compute the derotated and integration time weighted average of the
-    # PSF masks. Values outside of the subarray are filled with zeros
-    # (i.e., no transmission). Then, create a regular grid interpolator
-    # taking 2D pixel offset as input and returning the coronagraphic mask
-    # transmission.
-    ramp = np.arange(tp.shape[0]) # pix
-    xx, yy = np.meshgrid(ramp, ramp) # pix
-    if pxsc < 100:
-        xx = xx-158.5 # pix; new center because PSF mask was cropped by 2 pixel
-        yy = yy-158.5 # pix; new center because PSF mask was cropped by 2 pixel
+    
+    # For the NIRCam bar masks, shift the PSF masks to their correct center.
+    # Values outside of the subarray are filled with zeros (i.e., no
+    # transmission).
+    if (mask in ['MASKALWB', 'MASKASWB']):
+        tp = shift(tp, (0., -meta.bar_offset[key]*1000./pxsc), mode='constant', cval=0.)
+    
+    # Derotate the PSF mask and coadd it weighted by the integration time of
+    # the different rolls.
+    if (derotate == True):
+        totmsk = np.zeros_like(tp)
+        totexp = 0. # s
+        for i in range(len(ww_sci)):
+            totint = meta.obs[key]['NINTS'][ww_sci[i]]*meta.obs[key]['EFFINTTM'][ww_sci[i]] # s
+            totmsk += totint*rotate(tp.copy(), -meta.obs[key]['ROLL_REF'][ww_sci[i]], reshape=False, mode='constant', cval=0.)
+            totexp += totint # s
+        totmsk /= totexp
     else:
-        xx = xx-106.5
-        yy = yy-106.5
-    dist = np.sqrt(xx**2+yy**2) # pix
-    tottp = np.zeros_like(tp)
-    totet = 0. # s
-    for i in range(len(ww_sci)):
-        inttm = meta.obs[key]['NINTS'][ww_sci[i]]*meta.obs[key]['EFFINTTM'][ww_sci[i]] # s
-        tottp += inttm*rotate(tp.copy(), -meta.obs[key]['PA_V3'][ww_sci[i]], reshape=False, mode='constant', cval=0.)
-        totet += inttm # s
-    tottp /= totet
-    tottp[dist > meta.owa] = np.nan
-    meta.transmission = RegularGridInterpolator((xx[0, :], yy[:, 0]), tottp)
+        totmsk = tp
+    
+    # Create a regular grid interpolator taking 2D pixel offset as an input
+    # and returning the coronagraphic mask transmission.
+    xr = np.arange(tp.shape[1]) # pix
+    yr = np.arange(tp.shape[0]) # pix
+    xx, yy = np.meshgrid(xr, yr) # pix
+    xx = xx-(tp.shape[1]-1.)/2. # pix
+    yy = yy-(tp.shape[0]-1.)/2. # pix
+    rr = np.sqrt(xx**2+yy**2) # pix
+    totmsk[rr > meta.owa] = np.nan
+    meta.transmission = RegularGridInterpolator((xx[0, :], yy[:, 0]), totmsk)
     
     # Plot.
     plt.figure(figsize=(6.4, 4.8))
     ax = plt.gca()
-    pp = ax.imshow(tottp, origin='lower', cmap='viridis', vmin=0, vmax=1)
+    pp = ax.imshow(totmsk, origin='lower', extent=(tp.shape[1]/2., -tp.shape[1]/2., -tp.shape[0]/2., tp.shape[0]/2.), cmap='viridis', vmin=0, vmax=1)
     cc = plt.colorbar(pp, ax=ax)
     cc.set_label('Transmission', rotation=270, labelpad=20)
-    ax.set_xlabel('$\Delta$RA [pix]')
-    ax.set_ylabel('$\Delta$DEC [pix]')
+    if (derotate == True):
+        ax.set_xlabel('$\Delta$RA [pix]')
+        ax.set_ylabel('$\Delta$Dec [pix]')
+    else:
+        ax.set_xlabel('$\Delta$x [pix]')
+        ax.set_ylabel('$\Delta$y [pix]')
     ax.set_title('Transmission')
     plt.tight_layout()
     plt.savefig(odir+key+'-transmission.pdf')
     plt.close()
     
-    return tottp
+    return totmsk
 
-def correct_transmission(stamp,
-                         stamp_dx, # pix
-                         stamp_dy,
-                         meta): # pix
+def field_dependent_correction(stamp,
+                               stamp_dx,
+                               stamp_dy,
+                               meta,
+                               key):
     """
-    Apply coronagraphic mask transmission. This uses 2D offset from the
-    host star PSF center.
+    Apply the coronagraphic mask transmission to a PSF stamp.
     
-    Note: uses a standard cartesian coordinate system so that North is +y
-          and East is -x.
+    Note: assumes that the pyKLIP PSF center is the center of the 
+          coronagraphic mask transmission map.
     
-    Note: uses the 2D transmission map stored in self.transmission. Need
-          to run self.get_transmission first!
+    Note: uses a standard cartesian coordinate system so that North is +y and
+          East is -x.
+    
+    Note: uses the coronagraphic mask transmission map stored in
+          meta.transmission. Need to run get_transmission first!
     
     Parameters
     ----------
-    stamp: array
-        Frame to which coronagraphic mask transmission shall be applied.
-    stamp_dx: array
-        Frame of the same shape as stamp containing the x-axis separation
-        from the host star PSF center for each pixel.
-    stamp_dy: array
-        Frame of the same shape as stamp containing the y-axis separation
-        from the host star PSF center for each pixel.
+    stamp : array
+        PSF stamp to which the coronagraphic mask transmission shall be
+        applied.
+    stamp_dx : array
+        Array of the same shape as the PSF stamp containing the x-axis
+        separation from the host star PSF center for each pixel.
+    stamp_dy : array
+        Array of the same shape as the PSF stamp containing the y-axis
+        separation from the host star PSF center for each pixel.
     
     Returns
     -------
-    stamp: array
-        Frame to which coronagraphic mask transmission was applied.
+    stamp : array
+        PSF stamp to which the coronagraphic mask transmission was applied.
+    
     """
     
     # Apply coronagraphic mask transmission.
@@ -269,43 +386,6 @@ def correct_transmission(stamp,
     transmission = transmission.reshape(stamp.shape)
     
     return transmission*stamp
-
-def field_dependent_correction(stamp,
-                               stamp_dx,
-                               stamp_dy,
-                               meta,
-                               key,
-                               inst):
-    """
-    
-    """
-    
-    # Find offset of PSF stamp.
-    sx, sy = stamp.shape # pix
-    if ((sx % 2 != 1) or (sy % 2 != 1)):
-        raise UserWarning('PSF stamp must have odd shape')
-    xc = stamp_dx[0, (sx-1)//2] # pix
-    yc = stamp_dy[(sy-1)//2, 0] # pix
-    
-    # Find the science target observations.
-    ww_sci = np.where(meta.obs[key]['TYP'] == 'SCI')[0]
-    
-    # 
-    offset_r = np.sqrt(xc**2+yc**2)*meta.obs[key]['PIXSCALE'][ww_sci[0]]/1000. # arcsec
-    offset_theta = np.rad2deg(np.arctan2(xc, yc)) # deg; counter-clockwise
-    inst.options['source_offset_r'] = offset_r # arcsec
-    inst.options['source_offset_theta'] = offset_theta # deg; counter-clockwise
-    fov_pixels = int(np.ceil(max(np.abs(xc), np.abs(yc))))+79
-    if (fov_pixels % 2 != 1):
-        fov_pixels += 1
-    hdul = inst.calc_psf(fov_pixels=fov_pixels, oversample=1, normalize='last')
-    offsetpsf = hdul[0].data
-    hdul.close()
-    offsetpsf = shift(offsetpsf, (-yc, xc))
-    sh = (fov_pixels-1)//2
-    stamp = offsetpsf[sh-38:sh+41, sh-39:sh+40]
-    
-    return stamp
 
 def get_stellar_magnitudes(meta):
     # First find out if a file was provided correctly
@@ -392,66 +472,133 @@ def get_maxnumbasis(meta):
     """
     Find the maximum numbasis based on the number of available calibrator
     frames.
+    
+    Parameters
+    ----------
+    meta : object of type meta
+        Meta object that contains all the metadata of the observations.
+    
+    Returns
+    -------
+    meta : object of type meta
+        Meta object that contains all the metadata of the observations.
+    
     """
     
-    # The number of available calibrator frames can be found in the
-    # self.obs table.
+    # Find the maximum numbasis based on the number of available calibrator
+    # frames.
     meta.maxnumbasis = {}
-    for i, key in enumerate(meta.obs.keys()):
+    for key in meta.obs.keys():
         ww = meta.obs[key]['TYP'] == 'CAL'
         meta.maxnumbasis[key] = np.sum(meta.obs[key]['NINTS'][ww], dtype=int)
     
     return meta
 
 def get_psfmasknames(meta):
-    # PSF mask names from the CRDS
+    """
+    Get the correct PSF mask for each concatenation using functionalities of
+    the JWST pipeline.
+    
+    Parameters
+    ----------
+    meta : object of type meta
+        Meta object that contains all the metadata of the observations.
+    
+    Returns
+    -------
+    meta : object of type meta
+        Meta object that contains all the metadata of the observations.
+    
+    """
+    
+    # Create an instance of the reference star alignment JWST pipeline step.
+    # This just serves as a dummy from which the get_reference_file function
+    # can be used to obtain any reference file type from the online CRDS
+    # database.
     step = AlignRefsStep()
+    
+    # Get the correct PSF mask for each concatenation.
     meta.psfmask = {}
     for key in meta.obs.keys():
-        model = datamodels.open(meta.obs[key]['FITSFILE'][0])            
+        model = datamodels.open(meta.obs[key]['FITSFILE'][0])
         meta.psfmask[key] = step.get_reference_file(model, 'psfmask')
     del step
-
+    
     return meta
 
 def get_bar_offset(meta):
-    # Get the correct bar offset for each observing sequence.
+    """
+    Get the correct bar offset for each concatenation from the meta object
+    which contains the pySIAF bar offsets for the different NIRCam bar mask
+    fiducial points in meta.offset_lwb and meta.offset_swb.
+    
+    Parameters
+    ----------
+    meta : object of type meta
+        Meta object that contains all the metadata of the observations.
+    
+    Returns
+    -------
+    meta : object of type meta
+        Meta object that contains all the metadata of the observations.
+    
+    """
+    
+    # Get the correct bar offset for each concatenation.
     meta.bar_offset = {}
     for key in meta.obs.keys():
-        temp = [s.start() for s in re.finditer('_', key)]
-        filt = key[temp[1]+1:temp[2]].upper()
-        if ('MASKALWB' in key.upper()):
-            if ('NARROW' in meta.obs[key]['APERNAME'][0].upper()):
-                meta.bar_offset[key] = meta.offset_lwb['narrow']
-            else:
-                meta.bar_offset[key] = meta.offset_lwb[filt]
-        elif ('MASKASWB' in key.upper()):
-            if ('NARROW' in meta.obs[key]['APERNAME'][0].upper()):
-                meta.bar_offset[key] = meta.offset_swb['narrow']
-            else:
-                meta.bar_offset[key] = meta.offset_swb[filt]
+        if (meta.instrume[key] == 'NIRCAM'):
+            if ('LWB' in meta.coronmsk[key]):
+                if ('NARROW' in meta.apername[key]):
+                    meta.bar_offset[key] = meta.offset_lwb['narrow']
+                else:
+                    meta.bar_offset[key] = meta.offset_lwb[meta.filter[key]]
+            elif ('SWB' in meta.coronmsk[key]):
+                if ('NARROW' in meta.apername[key]):
+                    meta.bar_offset[key] = meta.offset_swb['narrow']
+                else:
+                    meta.bar_offset[key] = meta.offset_swb[meta.filter[key]]
+            else: # round masks
+                meta.bar_offset[key] = None
         else:
             meta.bar_offset[key] = None
-
+    
     return meta
 
-def prepare_meta(meta, files):
-    #Extract observations from created folder
-    meta = io.extract_obs(meta, files)
-
-    # Find the maximum numbasis based on the number of available
-    # calibrator frames.
+def prepare_meta(meta, fitsfiles):
+    """
+    Find and write the metadata for the provided FITS files into the meta
+    object. This function overwrites any metadata that was previously stored
+    in the meta object.
+    
+    Parameters
+    ----------
+    meta : object of type meta
+        Meta object that contains all the metadata of the observations.
+    fitsfiles : list of str
+        List of the FITS files whose metadata shall be extracted.
+    
+    Returns
+    -------
+    meta : object of type meta
+        Meta object that contains all the metadata of the observations.
+    
+    """
+    
+    # Extract the metadata of the observations from the FITS files.
+    meta = io.extract_obs(meta, fitsfiles)
+    
+    # Find the maximum numbasis based on the number of available calibrator
+    # frames.
     meta = get_maxnumbasis(meta)
-
-    # Find the names of the PSF masks from CRDS
+    
+    # Find the names of the PSF masks from CRDS.
     meta = get_psfmasknames(meta)
-
-    #Get bar offsets for NIRCam
-    instrument = list(meta.obs.keys())[0].split('_')[0] #Just use first filter, NIRCam / MIRI run separately
-    if instrument == 'NIRCAM':
-        meta = get_bar_offset(meta)
-
-    # Gather magnitudes for the target star
+    
+    # Get the bar offsets for NIRCam from pySIAF.
+    meta = get_bar_offset(meta)
+    
+    # Compute the host star magnitude in the observed filters.
     meta.mstar = get_stellar_magnitudes(meta)
-
+    
     return meta

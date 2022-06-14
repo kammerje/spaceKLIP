@@ -1,3 +1,10 @@
+from __future__ import division
+
+
+# =============================================================================
+# IMPORTS
+# =============================================================================
+
 import os, re, sys
 
 import astropy.io.fits as pyfits
@@ -14,87 +21,89 @@ import pyklip.fakes as fakes
 import pyklip.parallelized as parallelized
 
 from . import io
-from . import plotting
 from . import utils
+from . import plotting
+
+rad2mas = 180./np.pi*3600.*1000.
+
+
+# =============================================================================
+# MAIN
+# =============================================================================
 
 def raw_contrast_curve(meta):
     """
     Compute the raw contrast curves. Known companions and the location of
     the bar mask in both rolls will be masked out.
-
+    
     Note: currently masks a circle with a radius of 12 FWHM = ~12 lambda/D
           around known companions. This was found to be a sufficient but
           necessary value based on tests with simulated data.
-
+    
     Note: assumes that the data is photometrically calibrated including pupil
           mask and instrument throughput. Uses an offset PSF from WebbPSF that
           is normalized to a total intensity of 1 to estimate the peak flux of
           a PSF with respect to the source intensity.
-
+    
     Parameters
     ----------
-    meta : class
-        Meta class containing data and configuration information from
-        engine.py.
+    meta : object of type meta
+        Meta object that contains all the metadata of the observations.
+    
     """
-    # If necessary, build the obs dictionary etc
-    if not meta.done_subtraction:
-        basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS', search=meta.sub_ext)
-        meta = utils.prepare_meta(meta, basefiles)
-        # Set the subtraction flag for other stages
-        meta.done_subtraction = True
     
     if (meta.verbose == True):
         print('--> Computing raw contrast curve...')
-
-    # Loop through directories of subtracted images
-    for counter, rdir in enumerate(meta.rundirs): 
-        # Check if run directory actually exists
-        if not os.path.exists(rdir):
-            raise ValueError('Could not find provided run directory "{}"'.format(rdir))
-
-
-        if meta.verbose:
+    
+    # If necessary, extract the metadata of the observations.
+    if (not meta.done_subtraction):
+        basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS', search=meta.sub_ext)
+        meta = utils.prepare_meta(meta, basefiles)
+        meta.done_subtraction = True # set the subtraction flag for the subsequent pipeline stages
+    
+    # Loop through all directories of subtracted images.
+    for counter, rdir in enumerate(meta.rundirs):
+        if (meta.verbose == True):
             dirparts = rdir.split('/')[-2].split('_') # -2 because of trailing '/'
             print('--> Mode = {}, annuli = {}, subsections = {}, scenario {} of {}'.format(dirparts[3], dirparts[4], dirparts[5], counter+1, len(meta.rundirs)))
-
+        
         # Define the input and output directories for each set of pyKLIP
-        # parameters
+        # parameters.
         idir = rdir+'SUBTRACTED/'
         odir = rdir+'CONTRAST/'
-        if not os.path.exists(odir):
+        if (not os.path.exists(odir)):
             os.makedirs(odir)
-
-        # Loop through all sets of observing parameters
+        
+        # Loop through all concatenations.
         for i, key in enumerate(meta.obs.keys()):
             hdul = pyfits.open(idir+key+'-KLmodes-all.fits')
             data = hdul[0].data
-            pxsc = meta.obs[key]['PIXSCALE'][0] # mas
             cent = (hdul[0].header['PSFCENTX'], hdul[0].header['PSFCENTY']) # pix
-            temp = [s.start() for s in re.finditer('_', key)]
-            inst = key[:temp[0]]
-            filt = key[temp[1]+1:temp[2]]
-            mask = key[temp[3]+1:temp[4]]
-            subarr = key[temp[4]+1:]
+            filt = meta.filter[key]
+            mask = meta.coronmsk[key]
+            pxsc = meta.pixscale[key] # mas
+            pxar = meta.pixar_sr[key] # sr
             wave = meta.wave[filt] # m
             fwhm = wave/meta.diam*utils.rad2mas/pxsc # pix
             head = hdul[0].header
             hdul.close()
-
+            
             # Mask out known companions and the location of the bar mask in
-            # both rolls
+            # both rolls.
             data_masked = mask_companions(data, pxsc, cent, 12.*fwhm, meta.ra_off, meta.de_off)
-            if 'SWB' in mask or 'LWB' in mask:
+            if (('LWB' in mask) or ('SWB' in mask)):
                 data_masked = mask_bar(data_masked, cent, meta.pa_ranges_bar)
-
-            if meta.plotting:
+            
+            if (meta.plotting == True):
                 savefile = odir+key+'-mask.pdf'
-                plotting.plot_contrast_images(meta, data, data_masked, pxsc=pxsc, savefile=savefile)
-
-            # Convert the units and compute the contrast
-            offsetpsf = utils.get_offsetpsf(meta, inst, filt, mask, key)
+                plotting.plot_contrast_images(meta, data, data_masked, pxsc, savefile=savefile)
+            
+            # Convert the units and compute the contrast. Use the peak pixel
+            # count of the recentered offset PSF (discussed with Jason Wang on
+            # 12 May 2022).
+            offsetpsf = utils.get_offsetpsf(meta, key, recenter_offsetpsf=True, derotate=True)
             Fstar = meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6*np.max(offsetpsf) # MJy; convert the host star brightness from vegamag to MJy
-            Fdata = data_masked*pxsc**2/(180./np.pi*3600.*1000.)**2 # MJy; convert the data from MJy/sr to MJy
+            Fdata = data_masked*pxar # MJy; convert the data from MJy/sr to MJy
             seps = [] # arcsec
             cons = []
             for j in range(Fdata.shape[0]):
@@ -105,15 +114,15 @@ def raw_contrast_curve(meta):
             cons = np.array(cons)
             np.save(odir+key+'-seps.npy', seps) # arcsec
             np.save(odir+key+'-cons.npy', cons)
-
-            if meta.plotting:
+            
+            if (meta.plotting == True):
                 savefile = odir+key+'-cons_raw.pdf'
                 labels = []
                 for j in range(Fdata.shape[0]):
                     labels.append(str(head['KLMODE{}'.format(j)])+' KL')
                 plotting.plot_contrast_raw(meta, seps, cons, labels=labels, savefile=savefile)
-
-    return
+    
+    return None
 
 def calibrated_contrast_curve(meta):
     """

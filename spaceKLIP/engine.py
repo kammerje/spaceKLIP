@@ -1,63 +1,85 @@
+<<<<<<< HEAD
 import glob, os, re
+=======
+from __future__ import division
+
+
+# =============================================================================
+# IMPORTS
+# =============================================================================
+
+import os
+>>>>>>> main
 
 import astropy.io.fits as pyfits
+import matplotlib.pyplot as plt
 import numpy as np
-import copy
 
-from astropy.table import Table
 from astroquery.svo_fps import SvoFps
 
 import pysiaf
-import webbpsf
-
-os.environ['CRDS_PATH'] = '../crds_cache'
-os.environ['CRDS_SERVER_URL'] = 'https://jwst-crds.stsci.edu'
 
 from . import io
+from . import rampfit
+from . import imgprocess
 from . import subtraction
 from . import contrast
 from . import companion
-from . import utils
-from . import rampfit
-from . import imgprocess
+
+
+# =============================================================================
+# MAIN
+# =============================================================================
 
 class Meta():
     """
     A meta class to hold information throughout the pipeline process,
     including user inputs.
+    
     """
-
+    
     def __init__(self):
-
-        return
-
-    def save(self):
         
-        # TODO: write function that could save all of the used parameters for
-        # debugging purposes
-        return
+        return None
+    
+    def save(self):
+        """
+        TODO: write function that could save all of the used parameters for
+        debugging purposes.
+        
+        """
+        
+        return None
 
 class Pipeline():
     """
-    Generic Pipeline Class.
+    Generic pipeline class.
+    
     """
-
-    def __init__(self, config_file):
+    
+    def __init__(self, config_file='template'):
         """
         Initialize a generic pipeline class by reading a config file and
-        saving inputs to a Meta object.
+        saving the inputs to a Meta object.
+        
+        Parameters
+        ----------
+        config_file : str
+            File path of the YAML configuration file containing the pipeline
+            setup parameters.
+        
         """
-
-        # Initialize Meta object
+        
+        # Initialize the meta object.
         self.meta = Meta()
-
-        # Read in configuration parameters
-        if config_file == 'template':
+        
+        # Read the configuration parameters.
+        if (config_file == 'template'):
             tempstring = '/../tests/example_config.yaml'
-            config_file = os.path.join(os.path.dirname(__file__) + tempstring)
+            config_file = os.path.join(os.path.dirname(__file__)+tempstring)
         config = io.read_config(config_file)
-
-        # Assign config parameters to class attributes
+        
+        # Assign the configuration parameters to meta class attributes.
         for key in config:
             setattr(self.meta, key, config[key])
 
@@ -69,59 +91,64 @@ class Pipeline():
             else:
                 self.meta.rundirs = [self.meta.odir+rdir.replace('/', '')+'/' for rdir in self.meta.rundirs]
 
-        return
+        return None
+
 
 class JWST(Pipeline):
     """
-    JWST specifc Pipeline class.
+    JWST-specifc pipeline class.
+    
     """
-
+    
     def __init__(self, config_file):
         """
-        Initialize a JWST specific Pipeline Class.
-
-        Note: this class only works with NIRCam so far.
-
+        Initialize a JWST-specific pipeline class.
+        
         Parameters
         ----------
         config_file : str
-            File path of .yaml configuration file.
+            File path of the YAML configuration file containing the pipeline
+            setup parameters.
+        
         """
-
-        # Intialize parent class
+        
+        # Initialize the parent pipeline class.
         super().__init__(config_file)
-
-        # Assign flags to track which stages have been performed
+        
+        # Assign flags to track which pipeline stages have been performed.
         self.meta.done_rampfit = False
         self.meta.done_imgprocess = False
         self.meta.done_subtraction = False
         self.meta.done_raw_contrast = False
         self.meta.done_cal_contrast = False
         self.meta.done_companion = False
-
-        # Get properties for JWST
+        
+        # Get the JWST-specific metadata.
         self.get_jwst_meta()
-
+        
         return None
-
+    
     def get_jwst_meta(self):
-        """ 
-        Define a range of parameters specific to JWST and its instruments.
         """
-
-        # Define telescope and instrument properties
+        Get the JWST-specific metadata.
+        
+        """
+        
+        # Define the telescope and instrument properties.
         self.meta.diam = 6.5 # m; primary mirror diameter
         self.meta.iwa = 1. # pix; inner working angle
         self.meta.owa = 150. # pix; outer working angle
-
-        # Ancillary directories
-        if not os.path.isdir(self.meta.ancildir):
+        
+        # Define the ancillary directories.
+        if (not os.path.isdir(self.meta.ancildir)):
             self.meta.ancildir = self.meta.odir+'ANCILLARY/'
-        self.meta.psfmaskdir = self.meta.ancildir +'psfmasks/'
+        self.meta.psfmaskdir = self.meta.ancildir+'psfmasks/' # no longer required
         self.meta.offsetpsfdir = self.meta.ancildir+'offsetpsfs/'
-
-        # Mean wavelengths and zero points of the JWST filters from the SVO
-        # Filter Profile Service
+        
+        # Get the mean wavelengths and zero points of the NIRCam and the MIRI
+        # filters from the SVO Filter Profile Service. All filters are saved
+        # into the same dictionary. This works as long as the NIRCam and the
+        # MIRI filter names are distinct.
         self.meta.wave = {}
         self.meta.F0 = {}
         filter_list = SvoFps.get_filter_list(facility='JWST', instrument='NIRCAM')
@@ -137,113 +164,168 @@ class JWST(Pipeline):
             self.meta.wave[name] = filter_list['WavelengthMean'][i]/1e4*1e-6 # m
             self.meta.F0[name] = filter_list['ZeroPoint'][i] # Jy
         del filter_list
-
-        # PSF position with respect to the NRCA4_MASKSWB and the NRCA5_MASKLWB
-        # subarray, respectively, for each NIRCam filter, from pySIAF
-        self.siaf = pysiaf.Siaf('NIRCAM')
-        self.meta.offset_swb = {filt: self.get_bar_offset_from_siaf(filt, channel='SW')
-                                for filt in ['F182M', 'F187N', 'F210M', 'F212N', 'F200W', 'narrow']} # arcsec
+        
+        # Get the PSF reference position with respect to the NRCA5_MASKLWB and
+        # the NRCA4_MASKSWB subarrays, respectively, for each NIRCam filter,
+        # from pySIAF.
+        self.siaf = pysiaf.Siaf('NIRCAM')        
         self.meta.offset_lwb = {filt: self.get_bar_offset_from_siaf(filt, channel='LW')
-                                for filt in ['F250M', 'F300M', 'F277W', 'F335M', 'F360M', 'F356W', 'F410M', 'F430M', 'F460M', 'F480M', 'F444W', 'narrow']} # arcsec
+                                for filt in ['F250M', 'F277W', 'F300M', 'F335M', 'F356W', 'F360M', 'F410M', 'F430M', 'F444W', 'F460M', 'F480M', 'narrow']} # arcsec
+        self.meta.offset_swb = {filt: self.get_bar_offset_from_siaf(filt, channel='SW')
+                                for filt in ['F182M', 'F187N', 'F200W', 'F210M', 'F212N', 'narrow']} # arcsec
         del self.siaf
-
-        return
-
+        
+        return None
+    
     def get_bar_offset_from_siaf(self, filt, channel='LW'):
         """
-        Get bar offset directly from SIAF.
+        Get the PSF reference position with respect to the NRCA5_MASKLWB and
+        the NRCA4_MASKSWB subarrays, respectively, from pySIAF.
+        
+        Parameters
+        ----------
+        filt : str
+            Name of the NIRCam filter.
+        channel : str, optional
+            Long wavelength (LW) or short wavelength (SW) channel. The default
+            is 'LW'.
+        
+        Returns
+        -------
+        bar_offset : float
+            Offset of the PSF reference position with respect to the
+            NRCA5_MASKLWB and the NRCA4_MASKSWB subarrays, respectively, in
+            arcseconds.
+        
         """
-        if channel == 'SW':
+        if (channel == 'SW'):
             refapername = 'NRCA4_MASKSWB'
             apername = 'NRCA4_MASKSWB_'+filt.upper()
-        else: # otherwise default to LW
+        else: # otherwise default to LW channel
             refapername = 'NRCA5_MASKLWB'
             apername = 'NRCA5_MASKLWB_'+filt.upper()
         offset_arcsec = np.sqrt((self.siaf.apertures[refapername].V2Ref-self.siaf.apertures[apername].V2Ref)**2+(self.siaf.apertures[refapername].V3Ref-self.siaf.apertures[apername].V3Ref)**2)
         sign = np.sign(self.siaf.apertures[refapername].V2Ref-self.siaf.apertures[apername].V2Ref)
-
+        
         return sign*offset_arcsec
-
-    def run_all(self, skip_ramp=False, skip_imgproc=False, skip_sub=False, skip_rawcon=False, skip_calcon=False, skip_comps=False):
+    
+    def run_all(self, skip_ramp=False, skip_imgproc=False, skip_sub=False,
+                skip_rawcon=False, skip_calcon=False, skip_comps=False):
         """
         Single function to run all pipeline stages in sequence.
+        
+        Parameters
+        ----------
+        skip_ramp : bool
+            Skip the ramp fitting (JWST stage 1) stage?
+        skip_imgproc : bool
+            Skip the image processing (JWST stage 2) stage?
+        skip_sub : bool
+            Skip the KLIP subtraction stage?
+        skip_rawcon : bool
+            Skip the raw contrast estimation stage?
+        skip_calcon : bool
+            Skip the calibrated contrast estimation stage?
+        skip_comps : bool
+            Skip the companion property extraction stage?
+        
         """
-        if not skip_ramp:
+        
+        if (not skip_ramp):
             self.rampfit()
-        if not skip_imgproc:
+        if (not skip_imgproc):
             self.imgprocess()
-        if not skip_sub:
+        if (not skip_sub):
             self.subtraction()
-        if not skip_rawcon:
+        if (not skip_rawcon):
             self.raw_contrast()
-        if not skip_calcon:
+        if (not skip_calcon):
             self.cal_contrast()
-        if not skip_comps:
+        if (not skip_comps):
             self.companions()
-        return
+        
+        return None
     
     def rampfit(self):
-        '''
-        Wrapper function for ramp fitting stage
-        '''
-        # Set meta flag to True if not already
+        """
+        Wrapper function for the ramp fitting stage.
+        
+        """
+        
+        # Set the meta flag to True.
         self.meta.done_rampfit = True
-
-        # Run ramp fitting
+        
+        # Run ramp fitting stage.
         ramp = rampfit.stsci_ramp_fitting(self.meta)
-
-        return 
-
+        
+        return None
+    
     def imgprocess(self):
-        '''
-        Wrapper function for image processing stage
-        '''
-        # Set meta flag to True if not already
+        """
+        Wrapper function for the image processing stage.
+        
+        """
+        
+        # Set the meta flag to True.
         self.meta.done_imgprocess = True
         
-        #Run image processing
+        # Run image processing stage.
         img = imgprocess.stsci_image_processing(self.meta)
-
-        return
-
+        
+        return None
+    
     def subtraction(self):
-        '''
-        Wrapper function for subtraction stage
-        '''
-        # Set meta flag to True if not already
+        """
+        Wrapper function for the KLIP subtraction stage.
+        
+        """
+        
+        # Set the meta flag to True.
         self.meta.done_subtraction = True
-
-        #Run subtraction
+        
+        # Run KLIP subtraction stage.
         sub = subtraction.klip_subtraction(self.meta)
-        return
-
+        
+        return None
+    
     def raw_contrast(self):
-        '''
-        Wrapper function for raw contrast  stage
-        '''
-        # Set meta flag to True if not already
+        """
+        Wrapper function for the raw contrast estimation stage.
+        
+        """
+        
+        # Set the meta flag to True.
         self.meta.done_raw_contrast = True
-
-        #Run raw contrast calculation
+        
+        # Run raw contrast estimation stage.
         raw_contrast = contrast.raw_contrast_curve(self.meta)
-        return
-
+        
+        return None
+    
     def cal_contrast(self):
-        '''
-        Wrapper function for calibrated contrast stage
-        '''
-        # Set meta flag to True if not already
+        """
+        Wrapper function for the calibrated contrast estimation stage.
+        
+        """
+        
+        # Set the meta flag to True.
         self.meta.done_cal_contrast = True
-        # Run calibrated contrast calculation
+        
+        # Run calibrated contrast estimation stage.
         cal_contrast = contrast.calibrated_contrast_curve(self.meta)
-        return
-
+        
+        return None
+    
     def companions(self):
-        '''
-        Wrapper function for companion stage
-        '''
-        # Set meta flag to True if not already
+        """
+        Wrapper function for the companion property extraction stage.
+        
+        """
+        
+        # Set the meta flag to True.
         self.meta.done_companion = True
-        #Run companion photometry / astrometry
+        
+        # Run companion property extraction stage.
         extract_comps = companion.extract_companions(self.meta)
-        return
+        
+        return None
