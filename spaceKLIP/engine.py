@@ -1,15 +1,9 @@
-<<<<<<< HEAD
-import glob, os, re
-=======
 from __future__ import division
-
-
 # =============================================================================
 # IMPORTS
 # =============================================================================
 
-import os
->>>>>>> main
+import glob, os, re
 
 import astropy.io.fits as pyfits
 import matplotlib.pyplot as plt

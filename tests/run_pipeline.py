@@ -1,7 +1,5 @@
 import os, sys
 sys.path.append('..')
-os.environ['CRDS_PATH'] = '../crds_cache'
-os.environ['CRDS_SERVER_URL'] = 'https://jwst-crds.stsci.edu'
 from spaceKLIP.engine import JWST
 
 config_file = os.path.dirname(__file__)+'/example_config.yaml'

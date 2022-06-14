@@ -215,7 +215,6 @@ def extract_obs(meta, fitsfiles_all):
             else:
                 PIXSCALE[i] = nrc._pixelscale_short*1e3 # mas
 
-            PA_V3[i] = hdul[1].header['ROLL_REF'] # deg
         elif (INSTRUME[i] == 'MIRI'):
             PIXSCALE[i] = mir.pixelscale*1e3 # mas
         else:

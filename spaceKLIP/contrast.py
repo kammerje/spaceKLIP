@@ -248,7 +248,7 @@ def calibrated_contrast_curve(meta):
             # 2D map of the total throughput, i.e., an integration
             # time weighted average of the coronmsk transmission
             # over the rolls.
-            tottp = utils.get_transmission(meta, pxsc, filt, mask, subarr, odir, key)
+            tottp = utils.get_transmission(meta, key, odir)
             
             # The calibrated contrast curves have not been
             # computed already.
@@ -258,7 +258,7 @@ def calibrated_contrast_curve(meta):
                 # time weighted average of the unocculted offset
                 # PSF over the rolls (does account for pupil mask
                 # throughput).
-                offsetpsf = utils.get_offsetpsf(meta, inst, filt, mask, key)
+                offsetpsf = utils.get_offsetpsf(meta, key, recenter_offsetpsf=False, derotate=True)
                 
                 # Convert the units and compute the injected
                 # fluxes. They need to be in the units of the data
@@ -500,7 +500,7 @@ def inject_recover(meta,
     # Offset PSF from WebbPSF, i.e., an integration time weighted average
     # of the unocculted offset PSF over the rolls (normalized to a peak
     # flux of 1).
-    offsetpsf = utils.get_offsetpsf(meta, inst, filt, mask, key)
+    offsetpsf = utils.get_offsetpsf(meta, key, recenter_offsetpsf=False, derotate=True)
     offsetpsf /= np.max(offsetpsf)
     
     # Initialize outputs.
@@ -552,7 +552,7 @@ def inject_recover(meta,
                         todo += [i*Npa+j]
                         done += [i*Npa+j]
                         stamp = np.array([offsetpsf*flux_inject[i] for k in range(dataset.input.shape[0])]) # MJy/sr
-                        fakes.inject_planet(frames=dataset.input, centers=dataset.centers, inputflux=stamp, astr_hdrs=dataset.wcs, radius=seps_inject[i], pa=pas_inject[j], field_dependent_correction=partial(utils.correct_transmission, meta=meta))
+                        fakes.inject_planet(frames=dataset.input, centers=dataset.centers, inputflux=stamp, astr_hdrs=dataset.wcs, radius=seps_inject[i], pa=pas_inject[j], field_dependent_correction=partial(utils.field_dependent_correction, meta=meta))
                         flux_all += [flux_inject[i]] # MJy/sr
                         seps_all += [seps_inject[i]] # pix
                         pas_all += [pas_inject[j]] # deg

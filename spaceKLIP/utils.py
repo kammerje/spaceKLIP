@@ -347,8 +347,7 @@ def get_transmission(meta, key, odir, derotate=False):
 def field_dependent_correction(stamp,
                                stamp_dx,
                                stamp_dy,
-                               meta,
-                               key):
+                               meta):
     """
     Apply the coronagraphic mask transmission to a PSF stamp.
     

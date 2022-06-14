@@ -10,8 +10,8 @@
 
 ##### REQUIRED #####
 # Input Directory 
-idir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/HIFI_SIMS/NIRCam/20220407/pynrc_data/'
-odir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/20220608/' # Output Directory
+idir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/HIFI_SIMS/NIRCam/20220407/small_uncal/'
+odir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/20220614/' # Output Directory
 sdir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/HIP65426.vot' #VOT table or stellar model file.
 
 ##### OPTIONAL #####
