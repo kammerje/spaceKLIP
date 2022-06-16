@@ -9,13 +9,13 @@
 #######################
 
 ##### REQUIRED #####
- # Input Directory 
-idir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/HIFI_SIMS/MIRI/Elodie_20220420/'
-odir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/TESTING_MIRI/' # Output Directory
+# Input Directory 
+idir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/HIFI_SIMS/NIRCam/20220407/small_uncal/'
+odir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/20220614/' # Output Directory
 sdir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/HIP65426.vot' #VOT table or stellar model file.
 
 ##### OPTIONAL #####
-rundirs: ['2022_04_27_RDI_annu1_subs1_run1'] #Specify directory(ies) within odir of existing runs to calculate contrast cuvre / companion
+rundirs: [] #'2022_06_06_RDI_annu1_subs1_run1'] #Specify directory(ies) within odir of existing runs to calculate contrast cuvre / companion
 ancildir: None      # Specify directory to save ancillary files, if None then saved under odir/ANCILLARY/. 
 
 ############################
@@ -31,8 +31,8 @@ overwrite: True   # Will overwrite existing files in a given directory
 ##### Star / Companion information #####
 ########################################
 spt: 'A2V' # Spectral type of target, only necessary for VOTable. Keep it simple.
-ra_off: [418.] # mas; RA offset of the known companions in the same order as in the NIRCCoS config file
-de_off: [-698.] # mas; DEC offset of the known companions in the same order as in the NIRCCoS config file
+ra_off: [418.] # mas; RA offset of the known companions
+de_off: [-698.] # mas; DEC offset of the known companions 
 
 #################################
 ##### Ramp Fitting Settings #####
@@ -61,6 +61,7 @@ numbasis: [1, 2, 5, 10, 20, 50, 100] # list of number of basis vectors for pyKLI
 KL: -1 # index of the KL component for which the calibrated contrast curve and the companion properties shall be computed
 
 seps_inject_rnd: [5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 25., 30.0, 35.0, 40.0] # pix; list of separations at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
+#seps_inject_rnd: [5.0, 25.0, 40.0] # pix; list 
 pas_inject_rnd: [0., 45., 90., 135., 180., 225., 270., 315.] # deg; list of position angles at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
 
 pa_ranges_bar: [(105, 105), (285, 285)] # deg; list of tuples defining the pizza slices that shall be considered when computing the contrast curves for the bar masks

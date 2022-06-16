@@ -92,12 +92,18 @@ def plot_injected_locs(meta, data, transmission, seps, pas, pxsc=None, savefile=
     #Set some quick information depending on whether a pixel scale was passed
     if pxsc == None:
         extent=(-0.5, data.shape[1]-0.5, data.shape[1]-0.5, -0.5)
+        extent_tr=(-0.5, transmission.shape[1]-0.5, transmission.shape[1]-0.5, -0.5)
         pxsc = 1
         xlabel, ylabel = 'Pixels', 'Pixels'
     else:
         extl = (data.shape[1]+1.)/2.*pxsc/1000. # arcsec
         extr = (data.shape[1]-1.)/2.*pxsc/1000. # arcsec
         extent = (extl, -extr, -extl, extr)
+
+        extl = (transmission.shape[1]/2.)*pxsc/1000 # arcsec
+        extr = (transmission.shape[1]/2.)*pxsc/1000 # arcsec
+        extent_tr = (extl, -extr, -extl, extr)
+
         xlabel, ylabel = '$\Delta$RA [arcsec]', '$\Delta$DEC [arcsec]'
 
     f, ax = plt.subplots(1, 2, figsize=(2*6.4, 1*4.8))
@@ -110,16 +116,13 @@ def plot_injected_locs(meta, data, transmission, seps, pas, pxsc=None, savefile=
         de = seps[i]*pxsc*np.cos(np.deg2rad(pas[i])) # mas
         cc = plt.Circle((ra/1000., de/1000.), 10.*pxsc/1000., fill=False, edgecolor='red', linewidth=3)
         ax[0].add_artist(cc)
-    ax[0].set_xlim([5., -5.])
-    ax[0].set_ylim([-5., 5.])
+    # ax[0].set_xlim([5., -5.])
+    # ax[0].set_ylim([-5., 5.])
     ax[0].set_xlabel(xlabel)
     ax[0].set_ylabel(ylabel)
     ax[0].set_title('KLIP-subtracted')
 
-    extl = transmission.shape[1]/2.*pxsc/1000. # arcsec
-    extr = transmission.shape[1]/2.*pxsc/1000. # arcsec
-    extent = (extl, -extr, -extl, extr)
-    p1 = ax[1].imshow(transmission, origin='lower', cmap='viridis', vmin=0., vmax=1., extent=extent)
+    p1 = ax[1].imshow(transmission, origin='lower', cmap='viridis', vmin=0., vmax=1., extent=extent_tr)
     c1 = plt.colorbar(p1, ax=ax[1])
     c1.set_label('Transmission', rotation=270, labelpad=20)
     for i in range(len(meta.ra_off)):
@@ -130,10 +133,10 @@ def plot_injected_locs(meta, data, transmission, seps, pas, pxsc=None, savefile=
         de = seps[i]*pxsc*np.cos(np.deg2rad(pas[i])) # mas
         cc = plt.Circle((ra/1000., de/1000.), 10.*pxsc/1000., fill=False, edgecolor='red', linewidth=3)
         ax[1].add_artist(cc)
-    ax[1].set_xlim([5., -5.])
-    ax[1].set_ylim([-5., 5.])
-    ax[1].set_xlabel('$\Delta$RA [arcsec]')
-    ax[1].set_ylabel('$\Delta$DEC [arcsec]')
+    # ax[1].set_xlim([5., -5.])
+    # ax[1].set_ylim([-5., 5.])
+    ax[1].set_xlabel(xlabel)
+    ax[1].set_ylabel(ylabel)
     ax[1].set_title('Transmission')
     plt.tight_layout()
     plt.savefig(savefile)

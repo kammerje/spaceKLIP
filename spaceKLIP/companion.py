@@ -62,9 +62,13 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
         meta.done_subtraction = True # set the subtraction flag for the subsequent pipeline stages
     
     # Loop through all directories of subtracted images.
-    meta.rundirs = ['/Users/jkammerer/Documents/JWST GTO/HR8799_new/spaceKLIP/2022_05_16_RDI_annu1_subs1_run1/']
     meta.truenumbasis = {}
     for counter, rdir in enumerate(meta.rundirs):
+        # Check if run directory actually exists
+        if not os.path.exists(rdir):
+            raise ValueError('Could not find provided run directory "{}"'.format(rdir))
+
+        # Get the mode from the saved meta file
         if (meta.verbose == True):
             dirparts = rdir.split('/')[-2].split('_') # -2 because of trailing '/'
             print('--> Mode = {}, annuli = {}, subsections = {}, scenario {} of {}'.format(dirparts[3], dirparts[4], dirparts[5], counter+1, len(meta.rundirs)))
@@ -145,7 +149,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                                                  input_wvs=input_wvs,
                                                  spectrallib=[guess_spec],
                                                  spectrallib_units='contrast',
-                                                 field_dependent_correction=partial(utils.field_dependent_correction, meta=meta, key=key))
+                                                 field_dependent_correction=partial(utils.field_dependent_correction, meta=meta))
                     
                     # Compute the forward-modeled dataset.
                     annulus = [[guess_sep-20., guess_sep+20.]] # pix
@@ -199,7 +203,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                     xx = np.arange(sx)-sx//2-(int(guess_dx)+(fm_centx-int(fm_centx)))
                     yy = np.arange(sy)-sy//2+(int(guess_dy)-(fm_centy-int(fm_centy)))
                     stamp_dx, stamp_dy = np.meshgrid(xx, yy)
-                    stamp = utils.field_dependent_correction(stamp, stamp_dx, stamp_dy, meta, key)
+                    stamp = utils.field_dependent_correction(stamp, stamp_dx, stamp_dy, meta)
                     fm_frame[:, :] = 0.
                     fm_frame[int(fm_centy)+int(guess_dy)-sy//2:int(fm_centy)+int(guess_dy)+sy//2+1, int(fm_centx)-int(guess_dx)-sx//2:int(fm_centx)-int(guess_dx)+sx//2+1] = stamp
                 

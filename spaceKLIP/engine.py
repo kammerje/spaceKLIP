@@ -1,11 +1,9 @@
 from __future__ import division
-
-
 # =============================================================================
 # IMPORTS
 # =============================================================================
 
-import os
+import glob, os, re
 
 import astropy.io.fits as pyfits
 import matplotlib.pyplot as plt
@@ -78,12 +76,17 @@ class Pipeline():
         # Assign the configuration parameters to meta class attributes.
         for key in config:
             setattr(self.meta, key, config[key])
-        
-        # Set up rundirs.
-        if (self.meta.rundirs != None):
-            self.meta.rundirs = [self.meta.odir+rdir.replace('/', '')+'/' for rdir in self.meta.rundirs]
-        
+
+        # Assign run directories from output folder. These will be overwritten if subtraction if performed. 
+        if (self.meta.rundirs != None) or (len(self.meta.rundirs) == 0):
+            if len(self.meta.rundirs) == 0:
+                print('WARNING: No run directory(ies) specified, looping over all run directories in output directory. Are you sure you want to do this?')
+                self.meta.rundirs = [i+'/' for i in glob.glob(self.meta.odir+'*run*')]
+            else:
+                self.meta.rundirs = [self.meta.odir+rdir.replace('/', '')+'/' for rdir in self.meta.rundirs]
+
         return None
+
 
 class JWST(Pipeline):
     """

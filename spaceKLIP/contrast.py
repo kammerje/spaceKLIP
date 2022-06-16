@@ -187,6 +187,10 @@ def calibrated_contrast_curve(meta):
     # subsections.
     meta.truenumbasis = {}
     for counter, rdir in enumerate(meta.rundirs):
+        # Check if run directory actually exists
+        if not os.path.exists(rdir):
+            raise ValueError('Could not find provided run directory "{}"'.format(rdir))
+
         # Get some information from the original meta file in the run directory
         metasave = io.read_metajson(rdir+'SUBTRACTED/MetaSave.json')
         mode = metasave['used_mode']
@@ -244,7 +248,7 @@ def calibrated_contrast_curve(meta):
             # 2D map of the total throughput, i.e., an integration
             # time weighted average of the coronmsk transmission
             # over the rolls.
-            tottp = utils.get_transmission(meta, pxsc, filt, mask, subarr, odir, key)
+            tottp = utils.get_transmission(meta, key, odir)
             
             # The calibrated contrast curves have not been
             # computed already.
@@ -254,7 +258,7 @@ def calibrated_contrast_curve(meta):
                 # time weighted average of the unocculted offset
                 # PSF over the rolls (does account for pupil mask
                 # throughput).
-                offsetpsf = utils.get_offsetpsf(meta, inst, filt, mask, key)
+                offsetpsf = utils.get_offsetpsf(meta, key, recenter_offsetpsf=False, derotate=True)
                 
                 # Convert the units and compute the injected
                 # fluxes. They need to be in the units of the data
@@ -297,7 +301,7 @@ def calibrated_contrast_curve(meta):
             if meta.plotting:
                 # Plot injected locations
                 savefile=odir+key+'-cons_inj.pdf'
-                plotting.plot_injected_locs(meta, data, tottp, seps_all, pas_all, pxsc=None, savefile=savefile)
+                plotting.plot_injected_locs(meta, data, tottp, seps_all, pas_all, pxsc=pxsc, savefile=savefile)
 
                 # Plot calibrated contrast
                 fit_thrput = {}
@@ -496,7 +500,7 @@ def inject_recover(meta,
     # Offset PSF from WebbPSF, i.e., an integration time weighted average
     # of the unocculted offset PSF over the rolls (normalized to a peak
     # flux of 1).
-    offsetpsf = utils.get_offsetpsf(meta, inst, filt, mask, key)
+    offsetpsf = utils.get_offsetpsf(meta, key, recenter_offsetpsf=False, derotate=True)
     offsetpsf /= np.max(offsetpsf)
     
     # Initialize outputs.
@@ -548,7 +552,7 @@ def inject_recover(meta,
                         todo += [i*Npa+j]
                         done += [i*Npa+j]
                         stamp = np.array([offsetpsf*flux_inject[i] for k in range(dataset.input.shape[0])]) # MJy/sr
-                        fakes.inject_planet(frames=dataset.input, centers=dataset.centers, inputflux=stamp, astr_hdrs=dataset.wcs, radius=seps_inject[i], pa=pas_inject[j], field_dependent_correction=partial(utils.correct_transmission, meta=meta))
+                        fakes.inject_planet(frames=dataset.input, centers=dataset.centers, inputflux=stamp, astr_hdrs=dataset.wcs, radius=seps_inject[i], pa=pas_inject[j], field_dependent_correction=partial(utils.field_dependent_correction, meta=meta))
                         flux_all += [flux_inject[i]] # MJy/sr
                         seps_all += [seps_inject[i]] # pix
                         pas_all += [pas_inject[j]] # deg

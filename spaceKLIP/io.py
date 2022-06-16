@@ -214,6 +214,7 @@ def extract_obs(meta, fitsfiles_all):
                 PIXSCALE[i] = nrc._pixelscale_long*1e3 # mas
             else:
                 PIXSCALE[i] = nrc._pixelscale_short*1e3 # mas
+
         elif (INSTRUME[i] == 'MIRI'):
             PIXSCALE[i] = mir.pixelscale*1e3 # mas
         else:
