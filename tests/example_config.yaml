@@ -10,7 +10,7 @@
 
 ##### REQUIRED #####
 # Input Directory 
-idir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/HIFI_SIMS/NIRCam/20220407/small_uncal/'
+idir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/HIFI_SIMS/MIRI/SimData_20220614/'
 odir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/20220614/' # Output Directory
 sdir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/HIP65426.vot' #VOT table or stellar model file.
 
@@ -61,12 +61,14 @@ numbasis: [1, 2, 5, 10, 20, 50, 100] # list of number of basis vectors for pyKLI
 KL: -1 # index of the KL component for which the calibrated contrast curve and the companion properties shall be computed
 
 seps_inject_rnd: [5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 25., 30.0, 35.0, 40.0] # pix; list of separations at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
-#seps_inject_rnd: [5.0, 25.0, 40.0] # pix; list 
 pas_inject_rnd: [0., 45., 90., 135., 180., 225., 270., 315.] # deg; list of position angles at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
 
 pa_ranges_bar: [(105, 105), (285, 285)] # deg; list of tuples defining the pizza slices that shall be considered when computing the contrast curves for the bar masks
 seps_inject_bar: [2.0, 4.0, 6.0, 8.0, 10.0, 12.5, 15.0, 17.5, 20.0, 25.0, 30.0] # pix; list of separations at which fake planets shall be injected to compute the calibrated contrast curve for the bar masks
 pas_inject_bar: [45., 135., 225., 315.] # deg; list of position angles at which fake planets shall be injected to compute the calibrated contrast curve for the bar masks
+
+seps_inject_fqpm: [5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 25., 30.0, 35.0, 40.0]
+pas_inject_fqpm: [45., 135., 225., 315.]
 
 #######################################################
 ##### Companion Photometry / Astrometry Settings ######

@@ -90,7 +90,12 @@ def raw_contrast_curve(meta):
             
             # Mask out known companions and the location of the bar mask in
             # both rolls.
-            data_masked = mask_companions(data, pxsc, cent, 12.*fwhm, meta.ra_off, meta.de_off)
+            if ('4QPM' in mask):
+                fwhm_scale = 4.
+            else:
+                fwhm_scale = 12.
+            data_masked = mask_companions(data, pxsc, cent, fwhm_scale*fwhm, meta.ra_off, meta.de_off)
+
             if (('LWB' in mask) or ('SWB' in mask)):
                 data_masked = mask_bar(data_masked, cent, meta.pa_ranges_bar)
             
@@ -182,6 +187,8 @@ def calibrated_contrast_curve(meta):
     pas_inject_rnd = np.array(meta.pas_inject_rnd)
     seps_inject_bar = np.array(meta.seps_inject_bar)
     pas_inject_bar = np.array(meta.pas_inject_bar)
+    seps_inject_fqpm = np.array(meta.seps_inject_fqpm)
+    pas_inject_fqpm = np.array(meta.pas_inject_fqpm)
     
     # Loop through all modes, numbers of annuli, and numbers of
     # subsections.
@@ -266,6 +273,8 @@ def calibrated_contrast_curve(meta):
                 Fstar = meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6*np.max(offsetpsf) # MJy; convert the host star brightness from vegamag to MJy
                 if (mask in ['MASKASWB', 'MASKALWB']):
                     cons_inject = np.interp(seps_inject_bar*pxsc/1000., seps, cons)*5. # inject at 5 times 5 sigma
+                elif ('4QPM' in mask):
+                    cons_inject = np.interp(seps_inject_fqpm*pxsc/1000., seps, cons)*5.
                 else:
                     cons_inject = np.interp(seps_inject_rnd*pxsc/1000., seps, cons)*5. # inject at 5 times 5 sigma
                 flux_inject = cons_inject*Fstar*(180./np.pi*3600.*1000.)**2/pxsc**2 # MJy/sr; convert the injected flux from contrast to MJy/sr
@@ -276,9 +285,16 @@ def calibrated_contrast_curve(meta):
                 # fluxes into the injection and recovery routine.
                 good = np.isnan(flux_inject) == False
                 if (mask in ['MASKASWB', 'MASKALWB']):
-                    flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, inst, filt, mask, 10.*fwhm, flux_inject[good], seps_inject_bar[good], pas_inject_bar, meta.KL, meta.ra_off, meta.de_off)
+                    fwhm_scale = 10
+                    flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, inst, filt, mask, fwhm_scale*fwhm, flux_inject[good], seps_inject_bar[good], pas_inject_bar, meta.KL, meta.ra_off, meta.de_off)
+                elif ('4QPM' in mask):
+                    fwhm_scale = 4
+                    flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, inst, filt, mask, fwhm_scale*fwhm, flux_inject[good], seps_inject_fqpm[good], pas_inject_fqpm, meta.KL, meta.ra_off, meta.de_off)
                 else:
-                    flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, inst, filt, mask, 10.*fwhm, flux_inject[good], seps_inject_rnd[good], pas_inject_rnd, meta.KL, meta.ra_off, meta.de_off)
+                    fwhm_scale = 10
+                    flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, inst, filt, mask, fwhm_scale*fwhm, flux_inject[good], seps_inject_rnd[good], pas_inject_rnd, meta.KL, meta.ra_off, meta.de_off)
+
+
                 np.save(odir+key+'-flux_all.npy', flux_all) # MJy/sr
                 np.save(odir+key+'-seps_all.npy', seps_all) # pix
                 np.save(odir+key+'-pas_all.npy', pas_all) # deg

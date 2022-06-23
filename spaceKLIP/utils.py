@@ -288,8 +288,18 @@ def get_transmission(meta, key, odir, derotate=False):
     
     # MIRI.
     elif (inst == 'MIRI'):
-        tp, _ = JWST.trim_miri_data(hdul['SCI'].data[None, :, :], hdul['SCI'].data[None, :, :])
-        tp = tp[0, 1:-1, 1:-2]
+        if mask.lower() == '4qpm_1065':
+            filt = 'f1065c'
+        elif mask.lower() == '4qpm_1140':
+            filt = 'f1140c'
+        elif mask.lower() == '4qpm_1550':
+            filt = 'f1550c'
+        elif mask.lower() == 'lyot_2300':
+            filt = 'f2300c'
+
+        tp, _ = JWST.trim_miri_data([hdul['SCI'].data[None, :, :]], filt)
+        tp = tp[0][0] #Just want the 2D array 
+        #tp = tp[0, 1:-1, 1:-2]
     
     else:
         raise UserWarning('Unknown instrument')
@@ -318,12 +328,14 @@ def get_transmission(meta, key, odir, derotate=False):
     # and returning the coronagraphic mask transmission.
     xr = np.arange(tp.shape[1]) # pix
     yr = np.arange(tp.shape[0]) # pix
+
     xx, yy = np.meshgrid(xr, yr) # pix
     xx = xx-(tp.shape[1]-1.)/2. # pix
     yy = yy-(tp.shape[0]-1.)/2. # pix
     rr = np.sqrt(xx**2+yy**2) # pix
     totmsk[rr > meta.owa] = np.nan
-    meta.transmission = RegularGridInterpolator((xx[0, :], yy[:, 0]), totmsk)
+
+    meta.transmission = RegularGridInterpolator((yy[:, 0], xx[0, :]), totmsk)
     
     # Plot.
     plt.figure(figsize=(6.4, 4.8))

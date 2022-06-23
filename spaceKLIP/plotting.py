@@ -71,7 +71,7 @@ def plot_contrast_raw(meta, seps, cons, labels='default', savefile='./rawcontras
 
     # Plot settings
     ax.set_yscale('log')
-    ax.set_xlim([0., 5.]) # arcsec
+    #ax.set_xlim([0., 5.]) # arcsec
     ax.grid(axis='y')
     ax.set_xlabel('Separation [arcsec]')
     ax.set_ylabel('Contrast [5$\sigma$]')

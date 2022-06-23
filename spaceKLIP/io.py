@@ -307,7 +307,6 @@ def get_working_files(meta, runcheck, subdir='RAMPFIT', search='uncal.fits'):
 
     # Add wild card to the start of the search string
     search = '*' + search 
-   
     # Figure out where to look for files
     if runcheck:
         #Use an output directory that was just created
