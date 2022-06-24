@@ -420,6 +420,30 @@ def mask_bar(data, cent, pa_ranges_bar=[]):
     return data_masked
 
 
+def inject_recover_advanced(meta,
+                           filepaths,
+                           psflib_filepaths,
+                           mode,
+                           odir,
+                           key,
+                           annuli,
+                           subsections,
+                           pxsc, # mas
+                           inst,
+                           filt,
+                           mask,
+                           mrad, # pix
+                           flux_inject=[], # MJy/sr
+                           seps_inject=[], # pix
+                           pas_inject=[], # deg
+                           KL=-1,
+                           ra_off=[], # mas
+                           de_off=[]): # mas
+
+    # TODO Create injection where PSFs are generated exactly at the location they should be injected
+
+    return
+
 def inject_recover(meta,
                    filepaths,
                    psflib_filepaths,

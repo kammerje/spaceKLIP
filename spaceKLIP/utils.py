@@ -237,20 +237,6 @@ def gen_offsetpsf(offsetpsfdir, inst, filt, mask):
     webbpsf_inst.filter = filt
     hdul = webbpsf_inst.calc_psf(oversample=1, normalize='last')
 
-    # Need to scale the PSF for MIRI as the WebbPSF filters are normalised to 1
-    # These values are obtained from the PCE's in the resources folder
-    if (inst == 'MIRI'):
-        if (filt == 'F1065C'):
-            scale = 0.28085
-        elif (filt == 'F1140C'):
-            scale = 0.29090
-        elif (filt == 'F1550C'):
-            scale = 0.24817
-        elif (filt == 'F2300C'):
-            scale = 0.22038
-
-        hdul[0].data *= scale
-
     # Save the offset PSF.
     if (not os.path.exists(offsetpsfdir)):
         os.makedirs(offsetpsfdir)
