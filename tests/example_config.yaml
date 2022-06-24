@@ -11,7 +11,7 @@
 ##### REQUIRED #####
 # Input Directory 
 idir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/HIFI_SIMS/MIRI/SimData_20220614/'
-odir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/20220614/' # Output Directory
+odir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/20220623_MIRI/' # Output Directory
 sdir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/HIP65426.vot' #VOT table or stellar model file.
 
 ##### OPTIONAL #####

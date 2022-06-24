@@ -160,10 +160,10 @@ def get_offsetpsf(meta, key, recenter_offsetpsf=False, derotate=True):
     filt = meta.filter[key]
     mask = meta.coronmsk[key]
     try:
-        offsetpsf = np.load(offsetpsfdir+filt+'_'+mask+'.npy')
+        with pyfits.open(offsetpsfdir+filt+'_'+mask+'.fits') as op_hdu:
+            offsetpsf = op_hdu[0].data
     except:
-        gen_offsetpsf(offsetpsfdir, inst, filt, mask)
-        offsetpsf = np.load(offsetpsfdir+filt+'_'+mask+'.npy')
+        offsetpsf = gen_offsetpsf(offsetpsfdir, inst, filt, mask)
     
     # Recenter the offset PSF.
     if (recenter_offsetpsf == True):
@@ -221,27 +221,46 @@ def gen_offsetpsf(offsetpsfdir, inst, filt, mask):
             raise UserWarning('Unknown coronagraphic mask')
         nircam.image_mask = None
         webbpsf_inst = nircam
-    
     # MIRI.
     elif (inst == 'MIRI'):
         miri = webbpsf.MIRI()
+        if ('4QPM' in mask):
+            miri.pupil_mask = 'MASKFQPM' #F not 4 for WebbPSF
+        else:
+            miri.pupil_mask = 'MASKLYOT'
+        miri.image_mask = None #mask.replace('4QPM_', 'FQPM')
         webbpsf_inst = miri
-    
     else:
         raise UserWarning('Unknown instrument')
     
     # Assign the correct filter and compute the offset PSF.
     webbpsf_inst.filter = filt
     hdul = webbpsf_inst.calc_psf(oversample=1, normalize='last')
-    psf = hdul[0].data
-    hdul.close()
-    
+
+    # Need to scale the PSF for MIRI as the WebbPSF filters are normalised to 1
+    # These values are obtained from the PCE's in the resources folder
+    if (inst == 'MIRI'):
+        if (filt == 'F1065C'):
+            scale = 0.28085
+        elif (filt == 'F1140C'):
+            scale = 0.29090
+        elif (filt == 'F1550C'):
+            scale = 0.24817
+        elif (filt == 'F2300C'):
+            scale = 0.22038
+
+        hdul[0].data *= scale
+
     # Save the offset PSF.
     if (not os.path.exists(offsetpsfdir)):
         os.makedirs(offsetpsfdir)
-    np.save(offsetpsfdir+filt+'_'+mask+'.npy', psf)
+    hdul.writeto(offsetpsfdir+filt+'_'+mask+'.fits')
+    hdul.close()
     
-    return None
+    # Get the PSF array to return
+    psf = hdul[0].data
+
+    return psf
 
 def get_transmission(meta, key, odir, derotate=False):
     """
@@ -410,8 +429,8 @@ def get_stellar_magnitudes(meta):
     # Check if this is a Vizier VOTable, if so, use webbpsf_ext
     if meta.sdir[-4:] == '.vot':
         # Pick an arbitrary bandpass+magnitude to normalise the initial SED. Exact choice
-        # doesn't matter as will be be refitting this model using the provided data. Important
-        # thing is the spectral type (user provided).
+        # doesn't matter as will be be refitting this model using the provided data. 
+        # Important thing is the spectral type (user provided).
         bp_k = webbpsf_ext.bp_2mass('k')
         bp_mag = 5
 
@@ -439,14 +458,12 @@ def get_stellar_magnitudes(meta):
     else:
         try:
             # Open file and grab wavelength and flux arrays
-            print("HERE")
             data = np.genfromtxt(meta.sdir).transpose()
             model_wave = data[0]
             model_flux = data[1]
 
             # Create a synphot spectrum
             SED = SourceSpectrum(Empirical1D, points=model_wave << u.Unit('micron'), lookup_table=model_flux << u.Unit('Jy'))
-            print("HERE2")
         except:
             raise ValueError("Unable to read in provided file. Ensure format is in two columns with wavelength (microns), flux (Jy)")
 
