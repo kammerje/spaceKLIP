@@ -6,6 +6,7 @@ from __future__ import division
 # =============================================================================
 
 import os, re, sys
+import json
 
 import astropy.io.fits as pyfits
 import matplotlib.pyplot as plt
@@ -115,17 +116,27 @@ def raw_contrast_curve(meta):
                 sep, con = klip.meas_contrast(dat=Fdata[j]/Fstar, iwa=meta.iwa, owa=meta.owa, resolution=2.*fwhm, center=cent, low_pass_filter=False)
                 seps += [sep*pxsc/1000.] # arcsec
                 cons += [con]
-            seps = np.array(seps) # arcsec
-            cons = np.array(cons)
-            np.save(odir+key+'-seps.npy', seps) # arcsec
-            np.save(odir+key+'-cons.npy', cons)
+            # seps = np.array(seps) # arcsec
+            # cons = np.array(cons)
+
+            # Save the contrast curve as a dictionary
+            save_dict = {'seps':seps[0].tolist(), 'cons':{}}
+            for j, con in enumerate(cons):
+                save_dict['cons']['KL{}'.format(meta.numbasis[j])] = cons[j].tolist()
+            rawconfile = odir+key+'-raw_save.json'
+            with open(rawconfile, 'w') as rf:
+                json.dump(save_dict, rf)
+
+            # np.save(odir+key+'-seps.npy', seps) # arcsec
+            # np.save(odir+key+'-cons.npy', cons)
             
             if (meta.plotting == True):
                 savefile = odir+key+'-cons_raw.pdf'
                 labels = []
                 for j in range(Fdata.shape[0]):
                     labels.append(str(head['KLMODE{}'.format(j)])+' KL')
-                plotting.plot_contrast_raw(meta, seps, cons, labels=labels, savefile=savefile)
+                plotting.plot_contrast_raw(meta, seps[0], cons, labels=labels, savefile=savefile)
+
     
     return None
 
@@ -216,7 +227,6 @@ def calibrated_contrast_curve(meta):
         
         # Loop through all sets of observing parameters.
         for i, key in enumerate(meta.obs.keys()):
-            meta.truenumbasis[key] = [num for num in meta.numbasis if (num <= meta.maxnumbasis[key])]
 
             ww_sci = np.where(meta.obs[key]['TYP'] == 'SCI')[0]
             filepaths = np.array(meta.obs[key]['FITSFILE'][ww_sci], dtype=str).tolist()
@@ -233,19 +243,49 @@ def calibrated_contrast_curve(meta):
             subarr = key[temp[4]+1:]
             wave = meta.wave[filt] # m
             fwhm = wave/meta.diam*utils.rad2mas/pxsc # pix
+
+            all_numbasis = []
+            # Loop over up to 100 different KL mode inputs
+            for i in range(100):
+                try:
+                    # Get value from header
+                    all_numbasis.append(hdul[0].header['KLMODE{}'.format(i)])
+                except:
+                    # No more KL modes
+                    continue
+            meta.truenumbasis[key] = [num for num in all_numbasis if (num <= meta.maxnumbasis[key])]
+            # Get the index of the KL component we are interested in
+            KLindex = all_numbasis.index(meta.KL)
+
             hdul.close()
             
             # Load raw contrast curves. If overwrite is false,
             # check whether the calibrated contrast curves have
             # been computed already.
-            seps = np.load(odir+key+'-seps.npy')[meta.KL] # arcsec
-            cons = np.load(odir+key+'-cons.npy')[meta.KL]
+            rawconfile = odir+key+'-raw_save.json'
+            with open(rawconfile, 'r') as rf:
+                rawcon = json.load(rf)
+
+            seps = rawcon['seps']
+            cons = rawcon['cons']['KL{}'.format(meta.KL)]
+
+            # seps = np.load(odir+key+'-seps.npy')[meta.KL] # arcsec
+            # cons = np.load(odir+key+'-cons.npy')[meta.KL]
             if meta.overwrite == False:
                 try:
-                    flux_all = np.load(odir+key+'-flux_all.npy') # MJy/sr
-                    seps_all = np.load(odir+key+'-seps_all.npy') # pix
-                    pas_all = np.load(odir+key+'-pas_all.npy') # deg
-                    flux_retr_all = np.load(odir+key+'-flux_retr_all.npy') # MJy/sr
+                    calconfile = odir+key+'-cal_save.json'
+                    with open(calconfile, 'r') as rf:
+                        calcon = json.load(rf)
+
+                    flux_all = calcon['flux_all']
+                    seps_all = calcon['seps_all']
+                    pas_all = calcon['pas_all']
+                    flux_retr_all = calcon['flux_retr_all']
+
+                    # flux_all = np.load(odir+key+'-flux_all.npy') # MJy/sr
+                    # seps_all = np.load(odir+key+'-seps_all.npy') # pix
+                    # pas_all = np.load(odir+key+'-pas_all.npy') # deg
+                    # flux_retr_all = np.load(odir+key+'-flux_retr_all.npy') # MJy/sr
                     todo = False
                 except:
                     todo = True
@@ -286,19 +326,18 @@ def calibrated_contrast_curve(meta):
                 good = np.isnan(flux_inject) == False
                 if (mask in ['MASKASWB', 'MASKALWB']):
                     fwhm_scale = 10
-                    flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, inst, filt, mask, fwhm_scale*fwhm, flux_inject[good], seps_inject_bar[good], pas_inject_bar, meta.KL, meta.ra_off, meta.de_off)
+                    flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, inst, filt, mask, fwhm_scale*fwhm, flux_inject[good], seps_inject_bar[good], pas_inject_bar, KLindex, meta.ra_off, meta.de_off)
                 elif ('4QPM' in mask):
                     fwhm_scale = 4
-                    flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, inst, filt, mask, fwhm_scale*fwhm, flux_inject[good], seps_inject_fqpm[good], pas_inject_fqpm, meta.KL, meta.ra_off, meta.de_off)
+                    flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, inst, filt, mask, fwhm_scale*fwhm, flux_inject[good], seps_inject_fqpm[good], pas_inject_fqpm, KLindex, meta.ra_off, meta.de_off)
                 else:
                     fwhm_scale = 10
-                    flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, inst, filt, mask, fwhm_scale*fwhm, flux_inject[good], seps_inject_rnd[good], pas_inject_rnd, meta.KL, meta.ra_off, meta.de_off)
+                    flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, inst, filt, mask, fwhm_scale*fwhm, flux_inject[good], seps_inject_rnd[good], pas_inject_rnd, KLindex, meta.ra_off, meta.de_off)
 
-
-                np.save(odir+key+'-flux_all.npy', flux_all) # MJy/sr
-                np.save(odir+key+'-seps_all.npy', seps_all) # pix
-                np.save(odir+key+'-pas_all.npy', pas_all) # deg
-                np.save(odir+key+'-flux_retr_all.npy', flux_retr_all) # MJy/sr
+                # np.save(odir+key+'-flux_all.npy', flux_all) # MJy/sr
+                # np.save(odir+key+'-seps_all.npy', seps_all) # pix
+                # np.save(odir+key+'-pas_all.npy', pas_all) # deg
+                # np.save(odir+key+'-flux_retr_all.npy', flux_retr_all) # MJy/sr
             
             # Group the injection and recovery results by
             # separation and take the median, then fit a logistic
@@ -311,13 +350,20 @@ def calibrated_contrast_curve(meta):
             pp = least_squares(func_lnprob, p0, args=(med_res['seps'], med_res['tps']))
             # p0 = np.array([0., 1., 1.])
             # pp = least_squares(self.growth_lnprob, p0, args=(med_res['seps']*pxsc/1000., med_res['tps']))
-            corr_cons = cons/func(pp['x'], seps*1000./pxsc)
-            np.save(odir+key+'-pp.npy', pp['x'])
+            corr_cons = np.array(cons)/func(pp['x'], np.array(seps)*1000./pxsc)
+            
+            # np.save(odir+key+'-pp.npy', pp['x'])
+
+            # Save the contrast curve and other properties as a dictionary
+            save_dict = {'seps_all':seps_all.tolist(), 'flux_all':flux_all.tolist(), 'pas_all':pas_all.tolist(), 'flux_retr_all':flux_retr_all.tolist(), 'seps':seps, 'corr_cons':corr_cons.tolist(), 'raw_cons':cons}
+            calconfile = odir+key+'-cal_save.json'
+            with open(calconfile, 'w') as cf:
+                json.dump(save_dict, cf)
             
             if meta.plotting:
                 # Plot injected locations
                 savefile=odir+key+'-cons_inj.pdf'
-                plotting.plot_injected_locs(meta, data, tottp, seps_all, pas_all, pxsc=pxsc, savefile=savefile)
+                plotting.plot_injected_locs(meta, data[KLindex], tottp, seps_all, pas_all, pxsc=pxsc, savefile=savefile)
 
                 # Plot calibrated contrast
                 fit_thrput = {}
@@ -568,7 +614,7 @@ def inject_recover(meta,
     ctr = 0
     while (finished == False):
         dataset = JWST.JWSTData(filepaths=filepaths,
-                                psflib_filepaths=psflib_filepaths)
+                                psflib_filepaths=psflib_filepaths, centering=meta.centering_alg)
         
         # Inject fake companions. Make sure that no other fake companion
         # closer than mrad will be injected into the same dataset.

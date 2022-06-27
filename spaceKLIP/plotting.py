@@ -57,17 +57,17 @@ def plot_contrast_raw(meta, seps, cons, labels='default', savefile='./rawcontras
     ax = plt.gca()
 
     # Figure out if we're plotting one contrast curve, or multiple
-    if seps.ndim == 1:
+    if len(cons) == 1:
         if labels == 'default':
             labels == 'contrast'
         ax.plot(seps, cons, label=labels)
-    elif seps.ndim == 2:
+    elif len(cons) > 1:
         if labels == 'default':
             labels = ['contrast_{}'.format(i+1) for i in range(len(seps))]
 
         # Loop over contrast curves to plot
-        for i in range(len(seps)):
-            ax.plot(seps[i], cons[i], label=labels[i])
+        for i in range(len(cons)):
+            ax.plot(seps, cons[i], label=labels[i])
 
     # Plot settings
     ax.set_yscale('log')
@@ -107,7 +107,7 @@ def plot_injected_locs(meta, data, transmission, seps, pas, pxsc=None, savefile=
         xlabel, ylabel = '$\Delta$RA [arcsec]', '$\Delta$DEC [arcsec]'
 
     f, ax = plt.subplots(1, 2, figsize=(2*6.4, 1*4.8))
-    ax[0].imshow(np.log10(np.abs(data[meta.KL])), origin='lower', cmap='inferno', extent=extent)
+    ax[0].imshow(np.log10(np.abs(data)), origin='lower', cmap='inferno', extent=extent)
     for i in range(len(meta.ra_off)):
         cc = plt.Circle((meta.ra_off[i]/1000., meta.de_off[i]/1000.), 10.*pxsc/1000., fill=False, edgecolor='green', linewidth=3)
         ax[0].add_artist(cc)

@@ -92,7 +92,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
         # Loop through all concatenations.
         res = {}
         for i, key in enumerate(meta.obs.keys()):
-            meta.truenumbasis[key] = [num for num in meta.numbasis if (num <= meta.maxnumbasis[key])]
+            
             ww_sci = np.where(meta.obs[key]['TYP'] == 'SCI')[0]
             filepaths = np.array(meta.obs[key]['FITSFILE'][ww_sci], dtype=str).tolist()
             ww_cal = np.where(meta.obs[key]['TYP'] == 'CAL')[0]
@@ -103,12 +103,23 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
             pxar = meta.pixar_sr[key] # sr
             wave = meta.wave[filt] # m
             fwhm = wave/meta.diam*utils.rad2mas/pxsc # pix
+
+            all_numbasis = []
+            # Loop over up to 100 different KL mode inputs
+            for i in range(100):
+                try:
+                    # Get value from header
+                    all_numbasis.append(hdul[0].header['KLMODE{}'.format(i)])
+                except:
+                    # No more KL modes
+                    continue
+            meta.truenumbasis[key] = [num for num in all_numbasis if (num <= meta.maxnumbasis[key])]
             hdul.close()
             
             # Create a new pyKLIP dataset for forward modeling the companion
             # PSFs.
             dataset = JWST.JWSTData(filepaths=filepaths,
-                                    psflib_filepaths=psflib_filepaths)
+                                    psflib_filepaths=psflib_filepaths, centering=meta.centering_alg)
             
             # Get the coronagraphic mask transmission map.
             utils.get_transmission(meta, key, odir, derotate=False)

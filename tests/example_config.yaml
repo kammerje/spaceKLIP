@@ -15,7 +15,7 @@ odir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/20220623_MI
 sdir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/HIP65426.vot' #VOT table or stellar model file.
 
 ##### OPTIONAL #####
-rundirs: [] #'2022_06_06_RDI_annu1_subs1_run1'] #Specify directory(ies) within odir of existing runs to calculate contrast cuvre / companion
+rundirs: ['2022_06_27_RDI_annu1_subs1_run2'] #'2022_06_06_RDI_annu1_subs1_run1'] #Specify directory(ies) within odir of existing runs to calculate contrast cuvre / companion
 ancildir: None      # Specify directory to save ancillary files, if None then saved under odir/ANCILLARY/. 
 
 ############################
@@ -39,7 +39,7 @@ de_off: [-698.] # mas; DEC offset of the known companions
 #################################
 ramp_ext: 'uncal.fits'
 skip_jump: False     #Whether to skip the jump detection step of the pipeline
-jump_threshold: 20   #Adjust the jump detection threshold if not skipped
+jump_threshold: 20   #Adjust the jump detection threshold if not skipped2022_06_27_RDI_annu1_subs1_run2'
 
 #####################################
 ##### Image Processing Settings #####
@@ -50,6 +50,7 @@ imgproc_ext: 'rateints.fits'
 ##### PSF Subtraction Settings #####
 ####################################
 sub_ext: 'calints.fits'
+centering_alg: "imageregis"    # Algorithm to use for centering "basic", "jwstpipe", or "imageregis" 
 mode: ['RDI']       # list of modes for pyKLIP, will loop through all
 annuli: [1]         # list of number of annuli for pyKLIP, will loop through all
 subsections: [1]    # list of number of annuli for pyKLIP, will loop through all
@@ -58,8 +59,7 @@ numbasis: [1, 2, 5, 10, 20, 50, 100] # list of number of basis vectors for pyKLI
 ###################################
 ##### Contrast Curve Settings #####
 ###################################
-KL: -1 # index of the KL component for which the calibrated contrast curve and the companion properties shall be computed
-calcon_method: 'advanced'
+KL: 100 # Number of KL components for which the calibrated contrast curve and the companion properties shall be computed (must be in subtracted numbasis)
 
 seps_inject_rnd: [5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 25., 30.0, 35.0, 40.0] # pix; list of separations at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
 pas_inject_rnd: [0., 45., 90., 135., 180., 225., 270., 315.] # deg; list of position angles at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
@@ -68,7 +68,7 @@ pa_ranges_bar: [(105, 105), (285, 285)] # deg; list of tuples defining the pizza
 seps_inject_bar: [2.0, 4.0, 6.0, 8.0, 10.0, 12.5, 15.0, 17.5, 20.0, 25.0, 30.0] # pix; list of separations at which fake planets shall be injected to compute the calibrated contrast curve for the bar masks
 pas_inject_bar: [45., 135., 225., 315.] # deg; list of position angles at which fake planets shall be injected to compute the calibrated contrast curve for the bar masks
 
-seps_inject_fqpm: [5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 25., 30.0, 35.0, 40.0]
+seps_inject_fqpm: [5, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 25., 30.0, 35.0, 40.0]
 pas_inject_fqpm: [45., 135., 225., 315.]
 
 #######################################################

@@ -74,7 +74,7 @@ def klip_subtraction(meta):
                     ww_cal = np.where(meta.obs[key]['TYP'] == 'CAL')[0]
                     psflib_filepaths = np.array(meta.obs[key]['FITSFILE'][ww_cal], dtype=str).tolist()
                     dataset = JWST.JWSTData(filepaths=filepaths,
-                                            psflib_filepaths=psflib_filepaths)
+                                            psflib_filepaths=psflib_filepaths, centering=meta.centering_alg)
 
                     parallelized.klip_dataset(dataset=dataset,
                                               mode=mode,
