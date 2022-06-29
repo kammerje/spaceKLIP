@@ -400,8 +400,19 @@ def field_dependent_correction(stamp,
     xy = np.vstack((stamp_dy.flatten(), stamp_dx.flatten())).T
     transmission = meta.transmission(xy)
     transmission = transmission.reshape(stamp.shape)
+
+    # Get center of stamp
+    c0 = (stamp.shape[0]-1)/2
+    c1 = (stamp.shape[1]-1)/2
+
+    # Get transmission at this point
+    transmission_at_center = transmission[int(c0),int(c1)]
     
-    return transmission*stamp
+    ## Old way use peak of flux
+    # peak_index = np.unravel_index(stamp.argmax(), stamp.shape)
+    # transmission_at_center =  transmission[peak_index[1],peak_index[0]]
+
+    return transmission_at_center*stamp
 
 def get_stellar_magnitudes(meta):
     # First find out if a file was provided correctly

@@ -113,6 +113,11 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                 except:
                     # No more KL modes
                     continue
+            # Get the index of the KL component we are interested in
+            try:
+                KLindex = all_numbasis.index(meta.KL)
+            except:
+                raise ValueError('KL={} not found. Calculated options are: {}, and maximum possible for this data is {}'.format(meta.KL, all_numbasis, meta.maxnumbasis[key]))
             meta.truenumbasis[key] = [num for num in all_numbasis if (num <= meta.maxnumbasis[key])]
             hdul.close()
             
@@ -182,11 +187,11 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                 
                 # Open the forward-modeled dataset.
                 with pyfits.open(fmdataset) as hdul:
-                    fm_frame = hdul[0].data[meta.KL]
+                    fm_frame = hdul[0].data[KLindex]
                     fm_centx = hdul[0].header['PSFCENTX']
                     fm_centy = hdul[0].header['PSFCENTY']
                 with pyfits.open(klipdataset) as hdul:
-                    data_frame = hdul[0].data[meta.KL]
+                    data_frame = hdul[0].data[KLindex]
                     data_centx = hdul[0].header["PSFCENTX"]
                     data_centy = hdul[0].header["PSFCENTY"]
                 

@@ -255,7 +255,10 @@ def calibrated_contrast_curve(meta):
                     continue
             meta.truenumbasis[key] = [num for num in all_numbasis if (num <= meta.maxnumbasis[key])]
             # Get the index of the KL component we are interested in
-            KLindex = all_numbasis.index(meta.KL)
+            try:
+                KLindex = all_numbasis.index(meta.KL)
+            except:
+                raise ValueError('KL={} not found. Calculated options are: {}, and maximum possible for this data is {}'.format(meta.KL, all_numbasis, meta.maxnumbasis[key]))
 
             hdul.close()
             
