@@ -1,11 +1,9 @@
 from __future__ import division
-
-
 # =============================================================================
 # IMPORTS
 # =============================================================================
-
 import os, re, sys
+import json
 
 import astropy.io.fits as pyfits
 import matplotlib.pyplot as plt
@@ -92,7 +90,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
         # Loop through all concatenations.
         res = {}
         for i, key in enumerate(meta.obs.keys()):
-            meta.truenumbasis[key] = [num for num in meta.numbasis if (num <= meta.maxnumbasis[key])]
+            
             ww_sci = np.where(meta.obs[key]['TYP'] == 'SCI')[0]
             filepaths = np.array(meta.obs[key]['FITSFILE'][ww_sci], dtype=str).tolist()
             ww_cal = np.where(meta.obs[key]['TYP'] == 'CAL')[0]
@@ -103,12 +101,28 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
             pxar = meta.pixar_sr[key] # sr
             wave = meta.wave[filt] # m
             fwhm = wave/meta.diam*utils.rad2mas/pxsc # pix
+
+            all_numbasis = []
+            # Loop over up to 100 different KL mode inputs
+            for i in range(100):
+                try:
+                    # Get value from header
+                    all_numbasis.append(hdul[0].header['KLMODE{}'.format(i)])
+                except:
+                    # No more KL modes
+                    continue
+            # Get the index of the KL component we are interested in
+            try:
+                KLindex = all_numbasis.index(meta.KL)
+            except:
+                raise ValueError('KL={} not found. Calculated options are: {}, and maximum possible for this data is {}'.format(meta.KL, all_numbasis, meta.maxnumbasis[key]))
+            meta.truenumbasis[key] = [num for num in all_numbasis if (num <= meta.maxnumbasis[key])]
             hdul.close()
             
             # Create a new pyKLIP dataset for forward modeling the companion
             # PSFs.
             dataset = JWST.JWSTData(filepaths=filepaths,
-                                    psflib_filepaths=psflib_filepaths)
+                                    psflib_filepaths=psflib_filepaths, centering=meta.centering_alg)
             
             # Get the coronagraphic mask transmission map.
             utils.get_transmission(meta, key, odir, derotate=False)
@@ -171,11 +185,11 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                 
                 # Open the forward-modeled dataset.
                 with pyfits.open(fmdataset) as hdul:
-                    fm_frame = hdul[0].data[meta.KL]
+                    fm_frame = hdul[0].data[KLindex]
                     fm_centx = hdul[0].header['PSFCENTX']
                     fm_centy = hdul[0].header['PSFCENTY']
                 with pyfits.open(klipdataset) as hdul:
-                    data_frame = hdul[0].data[meta.KL]
+                    data_frame = hdul[0].data[KLindex]
                     data_centx = hdul[0].header["PSFCENTX"]
                     data_centy = hdul[0].header["PSFCENTY"]
                 
@@ -276,5 +290,10 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                         print('   CON = %.2e+/-%.2e (%.2e inj.)' % (res[key][temp]['f'], res[key][temp]['df'], cinj))
                     except:
                         print('   CON = %.2e+/-%.2e' % (res[key][temp]['f'], res[key][temp]['df']))
-    
+
+        # Save the results
+        compfile = odir+key+'-comp_save.json'
+        with open(compfile, 'w') as sf:
+            json.dump(res, sf)
+
     return res

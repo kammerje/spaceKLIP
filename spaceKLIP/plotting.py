@@ -1,5 +1,12 @@
+import glob, os
+
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gs
+
 import numpy as np
+from astropy.io import fits
+
+from itertools import chain
 
 def plot_contrast_images(meta, data, data_masked, pxsc=None, savefile='./maskimage.pdf'):
     """
@@ -57,21 +64,21 @@ def plot_contrast_raw(meta, seps, cons, labels='default', savefile='./rawcontras
     ax = plt.gca()
 
     # Figure out if we're plotting one contrast curve, or multiple
-    if seps.ndim == 1:
+    if len(cons) == 1:
         if labels == 'default':
             labels == 'contrast'
         ax.plot(seps, cons, label=labels)
-    elif seps.ndim == 2:
+    elif len(cons) > 1:
         if labels == 'default':
             labels = ['contrast_{}'.format(i+1) for i in range(len(seps))]
 
         # Loop over contrast curves to plot
-        for i in range(len(seps)):
-            ax.plot(seps[i], cons[i], label=labels[i])
+        for i in range(len(cons)):
+            ax.plot(seps, cons[i], label=labels[i])
 
     # Plot settings
     ax.set_yscale('log')
-    ax.set_xlim([0., 5.]) # arcsec
+    #ax.set_xlim([0., 5.]) # arcsec
     ax.grid(axis='y')
     ax.set_xlabel('Separation [arcsec]')
     ax.set_ylabel('Contrast [5$\sigma$]')
@@ -107,7 +114,7 @@ def plot_injected_locs(meta, data, transmission, seps, pas, pxsc=None, savefile=
         xlabel, ylabel = '$\Delta$RA [arcsec]', '$\Delta$DEC [arcsec]'
 
     f, ax = plt.subplots(1, 2, figsize=(2*6.4, 1*4.8))
-    ax[0].imshow(np.log10(np.abs(data[meta.KL])), origin='lower', cmap='inferno', extent=extent)
+    ax[0].imshow(np.log10(np.abs(data)), origin='lower', cmap='inferno', extent=extent)
     for i in range(len(meta.ra_off)):
         cc = plt.Circle((meta.ra_off[i]/1000., meta.de_off[i]/1000.), 10.*pxsc/1000., fill=False, edgecolor='green', linewidth=3)
         ax[0].add_artist(cc)
@@ -238,3 +245,75 @@ def plot_chains(chain, savefile):
     plt.tight_layout()
     plt.savefig(savefile)
     plt.close()
+
+def plot_subimages(imgdirs, subdirs, filts, submodes):
+    '''
+    Create a "publication ready" plot of the coronagraphic images, alongside
+    the PSF subtracted images. 
+
+    Parameters
+    ----------
+
+    imgdirs : list of strings
+        Parent directories of the unsubtracted images, filters won't be repeated 
+    subdirs : list of strings
+        Parent directories of the subtracted images
+    filts : list of strings
+        List of filter strings to include in the plot
+    '''
+
+    # Get the files we care about
+    imgfiles = list(chain.from_iterable([glob.glob(imgdir+'*') for imgdir in imgdirs]))
+    subfiles = list(chain.from_iterable([glob.glob(subdir+'*') for subdir in subdirs]))
+    filts = [filt.upper() for filt in filts]
+
+    # Filter the imgfiles
+    used_filts = []
+    true_imgfiles = []
+    for imgfile in imgfiles:
+        hdr = fits.getheader(imgfile)
+        if hdr['SUBPXPTS'] != 1:
+            # This is a dithered reference observation, which we don't want.
+            continue
+        elif 'TACQ' in hdr['EXP_TYPE']:
+            # This is a target acquisition image
+            continue
+        elif hdr['FILTER'] not in filts:
+            # We don't want this filter
+            continue
+        elif hdr['FILTER'] in used_filts:
+            # We've already got a file for this filter
+            continue
+        else:
+            # We want this file
+            true_imgfiles.append(imgfile)
+            used_filts.append(hdr['FILTER'])
+
+    # Filter the subfiles
+    # Note that we allow repeat filters for different reductions.
+    true_subfiles = []
+    for subfile in subfiles:
+        if any(filt in subfile for filt in filts):
+            true_subfiles.append(subfile)
+
+    ydim = len(true_imgfiles)
+    xdim = int(len(true_subfiles) / ydim) + 1
+
+    # Start making the figure
+    fig = plt.figure(figsize=[xdim*5, ydim*5])
+    grid = gs.GridSpec(ydim, xdim, figure=fig)
+
+    for i, imgfile in enumerate(true_imgfiles):
+        hdr = fits.getheader(imgfile)
+        row = filts.index(hdr['FILTER'])
+
+        ax = plt.subplot(grid[row, 0])
+        with fits.open(imgfile) as hdul:
+            img = hdul['SCI'].data[-1]
+        ax.imshow(img)
+
+    for i, subfile in enumerate(true_subfiles):
+
+    plt.show()
+
+    return

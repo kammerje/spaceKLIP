@@ -160,10 +160,10 @@ def get_offsetpsf(meta, key, recenter_offsetpsf=False, derotate=True):
     filt = meta.filter[key]
     mask = meta.coronmsk[key]
     try:
-        offsetpsf = np.load(offsetpsfdir+filt+'_'+mask+'.npy')
+        with pyfits.open(offsetpsfdir+filt+'_'+mask+'.fits') as op_hdu:
+            offsetpsf = op_hdu[0].data
     except:
-        gen_offsetpsf(offsetpsfdir, inst, filt, mask)
-        offsetpsf = np.load(offsetpsfdir+filt+'_'+mask+'.npy')
+        offsetpsf = gen_offsetpsf(offsetpsfdir, inst, filt, mask)
     
     # Recenter the offset PSF.
     if (recenter_offsetpsf == True):
@@ -221,27 +221,32 @@ def gen_offsetpsf(offsetpsfdir, inst, filt, mask):
             raise UserWarning('Unknown coronagraphic mask')
         nircam.image_mask = None
         webbpsf_inst = nircam
-    
     # MIRI.
     elif (inst == 'MIRI'):
         miri = webbpsf.MIRI()
+        if ('4QPM' in mask):
+            miri.pupil_mask = 'MASKFQPM' #F not 4 for WebbPSF
+        else:
+            miri.pupil_mask = 'MASKLYOT'
+        miri.image_mask = None #mask.replace('4QPM_', 'FQPM')
         webbpsf_inst = miri
-    
     else:
         raise UserWarning('Unknown instrument')
     
     # Assign the correct filter and compute the offset PSF.
     webbpsf_inst.filter = filt
     hdul = webbpsf_inst.calc_psf(oversample=1, normalize='last')
-    psf = hdul[0].data
-    hdul.close()
-    
+
     # Save the offset PSF.
     if (not os.path.exists(offsetpsfdir)):
         os.makedirs(offsetpsfdir)
-    np.save(offsetpsfdir+filt+'_'+mask+'.npy', psf)
+    hdul.writeto(offsetpsfdir+filt+'_'+mask+'.fits')
+    hdul.close()
     
-    return None
+    # Get the PSF array to return
+    psf = hdul[0].data
+
+    return psf
 
 def get_transmission(meta, key, odir, derotate=False):
     """
@@ -288,8 +293,18 @@ def get_transmission(meta, key, odir, derotate=False):
     
     # MIRI.
     elif (inst == 'MIRI'):
-        tp, _ = JWST.trim_miri_data(hdul['SCI'].data[None, :, :], hdul['SCI'].data[None, :, :])
-        tp = tp[0, 1:-1, 1:-2]
+        if mask.lower() == '4qpm_1065':
+            filt = 'f1065c'
+        elif mask.lower() == '4qpm_1140':
+            filt = 'f1140c'
+        elif mask.lower() == '4qpm_1550':
+            filt = 'f1550c'
+        elif mask.lower() == 'lyot_2300':
+            filt = 'f2300c'
+
+        tp, _ = JWST.trim_miri_data([hdul['SCI'].data[None, :, :]], filt)
+        tp = tp[0][0] #Just want the 2D array 
+        #tp = tp[0, 1:-1, 1:-2]
     
     else:
         raise UserWarning('Unknown instrument')
@@ -318,12 +333,14 @@ def get_transmission(meta, key, odir, derotate=False):
     # and returning the coronagraphic mask transmission.
     xr = np.arange(tp.shape[1]) # pix
     yr = np.arange(tp.shape[0]) # pix
+
     xx, yy = np.meshgrid(xr, yr) # pix
     xx = xx-(tp.shape[1]-1.)/2. # pix
     yy = yy-(tp.shape[0]-1.)/2. # pix
     rr = np.sqrt(xx**2+yy**2) # pix
     totmsk[rr > meta.owa] = np.nan
-    meta.transmission = RegularGridInterpolator((xx[0, :], yy[:, 0]), totmsk)
+
+    meta.transmission = RegularGridInterpolator((yy[:, 0], xx[0, :]), totmsk)
     
     # Plot.
     plt.figure(figsize=(6.4, 4.8))
@@ -383,8 +400,19 @@ def field_dependent_correction(stamp,
     xy = np.vstack((stamp_dy.flatten(), stamp_dx.flatten())).T
     transmission = meta.transmission(xy)
     transmission = transmission.reshape(stamp.shape)
+
+    # Get center of stamp
+    c0 = (stamp.shape[0]-1)/2
+    c1 = (stamp.shape[1]-1)/2
+
+    # Get transmission at this point
+    transmission_at_center = transmission[int(c0),int(c1)]
     
-    return transmission*stamp
+    ## Old way use peak of flux
+    # peak_index = np.unravel_index(stamp.argmax(), stamp.shape)
+    # transmission_at_center =  transmission[peak_index[1],peak_index[0]]
+
+    return transmission_at_center*stamp
 
 def get_stellar_magnitudes(meta):
     # First find out if a file was provided correctly
@@ -398,8 +426,8 @@ def get_stellar_magnitudes(meta):
     # Check if this is a Vizier VOTable, if so, use webbpsf_ext
     if meta.sdir[-4:] == '.vot':
         # Pick an arbitrary bandpass+magnitude to normalise the initial SED. Exact choice
-        # doesn't matter as will be be refitting this model using the provided data. Important
-        # thing is the spectral type (user provided).
+        # doesn't matter as will be be refitting this model using the provided data. 
+        # Important thing is the spectral type (user provided).
         bp_k = webbpsf_ext.bp_2mass('k')
         bp_mag = 5
 
@@ -427,14 +455,12 @@ def get_stellar_magnitudes(meta):
     else:
         try:
             # Open file and grab wavelength and flux arrays
-            print("HERE")
             data = np.genfromtxt(meta.sdir).transpose()
             model_wave = data[0]
             model_flux = data[1]
 
             # Create a synphot spectrum
             SED = SourceSpectrum(Empirical1D, points=model_wave << u.Unit('micron'), lookup_table=model_flux << u.Unit('Jy'))
-            print("HERE2")
         except:
             raise ValueError("Unable to read in provided file. Ensure format is in two columns with wavelength (microns), flux (Jy)")
 
