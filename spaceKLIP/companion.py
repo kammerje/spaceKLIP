@@ -1,11 +1,9 @@
 from __future__ import division
-
-
 # =============================================================================
 # IMPORTS
 # =============================================================================
-
 import os, re, sys
+import json
 
 import astropy.io.fits as pyfits
 import matplotlib.pyplot as plt
@@ -292,5 +290,10 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                         print('   CON = %.2e+/-%.2e (%.2e inj.)' % (res[key][temp]['f'], res[key][temp]['df'], cinj))
                     except:
                         print('   CON = %.2e+/-%.2e' % (res[key][temp]['f'], res[key][temp]['df']))
-    
+
+        # Save the results
+        compfile = odir+key+'-comp_save.json'
+        with open(compfile, 'w') as sf:
+            json.dump(res, sf)
+
     return res

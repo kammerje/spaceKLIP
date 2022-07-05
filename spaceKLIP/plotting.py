@@ -1,5 +1,12 @@
+import glob, os
+
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gs
+
 import numpy as np
+from astropy.io import fits
+
+from itertools import chain
 
 def plot_contrast_images(meta, data, data_masked, pxsc=None, savefile='./maskimage.pdf'):
     """
@@ -238,3 +245,75 @@ def plot_chains(chain, savefile):
     plt.tight_layout()
     plt.savefig(savefile)
     plt.close()
+
+def plot_subimages(imgdirs, subdirs, filts, submodes):
+    '''
+    Create a "publication ready" plot of the coronagraphic images, alongside
+    the PSF subtracted images. 
+
+    Parameters
+    ----------
+
+    imgdirs : list of strings
+        Parent directories of the unsubtracted images, filters won't be repeated 
+    subdirs : list of strings
+        Parent directories of the subtracted images
+    filts : list of strings
+        List of filter strings to include in the plot
+    '''
+
+    # Get the files we care about
+    imgfiles = list(chain.from_iterable([glob.glob(imgdir+'*') for imgdir in imgdirs]))
+    subfiles = list(chain.from_iterable([glob.glob(subdir+'*') for subdir in subdirs]))
+    filts = [filt.upper() for filt in filts]
+
+    # Filter the imgfiles
+    used_filts = []
+    true_imgfiles = []
+    for imgfile in imgfiles:
+        hdr = fits.getheader(imgfile)
+        if hdr['SUBPXPTS'] != 1:
+            # This is a dithered reference observation, which we don't want.
+            continue
+        elif 'TACQ' in hdr['EXP_TYPE']:
+            # This is a target acquisition image
+            continue
+        elif hdr['FILTER'] not in filts:
+            # We don't want this filter
+            continue
+        elif hdr['FILTER'] in used_filts:
+            # We've already got a file for this filter
+            continue
+        else:
+            # We want this file
+            true_imgfiles.append(imgfile)
+            used_filts.append(hdr['FILTER'])
+
+    # Filter the subfiles
+    # Note that we allow repeat filters for different reductions.
+    true_subfiles = []
+    for subfile in subfiles:
+        if any(filt in subfile for filt in filts):
+            true_subfiles.append(subfile)
+
+    ydim = len(true_imgfiles)
+    xdim = int(len(true_subfiles) / ydim) + 1
+
+    # Start making the figure
+    fig = plt.figure(figsize=[xdim*5, ydim*5])
+    grid = gs.GridSpec(ydim, xdim, figure=fig)
+
+    for i, imgfile in enumerate(true_imgfiles):
+        hdr = fits.getheader(imgfile)
+        row = filts.index(hdr['FILTER'])
+
+        ax = plt.subplot(grid[row, 0])
+        with fits.open(imgfile) as hdul:
+            img = hdul['SCI'].data[-1]
+        ax.imshow(img)
+
+    for i, subfile in enumerate(true_subfiles):
+
+    plt.show()
+
+    return
