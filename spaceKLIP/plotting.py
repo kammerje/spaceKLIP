@@ -312,8 +312,8 @@ def plot_subimages(imgdirs, subdirs, filts, submodes):
             img = hdul['SCI'].data[-1]
         ax.imshow(img)
 
-    for i, subfile in enumerate(true_subfiles):
+    # for i, subfile in enumerate(true_subfiles):
 
-    plt.show()
+    # plt.show()
 
     return
