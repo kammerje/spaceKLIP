@@ -1,3 +1,5 @@
+__version__ = "0.0.1"
+
 from . import companion
 from . import contrast
 from . import engine

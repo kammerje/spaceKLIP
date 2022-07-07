@@ -1,0 +1,17 @@
+README.rst
+setup.py
+spaceKLIP/__init__.py
+spaceKLIP/companion.py
+spaceKLIP/contrast.py
+spaceKLIP/engine.py
+spaceKLIP/imgprocess.py
+spaceKLIP/io.py
+spaceKLIP/plotting.py
+spaceKLIP/rampfit.py
+spaceKLIP/subtraction.py
+spaceKLIP/utils.py
+spaceKLIP.egg-info/PKG-INFO
+spaceKLIP.egg-info/SOURCES.txt
+spaceKLIP.egg-info/dependency_links.txt
+spaceKLIP.egg-info/requires.txt
+spaceKLIP.egg-info/top_level.txt
