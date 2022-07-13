@@ -139,7 +139,7 @@ def nmf_subtraction(meta):
 
     # Create an output directory for each set of parameters
     today = date.today().strftime('%Y_%m_%d_')
-    odir = meta.odir+today+mode+'_basis{}_run'.format(chosen_basis)
+    odir = meta.odir+today+'NMF_basis{}_run'.format(chosen_basis)
 
     # Figure out how many runs of this type have already been
     # performed
@@ -169,15 +169,17 @@ def nmf_subtraction(meta):
         filepaths = np.array(meta.obs[key]['FITSFILE'][ww_sci], dtype=str).tolist()
         ww_cal = np.where(meta.obs[key]['TYP'] == 'CAL')[0]
         psflib_filepaths = np.array(meta.obs[key]['FITSFILE'][ww_cal], dtype=str).tolist()
+
+        #@Bin, Aarynn I think there are advantages to reading the files into the pyklip data structure
+            #For example we can leverage the pyklip alignment machinations. 
         dataset = JWST.JWSTData(filepaths=filepaths,
                                 psflib_filepaths=psflib_filepaths)
 
-        #TODO: The following line should be replaced with something appropriate. 
+        #TODO: The following line should be replaced with something for NMF 
         #TODO: We may want to break out the reference basis generation to a separate function. 
         #      We want to do it in a way where it can check if the references have already been generated 
         #       and doesn't do it again if they have. 
         #TODO: We also want to include in the calibration file a path to a potentital data (and reference?) mask file for data imputation. 
-
         parallelized.klip_dataset(dataset=dataset,
                                     mode=mode,
                                     outputdir=odir,
@@ -194,15 +196,80 @@ def nmf_subtraction(meta):
 
     # Save a meta file under each directory
     smeta = copy.deepcopy(meta)
-    smeta.used_mode = mode
-    smeta.used_annuli = annuli
-    smeta.used_subsections = subsections
+    smeta.used_mode = "NMF"
 
     io.meta_to_json(smeta, savefile=odir+'MetaSave.json')
 
-    # Increment counter
-    counter += 1
-    
     return
 
+def classical_rdi(meta):
+    """
+    Do a classical RDI reduction
 
+    Parameters
+    ----------
+    meta : class
+        Meta class containing data and configuration information from
+        engine.py.
+    """
+
+    if meta.verbose:
+        print('--> Running Classical RDI...')
+
+    # Read in the filelist
+    files = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS', search=meta.sub_ext)
+
+    # Run some preparation steps on the meta object
+    meta = utils.prepare_meta(meta, files)
+
+    # create an array to save the run directories to
+    meta.rundirs = [] 
+
+    # Update terminal if requested
+    if meta.verbose:
+        print('--> Mode = Running Classical RDI')
+
+    # Create an output directory for each set of parameters
+    today = date.today().strftime('%Y_%m_%d_')
+    odir = meta.odir+today+'Classical_RDI_run'
+
+    # Figure out how many runs of this type have already been
+    # performed
+    existing_runs = glob.glob(odir+'*'.format(today))
+
+    # Assign run number based on existing runs
+    odir += str(len(existing_runs)+1)+'/'
+
+    # Save the odir to the meta object for later analyses
+    meta.rundirs.append(odir)
+
+    # Now provide and create actual directory to save to
+    odir += 'SUBTRACTED/'
+    if not os.path.exists(odir):
+        os.makedirs(odir)
+
+    # Loop through all sets of observing parameters.
+    for i, key in enumerate(meta.obs.keys()):
+
+        
+        if meta.overwrite == False and os.path.exists(odir+'-RDI.fits'):
+            continue
+        ww_sci = np.where(meta.obs[key]['TYP'] == 'SCI')[0]
+        filepaths = np.array(meta.obs[key]['FITSFILE'][ww_sci], dtype=str).tolist()
+        ww_cal = np.where(meta.obs[key]['TYP'] == 'CAL')[0]
+        psflib_filepaths = np.array(meta.obs[key]['FITSFILE'][ww_cal], dtype=str).tolist()
+        dataset = JWST.JWSTData(filepaths=filepaths,
+                                psflib_filepaths=psflib_filepaths)
+
+        #TODO: Introduce some way for the user to input their preferred PSF or by default 
+
+        #TODO: Add code to do classical RDI. 
+        
+
+    # Save a meta file under each directory
+    smeta = copy.deepcopy(meta)
+    smeta.used_mode = "RDI"
+
+    io.meta_to_json(smeta, savefile=odir+'MetaSave.json')
+    
+    return
