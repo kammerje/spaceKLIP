@@ -12,6 +12,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from functools import partial
+from scipy.integrate import simpson
+from scipy.interpolate import interp1d
 from scipy.ndimage import shift
 
 import pyklip.instruments.JWST as JWST
@@ -21,6 +23,7 @@ import pyklip.fitpsf as fitpsf
 
 import webbpsf
 webbpsf.setup_logging(level='ERROR')
+import webbpsf_ext
 
 from . import utils
 from . import io 
@@ -102,6 +105,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
             pxsc = meta.pixscale[key] # mas
             pxar = meta.pixar_sr[key] # sr
             wave = meta.wave[filt] # m
+            weff = meta.weff[filt] # m
             fwhm = wave/meta.diam*utils.rad2mas/pxsc # pix
             hdul.close()
             
@@ -115,8 +119,23 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
             
             # Get an offset PSF that is normalized to the total intensity of
             # the host star.
-            offsetpsf = utils.get_offsetpsf(meta, key, recenter_offsetpsf=recenter_offsetpsf, derotate=False)
-            offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
+            try:
+                offsetpsf = pyfits.getdata(meta.TA_file, 'SCI')
+                offsetpsf -= np.nanmedian(offsetpsf)
+                shift = utils.recenter(offsetpsf)
+                offsetpsf = utils.fourier_imshift(offsetpsf, shift)
+                if ('ND' in pyfits.getheader(meta.TA_file, 0)['SUBARRAY']):
+                    wd, od = webbpsf_ext.bandpasses.nircam_com_nd()
+                    od_interp = interp1d(wd*1e-6, od)
+                    nodes = np.linspace(wave-weff/2., wave+weff/2., 1000)
+                    odens = simpson(10**od_interp(nodes), nodes)/weff
+                    offsetpsf *= odens
+                TA_filt = pyfits.getheader(meta.TA_file, 0)['FILTER']
+                if (TA_filt != filt):
+                    offsetpsf *= 10**(-(meta.mstar[filt]-meta.mstar[TA_filt])/2.5)
+            except:
+                offsetpsf = utils.get_offsetpsf(meta, key, recenter_offsetpsf=recenter_offsetpsf, derotate=False)
+                offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
             
             # Loop through all companions.
             res[key] = {}

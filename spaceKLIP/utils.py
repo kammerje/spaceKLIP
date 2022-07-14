@@ -383,8 +383,10 @@ def field_dependent_correction(stamp,
     xy = np.vstack((stamp_dy.flatten(), stamp_dx.flatten())).T
     transmission = meta.transmission(xy)
     transmission = transmission.reshape(stamp.shape)
+    xh = transmission.shape[1]//2
+    yh = transmission.shape[0]//2
     
-    return transmission*stamp
+    return transmission[yh, xh]*stamp
 
 def get_stellar_magnitudes(meta):
     # First find out if a file was provided correctly
@@ -441,6 +443,8 @@ def get_stellar_magnitudes(meta):
     ### Now, perform synthetic observations on the SED to get stellar magnitudes
     # Get the filters used from the input datasets
     filters = [i.split('_')[2] for i in list(meta.obs.keys())]
+    if ('F335M' not in filters):
+        filters += ['F335M'] # make sure that TA filter is present
     
     # Calculate magnitude in each filter
     mstar = {}

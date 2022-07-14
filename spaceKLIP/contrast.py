@@ -13,12 +13,16 @@ import numpy as np
 
 from astropy.table import Table
 from functools import partial
+from scipy.integrate import simpson
+from scipy.interpolate import interp1d
+from scipy.ndimage import median_filter
 from scipy.optimize import least_squares
 
 import pyklip.klip as klip
 import pyklip.instruments.JWST as JWST
 import pyklip.fakes as fakes
 import pyklip.parallelized as parallelized
+import webbpsf_ext
 
 from . import io
 from . import utils
@@ -84,6 +88,7 @@ def raw_contrast_curve(meta):
             pxsc = meta.pixscale[key] # mas
             pxar = meta.pixar_sr[key] # sr
             wave = meta.wave[filt] # m
+            weff = meta.weff[filt] # m
             fwhm = wave/meta.diam*utils.rad2mas/pxsc # pix
             head = hdul[0].header
             hdul.close()
@@ -101,15 +106,36 @@ def raw_contrast_curve(meta):
             # Convert the units and compute the contrast. Use the peak pixel
             # count of the recentered offset PSF (discussed with Jason Wang on
             # 12 May 2022).
-            offsetpsf = utils.get_offsetpsf(meta, key, recenter_offsetpsf=True, derotate=True)
-            Fstar = meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6*np.max(offsetpsf) # MJy; convert the host star brightness from vegamag to MJy
-            Fdata = data_masked*pxar # MJy; convert the data from MJy/sr to MJy
             seps = [] # arcsec
             cons = []
-            for j in range(Fdata.shape[0]):
-                sep, con = klip.meas_contrast(dat=Fdata[j]/Fstar, iwa=meta.iwa, owa=meta.owa, resolution=2.*fwhm, center=cent, low_pass_filter=False)
-                seps += [sep*pxsc/1000.] # arcsec
-                cons += [con]
+            try:
+                offsetpsf = pyfits.getdata(meta.TA_file, 'SCI')
+                offsetpsf -= np.nanmedian(offsetpsf)
+                shift = utils.recenter(offsetpsf)
+                offsetpsf = utils.fourier_imshift(offsetpsf, shift)
+                if ('ND' in pyfits.getheader(meta.TA_file, 0)['SUBARRAY']):
+                    wd, od = webbpsf_ext.bandpasses.nircam_com_nd()
+                    od_interp = interp1d(wd*1e-6, od)
+                    nodes = np.linspace(wave-weff/2., wave+weff/2., 1000)
+                    odens = simpson(10**od_interp(nodes), nodes)/weff
+                    peak = np.max(offsetpsf)*odens
+                else:
+                    peak = np.max(offsetpsf)
+                TA_filt = pyfits.getheader(meta.TA_file, 0)['FILTER']
+                if (TA_filt != filt):
+                    peak *= 10**(-(meta.mstar[filt]-meta.mstar[TA_filt])/2.5)
+                for j in range(data_masked.shape[0]):
+                    sep, con = klip.meas_contrast(dat=data_masked[j]/peak, iwa=meta.iwa, owa=meta.owa, resolution=2.*fwhm, center=cent, low_pass_filter=False)
+                    seps += [sep*pxsc/1000.] # arcsec
+                    cons += [con]
+            except:
+                offsetpsf = utils.get_offsetpsf(meta, key, recenter_offsetpsf=True, derotate=True)
+                Fstar = meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6*np.max(offsetpsf) # MJy; convert the host star brightness from vegamag to MJy
+                Fdata = data_masked*pxar # MJy; convert the data from MJy/sr to MJy
+                for j in range(Fdata.shape[0]):
+                    sep, con = klip.meas_contrast(dat=Fdata[j]/Fstar, iwa=meta.iwa, owa=meta.owa, resolution=2.*fwhm, center=cent, low_pass_filter=False)
+                    seps += [sep*pxsc/1000.] # arcsec
+                    cons += [con]
             seps = np.array(seps) # arcsec
             cons = np.array(cons)
             np.save(odir+key+'-seps.npy', seps) # arcsec
@@ -118,7 +144,8 @@ def raw_contrast_curve(meta):
             if (meta.plotting == True):
                 savefile = odir+key+'-cons_raw.pdf'
                 labels = []
-                for j in range(Fdata.shape[0]):
+                # for j in range(Fdata.shape[0]):
+                for j in range(data_masked.shape[0]):
                     labels.append(str(head['KLMODE{}'.format(j)])+' KL')
                 plotting.plot_contrast_raw(meta, seps, cons, labels=labels, savefile=savefile)
     
@@ -355,9 +382,14 @@ def mask_companions(data, pxsc, cent, mrad, ra_off=[], de_off=[]):
     # Mask out known companions.
     data_masked = data.copy()
     yy, xx = np.indices(data.shape[1:]) # pix
+    i = 0
     for ra, de in zip(ra_off, de_off):
         dist = np.sqrt((xx-cent[0]+ra/pxsc)**2+(yy-cent[1]-de/pxsc)**2) # pix
-        data_masked[:, dist <= mrad] = np.nan
+        if (i == 0):
+            data_masked[:, dist <= mrad/2.] = np.nan
+        else:
+            data_masked[:, dist <= mrad] = np.nan
+        i += 1
     
     return data_masked
 

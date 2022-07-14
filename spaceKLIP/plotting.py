@@ -75,7 +75,7 @@ def plot_contrast_raw(meta, seps, cons, labels='default', savefile='./rawcontras
     ax.grid(axis='y')
     ax.set_xlabel('Separation [arcsec]')
     ax.set_ylabel('Contrast [5$\sigma$]')
-    ax.set_title('Raw contrast curve')
+    ax.set_title('Contrast curve')
     ax.legend(loc='upper right')
     plt.tight_layout()
 

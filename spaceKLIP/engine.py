@@ -144,18 +144,21 @@ class JWST(Pipeline):
         # into the same dictionary. This works as long as the NIRCam and the
         # MIRI filter names are distinct.
         self.meta.wave = {}
+        self.meta.weff = {}
         self.meta.F0 = {}
         filter_list = SvoFps.get_filter_list(facility='JWST', instrument='NIRCAM')
         for i in range(len(filter_list)):
             name = filter_list['filterID'][i]
             name = name[name.rfind('.')+1:]
             self.meta.wave[name] = filter_list['WavelengthMean'][i]/1e4*1e-6 # m
+            self.meta.weff[name] = filter_list['WidthEff'][i]/1e4*1e-6 # m
             self.meta.F0[name] = filter_list['ZeroPoint'][i] # Jy
         filter_list = SvoFps.get_filter_list(facility='JWST', instrument='MIRI')
         for i in range(len(filter_list)):
             name = filter_list['filterID'][i]
             name = name[name.rfind('.')+1:]
             self.meta.wave[name] = filter_list['WavelengthMean'][i]/1e4*1e-6 # m
+            self.meta.weff[name] = filter_list['WidthEff'][i]/1e4*1e-6 # m
             self.meta.F0[name] = filter_list['ZeroPoint'][i] # Jy
         del filter_list
         

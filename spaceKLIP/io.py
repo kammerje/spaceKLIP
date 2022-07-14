@@ -214,7 +214,6 @@ def extract_obs(meta, fitsfiles_all):
                 PIXSCALE[i] = nrc._pixelscale_long*1e3 # mas
             else:
                 PIXSCALE[i] = nrc._pixelscale_short*1e3 # mas
-
         elif (INSTRUME[i] == 'MIRI'):
             PIXSCALE[i] = mir.pixelscale*1e3 # mas
         else:
@@ -262,11 +261,23 @@ def extract_obs(meta, fitsfiles_all):
         # science PSFs and dithering for the reference PSFs.
         dpts = SUBPXPTS[ww]
         dpts_unique = np.unique(dpts)
-        if ((len(dpts_unique) == 2) and (dpts_unique[0] == 1)):
-            ww_sci = np.where(dpts == dpts_unique[0])[0]
-            ww_cal = np.where(dpts == dpts_unique[1])[0]
-        else:
-            raise UserWarning('Science and reference PSFs are identified based on their number of dither positions, assuming that there is no dithering for the science PSFs and dithering for the reference PSFs')
+        try:
+            ww_sci = []
+            for j in range(len(meta.sci)):
+                ww_sci += [np.where(fitsfiles == meta.idir+meta.sci[j])[0][0]]
+            ww_sci = np.array(ww_sci)
+            ww_cal = []
+            for j in range(len(meta.cal)):
+                ww_cal += [np.where(fitsfiles == meta.idir+meta.cal[j])[0][0]]
+            ww_cal = np.array(ww_cal)
+            if ((len(ww_sci) == 0) or (len(ww_cal) == 0)):
+                raise UserWarning('No science or calibrator data found')
+        except:
+            if ((len(dpts_unique) == 2) and (dpts_unique[0] == 1)):
+                ww_sci = np.where(dpts == dpts_unique[0])[0]
+                ww_cal = np.where(dpts == dpts_unique[1])[0]
+            else:
+                raise UserWarning('Science and reference PSFs are identified based on their number of dither positions, assuming that there is no dithering for the science PSFs and dithering for the reference PSFs')
         
         # These metadata are the same for all observations within one
         # concatenation.
@@ -293,8 +304,14 @@ def extract_obs(meta, fitsfiles_all):
         meta.obs[HASH_unique[i]] = tab.copy()
         del tab
     
+    temp = meta.obs.copy()
+    meta.obs = {}
+    for i, key in enumerate(temp.keys()):
+        if (i in [0]):
+            meta.obs[key] = temp[key].copy()
+    
     if (meta.verbose == True):
-        print('--> Identified %.0f concatenations' % len(meta.obs))
+        print('--> Identified %.0f concatenation(s)' % len(meta.obs))
         for i, key in enumerate(meta.obs.keys()):
             print('--> Concatenation %.0f: ' % (i+1)+key)
             print_tab = copy.deepcopy(meta.obs[key])
@@ -335,6 +352,6 @@ def get_working_files(meta, runcheck, subdir='RAMPFIT', search='uncal.fits'):
             raise ValueError('Unable to find any {} files in specified input or output directories.'.format(search))
 
     if meta.verbose:
-        print('--> Found {} files under: {}'.format(len(files), rdir))
+        print('--> Found {} file(s) under: {}'.format(len(files), rdir))
 
     return files
