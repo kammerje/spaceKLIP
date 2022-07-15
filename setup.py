@@ -1,7 +1,12 @@
 #!/usr/bin/env python
 
 from setuptools import setup, find_packages
+import os
 import re
+
+def resource(*args):
+    return os.path.join(os.path.abspath(os.path.join(__file__, os.pardir)),
+                        *args)
 
 with open('requirements.txt') as f:
     REQUIRES = f.read().splitlines()
