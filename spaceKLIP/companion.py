@@ -55,7 +55,11 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
     
     # If necessary, extract the metadata of the observations.
     if (not meta.done_subtraction):
-        basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS', search=meta.sub_ext)
+        if meta.usebgsub_companion:
+            subdir = 'IMGPROCESS+BGSUB'
+        else:
+            subdir = 'IMGPROCESS'
+        basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir=subdir, search=meta.sub_ext)
         meta = utils.prepare_meta(meta, basefiles)
         meta.done_subtraction = True # set the subtraction flag for the subsequent pipeline stages
     
@@ -121,8 +125,14 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
             
             # Create a new pyKLIP dataset for forward modeling the companion
             # PSFs.
+            if meta.repeatcentering_companion == False:
+                centering_alg = 'savefile'
+                print('Loading shifts from saved file...')
+            else:
+                centering_alg = meta.repeatcentering_companion
             dataset = JWST.JWSTData(filepaths=filepaths,
-                                    psflib_filepaths=psflib_filepaths, centering=meta.centering_alg)
+                                    psflib_filepaths=psflib_filepaths, centering=centering_alg, badpix_threshold=meta.badpix_threshold,
+                                    scishiftfile=meta.ancildir+'scishifts', refshiftfile=meta.ancildir+'refshifts')
             
             # Get the coronagraphic mask transmission map.
             utils.get_transmission(meta, key, odir, derotate=False)
@@ -131,11 +141,13 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
             # the host star.
             offsetpsf = utils.get_offsetpsf(meta, key, recenter_offsetpsf=recenter_offsetpsf, derotate=False)
             offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
-            
+
+            # plt.imshow(offsetpsf)
+            # plt.show()
+
             # Loop through all companions.
             res[key] = {}
             for j in range(len(meta.ra_off)):
-                
                 # Guesses for the fit parameters.
                 guess_dx = meta.ra_off[j]/pxsc # pix
                 guess_dy = meta.de_off[j]/pxsc # pix
@@ -226,7 +238,9 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                     plotting.plot_fm_psf(meta, fm_frame, data_frame, guess_flux, pxsc=pxsc, j=j, savefile=savefile)
                 
                 # Fit the forward-modeled PSF to the KLIP-subtracted data.
-                fitboxsize = 17 # pix
+                fitboxsize = 25 # pix
+                dr = 5
+                exc_rad = 3
                 fma = fitpsf.FMAstrometry(guess_sep=guess_sep,
                                           guess_pa=guess_pa,
                                           fitboxsize=fitboxsize)
@@ -235,8 +249,8 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                                       padding=5)
                 fma.generate_data_stamp(data=data_frame,
                                         data_center=[data_centx, data_centy],
-                                        dr=4,
-                                        exclusion_radius=12.*fwhm)
+                                        dr=dr,
+                                        exclusion_radius=exc_rad*fwhm)
                 corr_len_guess = 3. # pix
                 corr_len_label = r'$l$'
                 fma.set_kernel('matern32', [corr_len_guess], [corr_len_label])

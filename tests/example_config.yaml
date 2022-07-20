@@ -10,13 +10,15 @@
 
 ##### REQUIRED #####
 # Input Directory 
-idir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/HIFI_SIMS/NIRCam/20220407/pynrc_data/'
-odir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/20220628/' # Output Directory
-sdir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/HIP65426.vot' #VOT table or stellar model file.
+idir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F15500C/SCI+REF/'
+odir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/20220718_F1550/' # Output Directory
+sdir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/hip65426.vot' #VOT table or stellar model file.
 
 ##### OPTIONAL #####
-rundirs: []  #Specify directory(ies) within odir of existing runs to calculate contrast curve / companion
+rundirs: ['2022_07_19_RDI_annu1_subs1_run2']  #Specify directory(ies) within odir of existing runs to calculate contrast curve / companion
 ancildir: None      # Specify directory to save ancillary files, if None then saved under odir/ANCILLARY/. 
+bg_sci_dir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1550C/BGSCI/' #None if not using
+bg_ref_dir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1550C/BGREF/' #None if not using
 
 ############################
 ##### General Settings #####
@@ -26,32 +28,40 @@ plotting: True    # Produce matplotlib plots
 use_psfmask: True # if true use PSF masks from CRDS, if false use transmission functions
 fiducial_point_override: True # if true uses narrow end of the bar masks, if false use filter dependent position
 overwrite: True   # Will overwrite existing files in a given directory
+badpix_threshold: 1
 
 ########################################
 ##### Star / Companion information #####
 ########################################
 spt: 'A2V' # Spectral type of target, only necessary for VOTable. Keep it simple.
-ra_off: [418.] # mas; RA offset of the known companions
-de_off: [-698.] # mas; DEC offset of the known companions 
+ra_off: [450] #, 2200] # mas; RA offset of the known companions
+de_off: [-680] #, -4200] # mas; DEC offset of the known companions 
 
 #################################
 ##### Ramp Fitting Settings #####
 #################################
+rampfit_idir:  True   #Toggle if you just want to rampfit the backgrounds
+rampfit_bgdirs: True
 ramp_ext: 'uncal.fits'
 skip_jump: False     #Whether to skip the jump detection step of the pipeline
 jump_threshold: 20   #Adjust the jump detection threshold if not skipped2022_06_27_RDI_annu1_subs1_run2'
+ramp_fit_max_cores: 'all' #Options are 'none', 'quarter', 'half', 'all'
 
 #####################################
 ##### Image Processing Settings #####
 #####################################
+imgproc_idir: True  #Toggle if you just want to imgproc the backgrounds
+imgproc_bgdirs: True
 imgproc_ext: 'rateints.fits'
 
 ####################################
 ##### PSF Subtraction Settings #####
 ####################################
 sub_ext: 'calints.fits'
-centering_alg: "jwstpipe"    # Algorithm to use for centering "basic", "jwstpipe", or "imageregis" 
-mode: ['RDI']       # list of modes for pyKLIP, will loop through all
+bgtrim: 'first'   # Trim the first integration in the background, science, and reference (bgsub != 'saved' or 'None')
+bgsub: 'default'    #Perform background subtraction, 'default' to match sci with bg_sci, ref with bg_ref, 'saved' to load saved
+centering_alg: 'jwstpipe'    # Algorithm to use for centering "basic", "jwstpipe", "imageregis", or 'savefile'
+mode: ['ADI+RDI']       # list of modes for pyKLIP, will loop through all
 annuli: [1]         # list of number of annuli for pyKLIP, will loop through all
 subsections: [1]    # list of number of annuli for pyKLIP, will loop through all
 numbasis: [1, 2, 5, 10, 20, 50, 100] # list of number of basis vectors for pyKLIP, will loop through all
@@ -59,7 +69,10 @@ numbasis: [1, 2, 5, 10, 20, 50, 100] # list of number of basis vectors for pyKLI
 ###################################
 ##### Contrast Curve Settings #####
 ###################################
-KL: 10 # Number of KL components for which the calibrated contrast curve and the companion properties shall be computed (must be in subtracted numbasis)
+usebgsub_contrast: True
+fwhm_scale: 1.5
+repeatcentering_contrast: False
+KL: 50 # Number of KL components for which the calibrated contrast curve and the companion properties shall be computed (must be in subtracted numbasis)
 
 seps_inject_rnd: [5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 25., 30.0, 35.0, 40.0] # pix; list of separations at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
 pas_inject_rnd: [0., 45., 90., 135., 180., 225., 270., 315.] # deg; list of position angles at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
@@ -74,10 +87,12 @@ pas_inject_fqpm: [45., 135., 225., 315.]
 #######################################################
 ##### Companion Photometry / Astrometry Settings ######
 #######################################################
+usebgsub_companion: True 
+repeatcentering_companion: False
 nwalkers:  100
 nburn: 100
 nsteps: 200
-numthreads: 2
+numthreads: 6
 
 
 

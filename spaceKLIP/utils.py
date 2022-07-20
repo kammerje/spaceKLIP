@@ -545,8 +545,20 @@ def get_psfmasknames(meta):
     # Get the correct PSF mask for each concatenation.
     meta.psfmask = {}
     for key in meta.obs.keys():
-        model = datamodels.open(meta.obs[key]['FITSFILE'][0])
-        meta.psfmask[key] = step.get_reference_file(model, 'psfmask')
+        if '1065' in key:
+            # TODO
+            raise ValueError('Get a 1065 mask!')
+        elif '1140' in key:
+            trstring = '/../resources/miri_transmissions/jwst_miri_psfmask_0010_extract.fits'
+            trfile = os.path.join(os.path.dirname(__file__) + trstring)
+            meta.psfmask[key] = trfile
+        elif '1550' in key:
+            trstring = '/../resources/miri_transmissions/jwst_miri_psfmask_1550_jasonrotate.fits'
+            trfile = os.path.join(os.path.dirname(__file__) + trstring)
+            meta.psfmask[key] = trfile
+        else:
+            model = datamodels.open(meta.obs[key]['FITSFILE'][0])
+            meta.psfmask[key] = step.get_reference_file(model, 'psfmask')
     del step
     
     return meta
