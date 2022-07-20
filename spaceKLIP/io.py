@@ -205,6 +205,10 @@ def extract_obs(meta, fitsfiles_all):
                 SUBPXPTS[i] = head['NUMDTHPT']
             except:
                 SUBPXPTS[i] = 1
+            try:
+                SUBPXPTS[i] = head['NUMDTHPT']
+            except:
+                SUBPXPTS[i] = 1
         try:
             APERNAME[i] = head['APERNAME']
         except:
@@ -253,6 +257,8 @@ def extract_obs(meta, fitsfiles_all):
     meta.pixscale = {}
     meta.pixar_sr = {}
     meta.obs = {}
+
+    print(SUBPXPTS)
     for i in range(NHASH_unique):
         ww = HASH == HASH_unique[i]
 
@@ -261,8 +267,7 @@ def extract_obs(meta, fitsfiles_all):
         # science PSFs and dithering for the reference PSFs.
         dpts = SUBPXPTS[ww]
         dpts_unique = np.unique(dpts)
-        print(dpts)
-        print(dpts_unique)
+
         if ((len(dpts_unique) == 2) and (dpts_unique[0] == 1)):
             ww_sci = np.where(dpts == dpts_unique[0])[0]
             ww_cal = np.where(dpts == dpts_unique[1])[0]
@@ -328,7 +333,7 @@ def extract_obs(meta, fitsfiles_all):
 
     return meta
 
-def get_working_files(meta, runcheck, subdir='RAMPFIT', search='uncal.fits'):
+def get_working_files(meta, runcheck, subdir='RAMPFIT', search='uncal.fits', itype='default'):
 
     # Add wild card to the start of the search string
     search = '*' + search
@@ -338,8 +343,13 @@ def get_working_files(meta, runcheck, subdir='RAMPFIT', search='uncal.fits'):
         #Use an output directory that was just created
         rdir = meta.odir + subdir + '/'
     else:
-        #Use the specified input directory
-        rdir = meta.idir
+        if itype == 'default':
+            #Use the specified input directory
+            rdir = meta.idir
+        elif itype == 'bgsci':
+            rdir = meta.bg_sci_dir
+        elif itype == 'bgref':
+            rdir = meta.bg_ref_dir
 
     # Grab the files
     files = glob.glob(rdir + search)

@@ -1,11 +1,9 @@
 from __future__ import division
-
-
 # =============================================================================
 # IMPORTS
 # =============================================================================
-
 import os, re, sys
+import json
 
 import astropy.io.fits as pyfits
 import matplotlib.pyplot as plt
@@ -60,7 +58,11 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
 
     # If necessary, extract the metadata of the observations.
     if (not meta.done_subtraction):
-        basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS', search=meta.sub_ext)
+        if meta.usebgsub_companion:
+            subdir = 'IMGPROCESS+BGSUB'
+        else:
+            subdir = 'IMGPROCESS'
+        basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir=subdir, search=meta.sub_ext)
         meta = utils.prepare_meta(meta, basefiles)
         meta.done_subtraction = True # set the subtraction flag for the subsequent pipeline stages
 
@@ -95,7 +97,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
         # Loop through all concatenations.
         res = {}
         for i, key in enumerate(meta.obs.keys()):
-            meta.truenumbasis[key] = [num for num in meta.numbasis if (num <= meta.maxnumbasis[key])]
+
             ww_sci = np.where(meta.obs[key]['TYP'] == 'SCI')[0]
             filepaths = np.array(meta.obs[key]['FITSFILE'][ww_sci], dtype=str).tolist()
             ww_cal = np.where(meta.obs[key]['TYP'] == 'CAL')[0]
@@ -107,12 +109,34 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
             wave = meta.wave[filt] # m
             weff = meta.weff[filt] # m
             fwhm = wave/meta.diam*utils.rad2mas/pxsc # pix
+
+            all_numbasis = []
+            # Loop over up to 100 different KL mode inputs
+            for i in range(100):
+                try:
+                    # Get value from header
+                    all_numbasis.append(hdul[0].header['KLMODE{}'.format(i)])
+                except:
+                    # No more KL modes
+                    continue
+            # Get the index of the KL component we are interested in
+            try:
+                KLindex = all_numbasis.index(meta.KL)
+            except:
+                raise ValueError('KL={} not found. Calculated options are: {}, and maximum possible for this data is {}'.format(meta.KL, all_numbasis, meta.maxnumbasis[key]))
+            meta.truenumbasis[key] = [num for num in all_numbasis if (num <= meta.maxnumbasis[key])]
             hdul.close()
 
             # Create a new pyKLIP dataset for forward modeling the companion
             # PSFs.
+            if meta.repeatcentering_companion == False:
+                centering_alg = 'savefile'
+                print('Loading shifts from saved file...')
+            else:
+                centering_alg = meta.repeatcentering_companion
             dataset = JWST.JWSTData(filepaths=filepaths,
-                                    psflib_filepaths=psflib_filepaths)
+                                    psflib_filepaths=psflib_filepaths, centering=centering_alg, badpix_threshold=meta.badpix_threshold,
+                                    scishiftfile=meta.ancildir+'scishifts', refshiftfile=meta.ancildir+'refshifts')
 
             # Get the coronagraphic mask transmission map.
             utils.get_transmission(meta, key, odir, derotate=False)
@@ -191,11 +215,11 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                 # Open the forward-modeled dataset.
                 from pyklip.klip import nan_gaussian_filter
                 with pyfits.open(fmdataset) as hdul:
-                    fm_frame = hdul[0].data[meta.KL]
+                    fm_frame = hdul[0].data[KLindex]
                     fm_centx = hdul[0].header['PSFCENTX']
                     fm_centy = hdul[0].header['PSFCENTY']
                 with pyfits.open(klipdataset) as hdul:
-                    data_frame = hdul[0].data[meta.KL]
+                    data_frame = hdul[0].data[KLindex]
                     data_centx = hdul[0].header["PSFCENTX"]
                     data_centy = hdul[0].header["PSFCENTY"]
 
@@ -232,8 +256,9 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                     plotting.plot_fm_psf(meta, fm_frame, data_frame, guess_flux, pxsc=pxsc, j=j, savefile=savefile)
 
                 # Fit the forward-modeled PSF to the KLIP-subtracted data.
-                fitboxsize = 30 # pix
-                print('FWHM is ',fwhm)
+                fitboxsize = 25 # pix
+                dr = 5
+                exc_rad = 3
                 fma = fitpsf.FMAstrometry(guess_sep=guess_sep,
                                           guess_pa=guess_pa,
                                           fitboxsize=fitboxsize)
@@ -242,8 +267,8 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                                       padding=5)
                 fma.generate_data_stamp(data=data_frame,
                                         data_center=[data_centx, data_centy],
-                                        dr=4,
-                                        exclusion_radius=4.*fwhm)
+                                        dr=dr,
+                                        exclusion_radius=exc_rad*fwhm)
                 corr_len_guess = 3. # pix
                 corr_len_label = r'$l$'
                 fma.set_kernel('matern32', [corr_len_guess], [corr_len_label])
@@ -297,5 +322,10 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                         print('   CON = %.2e+/-%.2e (%.2e inj.)' % (res[key][temp]['f'], res[key][temp]['df'], cinj))
                     except:
                         print('   CON = %.2e+/-%.2e' % (res[key][temp]['f'], res[key][temp]['df']))
+
+        # Save the results
+        compfile = odir+key+'-comp_save.json'
+        with open(compfile, 'w') as sf:
+            json.dump(res, sf)
 
     return res
