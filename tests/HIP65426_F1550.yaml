@@ -10,12 +10,12 @@
 
 ##### REQUIRED #####
 # Input Directory
-idir: '/Users/wbalmer/JWST-HCI/ERS_DISK/JWST/NIRCAM/'
-odir: '/Users/wbalmer/JWST-HCI/ERS_DISK/JWST/NIRCAM/' # Output Directory
+idir: '/Users/wbalmer/JWST-HCI/HIP65426_F1550_NOBG/JWST/'
+odir: '/Users/wbalmer/JWST-HCI/HIP65426_F1550_NOBG/JWST/output/' # Output Directory
 sdir: '/Users/wbalmer/JWST-HCI/jwst_s1s2_data/vizier_votable.vot' #VOT table or stellar model file.
 
 ##### OPTIONAL #####
-rundirs: None #'2022_06_06_RDI_annu1_subs1_run1'] #Specify directory(ies) within odir of existing runs to calculate contrast cuvre / companion
+rundirs: ['2022_07_18_RDI+ADI_annu4_subs1_run1'] #'2022_06_06_RDI_annu1_subs1_run1'] #Specify directory(ies) within odir of existing runs to calculate contrast cuvre / companion
 ancildir: None      # Specify directory to save ancillary files, if None then saved under odir/ANCILLARY/.
 
 ############################
@@ -50,8 +50,8 @@ imgproc_ext: 'rateints.fits'
 ##### PSF Subtraction Settings #####
 ####################################
 sub_ext: 'calints.fits'
-mode: ['RDI']       # list of modes for pyKLIP, will loop through all
-annuli: [1]         # list of number of annuli for pyKLIP, will loop through all
+mode: ['RDI+ADI']       # list of modes for pyKLIP, will loop through all
+annuli: [4]         # list of number of annuli for pyKLIP, will loop through all
 subsections: [1]    # list of number of annuli for pyKLIP, will loop through all
 numbasis: [1, 2, 5, 10, 20, 50, 100] # list of number of basis vectors for pyKLIP, will loop through all
 
@@ -72,6 +72,6 @@ pas_inject_bar: [45., 135., 225., 315.] # deg; list of position angles at which 
 ##### Companion Photometry / Astrometry Settings ######
 #######################################################
 nwalkers:  100
-nburn: 100
-nsteps: 200
-numthreads: 2
+nburn: 500
+nsteps: 500
+numthreads: 4

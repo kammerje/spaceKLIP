@@ -10,12 +10,12 @@
 
 ##### REQUIRED #####
 # Input Directory
-idir: '/Users/wbalmer/JWST-HCI/ERS_DISK/JWST/NIRCAM/'
-odir: '/Users/wbalmer/JWST-HCI/ERS_DISK/JWST/NIRCAM/' # Output Directory
-sdir: '/Users/wbalmer/JWST-HCI/jwst_s1s2_data/vizier_votable.vot' #VOT table or stellar model file.
+idir: '/Users/wbalmer/JWST-HCI/HD114174/ROUND/JWST/'
+odir: '/Users/wbalmer/JWST-HCI/HD114174/ROUND/output/' # Output Directory
+sdir: '/Users/wbalmer/JWST-HCI/HD114174/vizier_votable.vot' #VOT table or stellar model file.
 
 ##### OPTIONAL #####
-rundirs: None #'2022_06_06_RDI_annu1_subs1_run1'] #Specify directory(ies) within odir of existing runs to calculate contrast cuvre / companion
+rundirs: ['2022_07_15_RDI_annu1_subs1_run1'] #'2022_06_06_RDI_annu1_subs1_run1'] #Specify directory(ies) within odir of existing runs to calculate contrast cuvre / companion
 ancildir: None      # Specify directory to save ancillary files, if None then saved under odir/ANCILLARY/.
 
 ############################
@@ -30,9 +30,9 @@ overwrite: True   # Will overwrite existing files in a given directory
 ########################################
 ##### Star / Companion information #####
 ########################################
-spt: 'A2V' # Spectral type of target, only necessary for VOTable. Keep it simple.
-ra_off: [418.] # mas; RA offset of the known companions
-de_off: [-698.] # mas; DEC offset of the known companions
+spt: 'G5V' # Spectral type of target, only necessary for VOTable. Keep it simple.
+ra_off: [19] # mas; RA offset of the known companions
+de_off: [-479] # mas; DEC offset of the known companions
 
 #################################
 ##### Ramp Fitting Settings #####

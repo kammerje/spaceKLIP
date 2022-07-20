@@ -30,7 +30,7 @@ def read_config(file):
 
     Parameters
     ----------
-    file : str  
+    file : str
         File path of .yaml configuration file.
 
     Returns
@@ -117,32 +117,32 @@ def extract_obs(meta, fitsfiles_all):
     spaceKLIP. Science and reference PSFs are identified based on their number
     of dither positions, assuming that there is no dithering for the science
     PSFs and dithering for the reference PSFs.
-    
+
     Parameters
     ----------
     meta : object of type meta
         Meta object that contains all the metadata of the observations.
     fitsfiles_all : list of str
         List of the FITS files whose metadata shall be extracted.
-    
+
     Returns
     -------
     meta : object of type meta
         Meta object that contains all the metadata of the observations.
-    
+
     """
-    
+
     # Get all FITS files whose exposure type is compatible with spaceKLIP.
     fitsfiles = []
     for file in fitsfiles_all:
         if (pyfits.getheader(file)['EXP_TYPE'] in ['NRC_IMAGE', 'NRC_CORON', 'MIR_IMAGE', 'MIR_LYOT', 'MIR_4QPM']):
             fitsfiles += [file]
     fitsfiles = np.array(fitsfiles)
-    
+
     # Load the WebbPSF NIRCam and MIRI classes.
     nrc = webbpsf.NIRCam()
     mir = webbpsf.MIRI()
-    
+
     # Extract the metadata of the observations from the FITS files.
     Nfitsfiles = len(fitsfiles)
     TARGPROP = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
@@ -169,14 +169,14 @@ def extract_obs(meta, fitsfiles_all):
     HASH = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
     for i, file in enumerate(fitsfiles):
         hdul = pyfits.open(file)
-        
+
         head = hdul[0].header
         if ('SGD' in file): # MIRI test data
             TARGPROP[i] = 'CALIBRATOR'
         elif ('HD141569' in file): # MIRI test data
             TARGPROP[i] = 'HD141569'
         else:
-            TARGPROP[i] = head['TARGPROP']        
+            TARGPROP[i] = head['TARGPROP']
         TARG_RA[i] = head['TARG_RA'] # deg
         TARG_DEC[i] = head['TARG_DEC'] # deg
         INSTRUME[i] = head['INSTRUME']
@@ -202,7 +202,7 @@ def extract_obs(meta, fitsfiles_all):
             SUBPXPTS[i] = 1
         else:
             try:
-                SUBPXPTS[i] = head['SUBPXPTS']
+                SUBPXPTS[i] = head['NUMDTHPT']
             except:
                 SUBPXPTS[i] = 1
         try:
@@ -218,7 +218,7 @@ def extract_obs(meta, fitsfiles_all):
             PIXSCALE[i] = mir.pixelscale*1e3 # mas
         else:
             raise UserWarning('Unknown instrument')
-        
+
         head = hdul['SCI'].header
         try:
             PIXAR_SR[i] = head['PIXAR_SR'] # sr
@@ -232,14 +232,14 @@ def extract_obs(meta, fitsfiles_all):
             ROLL_REF[i] = file.split('/')[-1].split('_')[2][2:] # deg
         else:
             ROLL_REF[i] = head['ROLL_REF'] # deg
-        
+
         # Create a hash for each observation. All observations with the same
         # hash will be grouped together into a concatenation. Each
         # concatenation will then be reduced separately by spaceKLIP.
         HASH[i] = INSTRUME[i]+'_'+DETECTOR[i]+'_'+FILTER[i]+'_'+PUPIL[i]+'_'+CORONMSK[i]+'_'+SUBARRAY[i]+'_'+APERNAME[i]
-        
+
         hdul.close()
-    
+
     # Group together all observations with the same hash into a concatenation.
     HASH_unique = np.unique(HASH)
     NHASH_unique = len(HASH_unique)
@@ -255,30 +255,38 @@ def extract_obs(meta, fitsfiles_all):
     meta.obs = {}
     for i in range(NHASH_unique):
         ww = HASH == HASH_unique[i]
-        
+
         # Science and reference PSFs are identified based on their number of
         # dither positions, assuming that there is no dithering for the
         # science PSFs and dithering for the reference PSFs.
         dpts = SUBPXPTS[ww]
         dpts_unique = np.unique(dpts)
-        try:
-            ww_sci = []
-            for j in range(len(meta.sci)):
-                ww_sci += [np.where(fitsfiles == meta.idir+meta.sci[j])[0][0]]
-            ww_sci = np.array(ww_sci)
-            ww_cal = []
-            for j in range(len(meta.cal)):
-                ww_cal += [np.where(fitsfiles == meta.idir+meta.cal[j])[0][0]]
-            ww_cal = np.array(ww_cal)
-            if ((len(ww_sci) == 0) or (len(ww_cal) == 0)):
-                raise UserWarning('No science or calibrator data found')
-        except:
-            if ((len(dpts_unique) == 2) and (dpts_unique[0] == 1)):
-                ww_sci = np.where(dpts == dpts_unique[0])[0]
-                ww_cal = np.where(dpts == dpts_unique[1])[0]
-            else:
-                raise UserWarning('Science and reference PSFs are identified based on their number of dither positions, assuming that there is no dithering for the science PSFs and dithering for the reference PSFs')
-        
+        print(dpts)
+        print(dpts_unique)
+        if ((len(dpts_unique) == 2) and (dpts_unique[0] == 1)):
+            ww_sci = np.where(dpts == dpts_unique[0])[0]
+            ww_cal = np.where(dpts == dpts_unique[1])[0]
+        else:
+            raise UserWarning('Science and reference PSFs are identified based on their number of dither positions, assuming that there is no dithering for the science PSFs and dithering for the reference PSFs')
+
+        # try:
+        #     ww_sci = []
+        #     for j in range(len(meta.sci)):
+        #         ww_sci += [np.where(fitsfiles == meta.idir+meta.sci[j])[0][0]]
+        #     ww_sci = np.array(ww_sci)
+        #     ww_cal = []
+        #     for j in range(len(meta.cal)):
+        #         ww_cal += [np.where(fitsfiles == meta.idir+meta.cal[j])[0][0]]
+        #     ww_cal = np.array(ww_cal)
+        #     if ((len(ww_sci) == 0) or (len(ww_cal) == 0)):
+        #         raise UserWarning('No science or calibrator data found')
+        # except:
+        #     if ((len(dpts_unique) == 2) and (dpts_unique[0] == 1)):
+        #         ww_sci = np.where(dpts == dpts_unique[0])[0]
+        #         ww_cal = np.where(dpts == dpts_unique[1])[0]
+        #     else:
+        #         raise UserWarning('Science and reference PSFs are identified based on their number of dither positions, assuming that there is no dithering for the science PSFs and dithering for the reference PSFs')
+
         # These metadata are the same for all observations within one
         # concatenation.
         meta.instrume[HASH_unique[i]] = INSTRUME[ww][ww_sci][0]
@@ -290,7 +298,7 @@ def extract_obs(meta, fitsfiles_all):
         meta.apername[HASH_unique[i]] = APERNAME[ww][ww_sci][0]
         meta.pixscale[HASH_unique[i]] = PIXSCALE[ww][ww_sci][0]
         meta.pixar_sr[HASH_unique[i]] = PIXAR_SR[ww][ww_sci][0]
-        
+
         # These metadata are different for each observation within the
         # concatenation.
         # TODO: PIXSCALE and PA_V3 will be removed in a future version because
@@ -303,13 +311,13 @@ def extract_obs(meta, fitsfiles_all):
             tab.add_row(('CAL', TARGPROP[ww][ww_cal][j], TARG_RA[ww][ww_cal][j], TARG_DEC[ww][ww_cal][j], READPATT[ww][ww_cal][j], NINTS[ww][ww_cal][j], NGROUPS[ww][ww_cal][j], NFRAMES[ww][ww_cal][j], EFFINTTM[ww][ww_cal][j], RA_REF[ww][ww_cal][j], DEC_REF[ww][ww_cal][j], ROLL_REF[ww][ww_cal][j], fitsfiles[ww][ww_cal][j], PIXSCALE[ww][ww_cal][j], ROLL_REF[ww][ww_cal][j]))
         meta.obs[HASH_unique[i]] = tab.copy()
         del tab
-    
+
     temp = meta.obs.copy()
     meta.obs = {}
     for i, key in enumerate(temp.keys()):
         if (i in [0]):
             meta.obs[key] = temp[key].copy()
-    
+
     if (meta.verbose == True):
         print('--> Identified %.0f concatenation(s)' % len(meta.obs))
         for i, key in enumerate(meta.obs.keys()):
@@ -317,14 +325,14 @@ def extract_obs(meta, fitsfiles_all):
             print_tab = copy.deepcopy(meta.obs[key])
             print_tab.remove_column('FITSFILE')
             print_tab.pprint(max_lines=100, max_width=1000)
-    
+
     return meta
 
 def get_working_files(meta, runcheck, subdir='RAMPFIT', search='uncal.fits'):
 
     # Add wild card to the start of the search string
-    search = '*' + search 
-   
+    search = '*' + search
+
     # Figure out where to look for files
     if runcheck:
         #Use an output directory that was just created
@@ -341,7 +349,7 @@ def get_working_files(meta, runcheck, subdir='RAMPFIT', search='uncal.fits'):
             print('Located {} folder within input directory.'.format(subdir))
             rdir += subdir + '/' + search
             files = glob.glob(rdir)
-        
+
         # If there are still no files, look in output directory
         if (len(files) == 0) and ('/{}/'.format(subdir) not in rdir):
             print('WARNING: No {} files found in input directory, searching output directory.'.format(search))

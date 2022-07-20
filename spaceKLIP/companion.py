@@ -26,7 +26,7 @@ webbpsf.setup_logging(level='ERROR')
 import webbpsf_ext
 
 from . import utils
-from . import io 
+from . import io
 from . import plotting
 
 
@@ -38,10 +38,10 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
     """
     Extract astrometry and photometry from any detected companions using
     the pyKLIP forward modeling class.
-    
+
     TODO: use a position-dependent offset PSF from pyNRC instead of the
           completely unocculted offset PSF from WebbPSF.
-    
+
     Parameters
     ----------
     meta : object of type meta
@@ -52,18 +52,18 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
         coronagraphic subarrays introduces a chromatic shift.
     use_fm_psf : bool
         Use a pyKLIP forward-modeled offset PSF instead of a simple offset PSF.
-    
+
     """
-    
+
     if (meta.verbose == True):
         print('--> Extracting companion properties...')
-    
+
     # If necessary, extract the metadata of the observations.
     if (not meta.done_subtraction):
         basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS', search=meta.sub_ext)
         meta = utils.prepare_meta(meta, basefiles)
         meta.done_subtraction = True # set the subtraction flag for the subsequent pipeline stages
-    
+
     # Loop through all directories of subtracted images.
     meta.truenumbasis = {}
     for counter, rdir in enumerate(meta.rundirs):
@@ -75,18 +75,18 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
         if (meta.verbose == True):
             dirparts = rdir.split('/')[-2].split('_') # -2 because of trailing '/'
             print('--> Mode = {}, annuli = {}, subsections = {}, scenario {} of {}'.format(dirparts[3], dirparts[4], dirparts[5], counter+1, len(meta.rundirs)))
-        
+
         # Get the mode from the saved meta file.
         metasave = io.read_metajson(rdir+'SUBTRACTED/MetaSave.json')
         mode = metasave['used_mode']
-        
+
         # Define the input and output directories for each set of pyKLIP
         # parameters.
         idir = rdir+'SUBTRACTED/'
         odir = rdir+'COMPANION/'
         if (not os.path.exists(odir)):
             os.makedirs(odir)
-        
+
         # Create an output directory for the forward-modeled datasets.
         odir_temp = odir+'FITS/'
         if (not os.path.exists(odir_temp)):
@@ -108,15 +108,15 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
             weff = meta.weff[filt] # m
             fwhm = wave/meta.diam*utils.rad2mas/pxsc # pix
             hdul.close()
-            
+
             # Create a new pyKLIP dataset for forward modeling the companion
             # PSFs.
             dataset = JWST.JWSTData(filepaths=filepaths,
                                     psflib_filepaths=psflib_filepaths)
-            
+
             # Get the coronagraphic mask transmission map.
             utils.get_transmission(meta, key, odir, derotate=False)
-            
+
             # Get an offset PSF that is normalized to the total intensity of
             # the host star.
             try:
@@ -136,11 +136,11 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
             except:
                 offsetpsf = utils.get_offsetpsf(meta, key, recenter_offsetpsf=recenter_offsetpsf, derotate=False)
                 offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
-            
+
             # Loop through all companions.
             res[key] = {}
             for j in range(len(meta.ra_off)):
-                
+
                 # Guesses for the fit parameters.
                 guess_dx = meta.ra_off[j]/pxsc # pix
                 guess_dy = meta.de_off[j]/pxsc # pix
@@ -148,13 +148,13 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                 guess_pa = np.rad2deg(np.arctan2(guess_dx, guess_dy)) # deg
                 guess_flux = 1e-4
                 guess_spec = np.array([1.])
-                
+
                 # Compute the forward-modeled dataset if it does not exist,
                 # yet, or if overwrite is True.
                 fmdataset = odir_temp+'FM_c%.0f-' % (j+1)+key+'-fmpsf-KLmodes-all.fits'
                 klipdataset = odir_temp+'FM_c%.0f-' % (j+1)+key+'-klipped-KLmodes-all.fits'
                 if ((meta.overwrite == True) or (not os.path.exists(fmdataset) or not os.path.exists(klipdataset))):
-                    
+
                     # Initialize the forward modeling pyKLIP class.
                     input_wvs = np.unique(dataset.wvs)
                     if (len(input_wvs) != 1):
@@ -169,7 +169,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                                                  spectrallib=[guess_spec],
                                                  spectrallib_units='contrast',
                                                  field_dependent_correction=partial(utils.field_dependent_correction, meta=meta))
-                    
+
                     # Compute the forward-modeled dataset.
                     annulus = [[guess_sep-20., guess_sep+20.]] # pix
                     subsection = 1
@@ -187,8 +187,9 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                                     psf_library=dataset.psflib,
                                     highpass=False,
                                     mute_progression=True)
-                
+
                 # Open the forward-modeled dataset.
+                from pyklip.klip import nan_gaussian_filter
                 with pyfits.open(fmdataset) as hdul:
                     fm_frame = hdul[0].data[meta.KL]
                     fm_centx = hdul[0].header['PSFCENTX']
@@ -197,14 +198,14 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                     data_frame = hdul[0].data[meta.KL]
                     data_centx = hdul[0].header["PSFCENTX"]
                     data_centy = hdul[0].header["PSFCENTY"]
-                
+
                 # If use_fm_psf is False, replace the forward-modeled PSF in
                 # the fm_frame with a simple offset PSF from WebbPSF.
                 if (use_fm_psf == False):
-                    
+
                     # Get the coronagraphic mask transmission map.
                     utils.get_transmission(meta, key, odir, derotate=True)
-                    
+
                     # Get a derotated and integration time weighted average of
                     # an offset PSF from WebbPSF. Apply the field-dependent
                     # correction and insert it at the correct companion
@@ -225,13 +226,14 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                     stamp = utils.field_dependent_correction(stamp, stamp_dx, stamp_dy, meta)
                     fm_frame[:, :] = 0.
                     fm_frame[int(fm_centy)+int(guess_dy)-sy//2:int(fm_centy)+int(guess_dy)+sy//2+1, int(fm_centx)-int(guess_dx)-sx//2:int(fm_centx)-int(guess_dx)+sx//2+1] = stamp
-                
+
                 if (meta.plotting == True):
                     savefile = odir+key+'-fmpsf_c%.0f' % (j+1)+'.pdf'
                     plotting.plot_fm_psf(meta, fm_frame, data_frame, guess_flux, pxsc=pxsc, j=j, savefile=savefile)
-                
+
                 # Fit the forward-modeled PSF to the KLIP-subtracted data.
-                fitboxsize = 17 # pix
+                fitboxsize = 30 # pix
+                print('FWHM is ',fwhm)
                 fma = fitpsf.FMAstrometry(guess_sep=guess_sep,
                                           guess_pa=guess_pa,
                                           fitboxsize=fitboxsize)
@@ -241,21 +243,21 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                 fma.generate_data_stamp(data=data_frame,
                                         data_center=[data_centx, data_centy],
                                         dr=4,
-                                        exclusion_radius=12.*fwhm)
+                                        exclusion_radius=4.*fwhm)
                 corr_len_guess = 3. # pix
                 corr_len_label = r'$l$'
                 fma.set_kernel('matern32', [corr_len_guess], [corr_len_label])
                 x_range = 1. # pix
                 y_range = 1. # pix
-                flux_range = 1. # mag
+                flux_range = 10. # mag
                 corr_len_range = 1. # mag
                 fma.set_bounds(x_range, y_range, flux_range, [corr_len_range])
-                
+
                 # Make sure that noise map is invertible.
                 noise_map_max = np.nanmax(fma.noise_map)
                 fma.noise_map[np.isnan(fma.noise_map)] = noise_map_max
                 fma.noise_map[fma.noise_map == 0.] = noise_map_max
-                
+
                 # Run the MCMC fit.
                 fma.fit_astrometry(nwalkers=meta.nwalkers, nburn=meta.nburn, nsteps=meta.nsteps, numthreads=meta.numthreads, chain_output=odir+key+'-bka_chain_c%.0f' % (j+1)+'.pkl')
                 fma.sampler.chain[:, :, 0] *= pxsc
@@ -270,7 +272,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                     fma.best_fit_and_residuals()
                     plt.savefig(odir+key+'-model_c%.0f' % (j+1)+'.pdf')
                     plt.close()
-                
+
                 # Write the best fit values into the results dictionary.
                 temp = 'c%.0f' % (j+1)
                 res[key][temp] = {}
@@ -280,7 +282,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                 res[key][temp]['dde'] = fma.raw_Dec_offset.error*pxsc # mas
                 res[key][temp]['f'] = fma.raw_flux.bestfit*guess_flux
                 res[key][temp]['df'] = fma.raw_flux.error*guess_flux
-                
+
                 if (meta.verbose == True):
                     print('--> Companion %.0f' % (j+1))
                     print('   RA  = %.2f+/-%.2f mas (%.2f mas guess)' % (res[key][temp]['ra'], res[key][temp]['dra'], meta.ra_off[j]))
@@ -295,5 +297,5 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                         print('   CON = %.2e+/-%.2e (%.2e inj.)' % (res[key][temp]['f'], res[key][temp]['df'], cinj))
                     except:
                         print('   CON = %.2e+/-%.2e' % (res[key][temp]['f'], res[key][temp]['df']))
-    
+
     return res
