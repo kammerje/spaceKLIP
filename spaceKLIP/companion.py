@@ -259,54 +259,126 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                 fitboxsize = 25 # pix
                 dr = 5
                 exc_rad = 3
-                fma = fitpsf.FMAstrometry(guess_sep=guess_sep,
-                                          guess_pa=guess_pa,
-                                          fitboxsize=fitboxsize)
-                fma.generate_fm_stamp(fm_image=fm_frame,
-                                      fm_center=[fm_centx, fm_centy],
-                                      padding=5)
-                fma.generate_data_stamp(data=data_frame,
-                                        data_center=[data_centx, data_centy],
-                                        dr=dr,
-                                        exclusion_radius=exc_rad*fwhm)
-                corr_len_guess = 3. # pix
-                corr_len_label = r'$l$'
-                fma.set_kernel('matern32', [corr_len_guess], [corr_len_label])
-                x_range = 1. # pix
-                y_range = 1. # pix
-                flux_range = 10. # mag
-                corr_len_range = 1. # mag
-                fma.set_bounds(x_range, y_range, flux_range, [corr_len_range])
 
-                # Make sure that noise map is invertible.
-                noise_map_max = np.nanmax(fma.noise_map)
-                fma.noise_map[np.isnan(fma.noise_map)] = noise_map_max
-                fma.noise_map[fma.noise_map == 0.] = noise_map_max
+                if (meta.mcmc == True):
 
-                # Run the MCMC fit.
-                fma.fit_astrometry(nwalkers=meta.nwalkers, nburn=meta.nburn, nsteps=meta.nsteps, numthreads=meta.numthreads, chain_output=odir+key+'-bka_chain_c%.0f' % (j+1)+'.pkl')
-                fma.sampler.chain[:, :, 0] *= pxsc
-                fma.sampler.chain[:, :, 1] *= pxsc
-                fma.sampler.chain[:, :, 2] *= guess_flux
-                if (meta.plotting == True):
-                    savefile = odir+key+'-chains_c%.0f' % (j+1)+'.pdf'
-                    plotting.plot_chains(fma.sampler.chain, savefile)
-                    fma.make_corner_plot()
-                    plt.savefig(odir+key+'-corner_c%.0f' % (j+1)+'.pdf')
-                    plt.close()
-                    fma.best_fit_and_residuals()
-                    plt.savefig(odir+key+'-model_c%.0f' % (j+1)+'.pdf')
-                    plt.close()
+                    fma = fitpsf.FMAstrometry(guess_sep=guess_sep,
+                                              guess_pa=guess_pa,
+                                              fitboxsize=fitboxsize)
+                    fma.generate_fm_stamp(fm_image=fm_frame,
+                                          fm_center=[fm_centx, fm_centy],
+                                          padding=5)
+                    fma.generate_data_stamp(data=data_frame,
+                                            data_center=[data_centx, data_centy],
+                                            dr=dr,
+                                            exclusion_radius=exc_rad*fwhm)
+                    corr_len_guess = 3. # pix
+                    corr_len_label = r'$l$'
+                    fma.set_kernel('matern32', [corr_len_guess], [corr_len_label])
+                    x_range = 1. # pix
+                    y_range = 1. # pix
+                    flux_range = 10. # mag
+                    corr_len_range = 1. # mag
+                    fma.set_bounds(x_range, y_range, flux_range, [corr_len_range])
 
-                # Write the best fit values into the results dictionary.
-                temp = 'c%.0f' % (j+1)
-                res[key][temp] = {}
-                res[key][temp]['ra'] = fma.raw_RA_offset.bestfit*pxsc # mas
-                res[key][temp]['dra'] = fma.raw_RA_offset.error*pxsc # mas
-                res[key][temp]['de'] = fma.raw_Dec_offset.bestfit*pxsc # mas
-                res[key][temp]['dde'] = fma.raw_Dec_offset.error*pxsc # mas
-                res[key][temp]['f'] = fma.raw_flux.bestfit*guess_flux
-                res[key][temp]['df'] = fma.raw_flux.error*guess_flux
+                    # Make sure that noise map is invertible.
+                    noise_map_max = np.nanmax(fma.noise_map)
+                    fma.noise_map[np.isnan(fma.noise_map)] = noise_map_max
+                    fma.noise_map[fma.noise_map == 0.] = noise_map_max
+
+                    # Run the MCMC fit.
+                    fma.fit_astrometry(nwalkers=meta.nwalkers, nburn=meta.nburn, nsteps=meta.nsteps, numthreads=meta.numthreads, chain_output=odir+key+'-bka_chain_c%.0f' % (j+1)+'.pkl')
+                    fma.sampler.chain[:, :, 0] *= pxsc
+                    fma.sampler.chain[:, :, 1] *= pxsc
+                    fma.sampler.chain[:, :, 2] *= guess_flux
+                    if (meta.plotting == True):
+                        savefile = odir+key+'-chains_c%.0f' % (j+1)+'.pdf'
+                        plotting.plot_chains(fma.sampler.chain, savefile)
+                        fma.make_corner_plot()
+                        plt.savefig(odir+key+'-corner_c%.0f' % (j+1)+'.pdf')
+                        plt.close()
+                        fma.best_fit_and_residuals()
+                        plt.savefig(odir+key+'-model_c%.0f' % (j+1)+'.pdf')
+                        plt.close()
+
+                    # Write the best fit values into the results dictionary.
+                    temp = 'c%.0f' % (j+1)
+                    res[key][temp] = {}
+                    res[key][temp]['ra'] = fma.raw_RA_offset.bestfit*pxsc # mas
+                    res[key][temp]['dra'] = fma.raw_RA_offset.error*pxsc # mas
+                    res[key][temp]['de'] = fma.raw_Dec_offset.bestfit*pxsc # mas
+                    res[key][temp]['dde'] = fma.raw_Dec_offset.error*pxsc # mas
+                    res[key][temp]['f'] = fma.raw_flux.bestfit*guess_flux
+                    res[key][temp]['df'] = fma.raw_flux.error*guess_flux
+
+                if (meta.nested == True):
+
+                    # the fortran code here requires a shorter output file than is nominally passed
+                    # so try shortening it and then moving the files after
+                    tempoutput = './temp-multinest'
+                    fit = fitpsf.PlanetEvidence(guess_sep, guess_pa, fitboxsize, tempoutput)
+                    print('created PE module')
+
+                    # generate FM stamp
+                    fit.generate_fm_stamp(fm_frame, [fm_centx, fm_centy], padding=5)
+
+                    # generate data_stamp stamp
+                    fit.generate_data_stamp(data_frame, [data_centx, data_centy], dr=dr, exclusion_radius=exc_rad*fwhm)
+                    print('generated FM & data stamps')
+                    # set kernel, no read noise
+                    corr_len_guess = 3.
+                    corr_len_label = "l"
+                    fit.set_kernel("matern32", [corr_len_guess], [corr_len_label])
+                    print('set kernel')
+                    x_range = 1. # pix
+                    y_range = 1. # pix
+                    flux_range = 10. # mag
+                    corr_len_range = 1. # mag
+                    fit.set_bounds(x_range, y_range, flux_range, [corr_len_range])
+                    print('set bounds')
+                    #Run the pymultinest fit
+
+                    fit.multifit()
+                    print('ran fit')
+
+                    evidence = fit.fit_stats()
+
+                    #Forward model evidence
+                    fm_evidence = evidence[0]['nested sampling global log-evidence']
+                    #forward model parameter distributions, containing the median and percentiles for each
+                    fm_posteriors = evidence[0]['marginals']
+                    #Null model evidence
+                    null_evidence = evidence[1]['nested sampling global log-evidence']
+                    #null parameter distributions, containing the median and percentiles for each
+                    null_posteriors = evidence[1]['marginals']
+                    evidence_ratio = np.exp(fm_evidence)/np.exp(null_evidence)
+
+                    print('evidence ratio is: ',round(np.log(evidence_ratio), 4),' >5 is strong evidence')
+                    residnfig = fit.fm_residuals()
+                    if (meta.plotting == True):
+                        # savefile = odir+key+'-chains_c%.0f' % (j+1)+'.pdf'
+                        # plotting.plot_chains(fma.sampler.chain, savefile)
+                        corn, nullcorn = fit.fit_plots()
+                        corn
+                        plt.savefig(odir+key+'-corner_c%.0f' % (j+1)+'.pdf')
+                        plt.close()
+                        fit.fm_residuals()
+                        plt.savefig(odir+key+'-model_c%.0f' % (j+1)+'.pdf')
+                        plt.close()
+
+                    # move multinest output from temp dir to odir+key
+                    import shutil
+                    shutil.move(tempoutput, odir+key)
+
+                    # Write the best fit values into the results dictionary.
+                    temp = 'c%.0f' % (j+1)
+                    res[key][temp] = {}
+                    res[key][temp]['ra'] = fit.raw_RA_offset.bestfit*pxsc # mas
+                    res[key][temp]['dra'] = fit.raw_RA_offset.error*pxsc # mas
+                    res[key][temp]['de'] = fit.raw_Dec_offset.bestfit*pxsc # mas
+                    res[key][temp]['dde'] = fit.raw_Dec_offset.error*pxsc # mas
+                    res[key][temp]['f'] = fit.raw_flux.bestfit*guess_flux
+                    res[key][temp]['df'] = fit.raw_flux.error*guess_flux
 
                 if (meta.verbose == True):
                     print('--> Companion %.0f' % (j+1))

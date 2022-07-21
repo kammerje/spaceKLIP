@@ -149,10 +149,19 @@ def raw_contrast_curve(meta):
                     sep, con = klip.meas_contrast(dat=Fdata[j]/Fstar, iwa=meta.iwa, owa=meta.owa, resolution=2.*fwhm, center=cent, low_pass_filter=False)
                     seps += [sep*pxsc/1000.] # arcsec
                     cons += [con]
-            seps = np.array(seps) # arcsec
-            cons = np.array(cons)
-            np.save(odir+key+'-seps.npy', seps) # arcsec
-            np.save(odir+key+'-cons.npy', cons)
+            # seps = np.array(seps) # arcsec
+            # cons = np.array(cons)
+
+            # Save the contrast curve as a dictionary
+            save_dict = {'seps':seps[0].tolist(), 'cons':{}, 'mstar':meta.mstar}
+            for j, con in enumerate(cons):
+                save_dict['cons']['KL{}'.format(meta.numbasis[j])] = cons[j].tolist()
+            rawconfile = odir+key+'-raw_save.json'
+            with open(rawconfile, 'w') as rf:
+                json.dump(save_dict, rf)
+
+            # np.save(odir+key+'-seps.npy', seps) # arcsec
+            # np.save(odir+key+'-cons.npy', cons)
 
             if (meta.plotting == True):
                 savefile = odir+key+'-cons_raw.pdf'
