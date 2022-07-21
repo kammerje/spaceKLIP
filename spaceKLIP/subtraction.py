@@ -7,6 +7,8 @@ from datetime import date
 from astropy.io import fits
 import matplotlib.pyplot as plt
 
+from pyklip.instruments.Instrument import GenericData
+import pyklip.rdi as rdi
 import pyklip.instruments.JWST as JWST
 import pyklip.parallelized as parallelized
 
@@ -25,7 +27,6 @@ def perform_subtraction(meta):
         engine.py.
 
     '''
-
     files = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS', search=meta.sub_ext)
     # Run some preparation steps on the meta object
     meta = utils.prepare_meta(meta, files)
@@ -57,6 +58,7 @@ def bg_subtraction(meta):
     else:
         if meta.bgsub == 'None':
             print('Skipping background subtraction')
+            return
         else:
             raise ValueError('Background subtraction {} not recognised'.format(meta.bgsub))
 
@@ -69,37 +71,39 @@ def bg_subtraction(meta):
     types = ['SCI', 'CAL']
     for i, files in enumerate([bgsci_files, bgref_files]):
         
-        bg_sub = median_bg(files, data_start=data_start)
-
-        #Save the median_bg
-        primary = fits.PrimaryHDU(bg_sub)
-        hdul = fits.HDUList([primary])
-        meddir = meta.ancildir + 'median_bg/'
-        if not os.path.exists(meddir):
-            os.makedirs(meddir)
-        hdul.writeto(meddir+'{}.fits'.format(types[i]), overwrite=meta.overwrite)
-
         for key in meta.obs.keys():
             ww = np.where(meta.obs[key]['TYP'] == types[i])[0]
-            filepaths = np.array(meta.obs[key]['FITSFILE'][ww], dtype=str).tolist()
+        basefiles = np.array(meta.obs[key]['FITSFILE'][ww], dtype=str).tolist()
 
-        for file in filepaths:
-            with fits.open(file) as hdul:
-                data = hdul['SCI'].data
-                data -= bg_sub[None,:,:]
+        if meta.bgsub == 'default':
+            bg_sub = median_bg(files, data_start=data_start)
+            #Save the median_bg
+            primary = fits.PrimaryHDU(bg_sub)
+            hdul = fits.HDUList([primary])
+            meddir = meta.ancildir + 'median_bg/'
+            if not os.path.exists(meddir):
+                os.makedirs(meddir)
+            hdul.writeto(meddir+'{}.fits'.format(types[i]), overwrite=meta.overwrite)
 
-                hdul['SCI'].data = data[data_start:]
-                if data_start != 0:
-                    hdul[0].header['NINTS'] -= data_start 
-                    for ext in ['ERR', 'DQ', 'VAR_POISSON', 'VAR_RNOISE', 'VAR_FLAT']:  
-                        temp_data = hdul[ext].data
-                        hdul[ext].data = np.array(temp_data[data_start:])
+            for file in basefiles:
+                with fits.open(file) as hdul:
+                    data = hdul['SCI'].data
+                    data -= bg_sub[None,:,:]
 
-                savedir = '/'.join(file.split('/')[:-1]).replace('IMGPROCESS', 'IMGPROCESS+BGSUB')
-                savefile = file.split('/')[-1].replace('calints', 'bg_calints')
-                if not os.path.exists(savedir):
-                    os.makedirs(savedir)
-                hdul.writeto(savedir+'/'+savefile, overwrite=meta.overwrite)
+                    hdul['SCI'].data = data[data_start:]
+                    if data_start != 0:
+                        hdul[0].header['NINTS'] -= data_start 
+                        for ext in ['ERR', 'DQ', 'VAR_POISSON', 'VAR_RNOISE', 'VAR_FLAT']:  
+                            temp_data = hdul[ext].data
+                            hdul[ext].data = np.array(temp_data[data_start:])
+
+                    savedir = '/'.join(file.split('/')[:-1]).replace('IMGPROCESS', 'IMGPROCESS+BGSUB')
+                    savefile = file.split('/')[-1].replace('calints', 'bg_calints')
+                    if not os.path.exists(savedir):
+                        os.makedirs(savedir)
+                    hdul.writeto(savedir+'/'+savefile, overwrite=meta.overwrite)
+        elif meta.bgsub == 'pyklip':
+            klip_bg(basefiles, files, data_start=data_start, overwrite=meta.overwrite)
 
     return
 
@@ -135,6 +139,107 @@ def median_bg(files, data_start=0):
     # TODO Add outlier cleanin
 
     return bg_median
+
+def klip_bg(basefiles, files, data_start=0, overwrite=True):
+
+    data = []
+    pas = []
+    centers = []
+    filenames = []
+    wcs_hdrs = []
+    for file in basefiles:
+        with fits.open(file) as hdu:
+            nints = hdu[0].header['NINTS'] - data_start
+            filt = hdu[0].header['FILTER']
+
+            #Define data
+            img_data = hdu['SCI'].data[data_start:]
+
+            # Define filenames
+            filenames += ['{}_INT{}'.format(file.split('/')[-1], i+1) for i in range(nints)]
+
+            # Define image centers
+            if filt == 'F1065C':
+                aligned_center = [120.81, 111.89]
+            elif filt == 'F1140C':
+                aligned_center = [119.99, 112.2]
+            elif filt == 'F1550C':
+                aligned_center = [119.84, 113.33]
+            img_centers = [aligned_center for i in range(nints)]
+            # # Get WCS information
+            # wcs_hdr = wcs.WCS(header=hdu['SCI'].header, naxis=hdu['SCI'].header['WCSAXES'])
+            # for i in range(nints):
+            #     wcs_hdrs.append(wcs_hdr.deepcopy())
+
+            # Append to arrays
+            data.extend(img_data)
+            centers.extend(img_centers) 
+            pas.extend([0]*nints)
+
+    dataset = GenericData(data, centers, IWA=0, parangs=np.array(pas), filenames=filenames)
+
+    # Now prep the PSF Library
+    psflib_imgs = []
+    psflib_filenames = []
+    for file in files:
+        with fits.open(file) as hdu:
+            nints = hdu[0].header['NINTS'] - data_start
+            filt = hdu[0].header['FILTER']
+
+            #Define data
+            psfimg_data = hdu['SCI'].data[data_start:]
+
+            # Define filenames
+            psflib_filenames += ['{}_INT{}'.format(file.split('/')[-1], i+1) for i in range(nints)]
+
+            # Append to arrays
+            psflib_imgs.extend(psfimg_data)
+
+    # # Append the target images as well
+    psflib_imgs = np.append(psflib_imgs, dataset._input, axis=0)
+    psflib_filenames = np.append(psflib_filenames, dataset._filenames, axis=0)
+
+    psflib = rdi.PSFLibrary(psflib_imgs, aligned_center, psflib_filenames, compute_correlation=True)
+
+    # Now run it
+    psflib.prepare_library(dataset)
+    numbasis=[20] # number of KL basis vectors to use to model the PSF. We will try several different ones
+    maxnumbasis=150 # maximum number of most correlated PSFs to do PCA reconstruction with
+    annuli=1
+    subsections=1 # break each annulus into 4 sectors
+    parallelized.klip_dataset(dataset, outputdir='.', fileprefix="pyklip_k150a3s4m1", annuli=annuli,
+                            subsections=subsections, numbasis=numbasis, maxnumbasis=maxnumbasis, mode="RDI",
+                            aligned_center=aligned_center, psf_library=psflib, movement=1, save_ints = True)
+
+    klip_sub = dataset.allints[0,0,:,:,:] # Grab all the integrations
+
+    # Now want to save back into the original files so spaceKLIP can understand things
+    for i, file in enumerate(basefiles):
+        with fits.open(file) as hdu:
+            hdu[0].header['NINTS'] -= data_start
+            nints = hdu[0].header['NINTS']
+
+            # Swap out data
+            if i != len(basefiles)-1:
+                hdu['SCI'].data[data_start:] = klip_sub[nints*i:nints*(i+1)]
+            else:
+                hdu['SCI'].data[data_start:] = klip_sub[nints*i:] 
+
+            # Trim if necessary
+            if data_start == 1:
+                for ext in ['SCI', 'ERR', 'DQ', 'VAR_POISSON', 'VAR_RNOISE', 'VAR_FLAT']:  
+                    temp_data = hdu[ext].data
+                    hdu[ext].data = np.array(temp_data[data_start:])
+
+            # Save file
+            savedir = '/'.join(file.split('/')[:-1]).replace('IMGPROCESS', 'IMGPROCESS+BGSUB')
+            savefile = file.split('/')[-1].replace('calints', 'bg_calints')
+            if not os.path.exists(savedir):
+                os.makedirs(savedir)
+            hdu.writeto(savedir+'/'+savefile, overwrite=overwrite)
+
+    return
+
 
 def klip_subtraction(meta, files):
     """
@@ -181,6 +286,8 @@ def klip_subtraction(meta, files):
                 odir += 'SUBTRACTED/'
                 if not os.path.exists(odir):
                     os.makedirs(odir)
+                if not os.path.exists(meta.ancildir+'shifts'):
+                    os.makedirs(meta.ancildir+'shifts')
 
                 # Loop through all sets of observing parameters. Only run
                 # pyKLIP if the corresponding KLmodes-all fits file does
@@ -195,7 +302,7 @@ def klip_subtraction(meta, files):
                     psflib_filepaths = np.array(meta.obs[key]['FITSFILE'][ww_cal], dtype=str).tolist()
                     dataset = JWST.JWSTData(filepaths=filepaths,
                                             psflib_filepaths=psflib_filepaths, centering=meta.centering_alg, badpix_threshold=meta.badpix_threshold,
-                                            scishiftfile=meta.ancildir+'scishifts', refshiftfile=meta.ancildir+'refshifts')
+                                            scishiftfile=meta.ancildir+'shifts/scishifts', refshiftfile=meta.ancildir+'shifts/refshifts')
 
                     parallelized.klip_dataset(dataset=dataset,
                                               mode=mode,

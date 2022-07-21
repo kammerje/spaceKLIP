@@ -132,7 +132,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                 centering_alg = meta.repeatcentering_companion
             dataset = JWST.JWSTData(filepaths=filepaths,
                                     psflib_filepaths=psflib_filepaths, centering=centering_alg, badpix_threshold=meta.badpix_threshold,
-                                    scishiftfile=meta.ancildir+'scishifts', refshiftfile=meta.ancildir+'refshifts')
+                                    scishiftfile=meta.ancildir+'shifts/scishifts', refshiftfile=meta.ancildir+'shifts/refshifts')
             
             # Get the coronagraphic mask transmission map.
             utils.get_transmission(meta, key, odir, derotate=False)

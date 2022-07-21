@@ -30,11 +30,11 @@ def stsci_ramp_fitting(meta):
 	Use the JWST pipeline to process *uncal.fits files to *rateints.fits files
 	"""
 	if meta.rampfit_idir:
-		run_ramp_fitting(meta, meta.idir, 'RAMPFIT/')
+		run_ramp_fitting(meta, meta.idir, 'RAMPFIT/SCI+REF/')
 	if meta.rampfit_bgdirs:
 		if meta.bg_sci_dir != 'None':
-			run_ramp_fitting(meta, meta.bg_sci_dir, 'RAMPFIT_BGSCI/')
+			run_ramp_fitting(meta, meta.bg_sci_dir, 'RAMPFIT/BGSCI/')
 		if meta.bg_ref_dir != 'None':
-			run_ramp_fitting(meta, meta.bg_ref_dir, 'RAMPFIT_BGREF/')
+			run_ramp_fitting(meta, meta.bg_ref_dir, 'RAMPFIT/BGREF/')
 
 	return

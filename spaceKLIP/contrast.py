@@ -127,7 +127,7 @@ def raw_contrast_curve(meta):
             # cons = np.array(cons)
 
             # Save the contrast curve as a dictionary
-            save_dict = {'seps':seps[0].tolist(), 'cons':{}}
+            save_dict = {'seps':seps[0].tolist(), 'cons':{}, 'mstar':meta.mstar}
             for j, con in enumerate(cons):
                 save_dict['cons']['KL{}'.format(meta.numbasis[j])] = cons[j].tolist()
             rawconfile = odir+key+'-raw_save.json'
@@ -631,7 +631,7 @@ def inject_recover(meta,
     while (finished == False):
         dataset = JWST.JWSTData(filepaths=filepaths,
                                 psflib_filepaths=psflib_filepaths, centering=meta.centering_alg, badpix_threshold=meta.badpix_threshold,
-                                scishiftfile=meta.ancildir+'scishifts', refshiftfile=meta.ancildir+'refshifts')
+                                scishiftfile=meta.ancildir+'shifts/scishifts', refshiftfile=meta.ancildir+'shifts/refshifts')
         
         # Inject fake companions. Make sure that no other fake companion
         # closer than mrad will be injected into the same dataset.

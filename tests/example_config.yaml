@@ -10,15 +10,15 @@
 
 ##### REQUIRED #####
 # Input Directory 
-idir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F15500C/SCI+REF/'
-odir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/20220718_F1550/' # Output Directory
+idir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1140C/SCI+REF/'
+odir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/20220719_F1140/' # Output Directory
 sdir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/hip65426.vot' #VOT table or stellar model file.
 
 ##### OPTIONAL #####
-rundirs: ['2022_07_19_RDI_annu1_subs1_run2']  #Specify directory(ies) within odir of existing runs to calculate contrast curve / companion
+rundirs: ['2022_07_20_ADI+RDI_annu1_subs1_run4']  #Specify directory(ies) within odir of existing runs to calculate contrast curve / companion
 ancildir: None      # Specify directory to save ancillary files, if None then saved under odir/ANCILLARY/. 
-bg_sci_dir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1550C/BGSCI/' #None if not using
-bg_ref_dir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1550C/BGREF/' #None if not using
+bg_sci_dir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1140C/BGSCI/' #None if not using
+bg_ref_dir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1140C/BGREF/' #None if not using
 
 ############################
 ##### General Settings #####
@@ -34,8 +34,8 @@ badpix_threshold: 1
 ##### Star / Companion information #####
 ########################################
 spt: 'A2V' # Spectral type of target, only necessary for VOTable. Keep it simple.
-ra_off: [450] #, 2200] # mas; RA offset of the known companions
-de_off: [-680] #, -4200] # mas; DEC offset of the known companions 
+ra_off: [455] #[5950] #, 2200] # mas; RA offset of the known companions
+de_off:  [-683] # [-7500] #, -4200] # mas; DEC offset of the known companions 
 
 #################################
 ##### Ramp Fitting Settings #####
@@ -53,14 +53,16 @@ ramp_fit_max_cores: 'all' #Options are 'none', 'quarter', 'half', 'all'
 imgproc_idir: True  #Toggle if you just want to imgproc the backgrounds
 imgproc_bgdirs: True
 imgproc_ext: 'rateints.fits'
+dq_only: True
+dqcorr: 'median'
 
 ####################################
 ##### PSF Subtraction Settings #####
 ####################################
 sub_ext: 'calints.fits'
 bgtrim: 'first'   # Trim the first integration in the background, science, and reference (bgsub != 'saved' or 'None')
-bgsub: 'default'    #Perform background subtraction, 'default' to match sci with bg_sci, ref with bg_ref, 'saved' to load saved
-centering_alg: 'jwstpipe'    # Algorithm to use for centering "basic", "jwstpipe", "imageregis", or 'savefile'
+bgsub: 'saved'    #Perform background subtraction, 'default' to match sci with bg_sci, ref with bg_ref, 'saved' to load saved
+centering_alg: 'savefile'    # Algorithm to use for centering "basic", "jwstpipe", "imageregis", or 'savefile'
 mode: ['ADI+RDI']       # list of modes for pyKLIP, will loop through all
 annuli: [1]         # list of number of annuli for pyKLIP, will loop through all
 subsections: [1]    # list of number of annuli for pyKLIP, will loop through all

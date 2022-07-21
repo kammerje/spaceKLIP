@@ -7,11 +7,11 @@ config_file = os.path.dirname(__file__)+'/example_config.yaml'
 if __name__ == '__main__':
 	pipe = JWST(config_file)
 	pipe.run_all(skip_ramp=True, 
-				 skip_imgproc=True, 
+				 skip_imgproc=False, 
 				 skip_sub=True, 
 				 skip_rawcon=True, 
 				 skip_calcon=True, 
-				 skip_comps=False)
+				 skip_comps=True)
 
 
 # imgdir = '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/20220628_NIRCam/IMGPROCESS/'
