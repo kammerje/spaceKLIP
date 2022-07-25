@@ -256,9 +256,19 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                     plotting.plot_fm_psf(meta, fm_frame, data_frame, guess_flux, pxsc=pxsc, j=j, savefile=savefile)
 
                 # Fit the forward-modeled PSF to the KLIP-subtracted data.
-                fitboxsize = 25 # pix
-                dr = 5
-                exc_rad = 3
+                # there's gotta be a better way to do this...
+                try:
+                    fitboxsize = meta.fitboxsize
+                except:
+                    fitboxsize = 25 # pix
+                try:
+                    dr = meta.dr
+                except:
+                    dr = 5
+                try:
+                    exc_rad = meta.exc_rad
+                except:
+                    exc_rad = 3
 
                 if (meta.mcmc == True):
 
@@ -311,11 +321,27 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                     res[key][temp]['f'] = fma.raw_flux.bestfit*guess_flux
                     res[key][temp]['df'] = fma.raw_flux.error*guess_flux
 
+                    if (meta.verbose == True):
+                        print('--> Companion %.0f' % (j+1))
+                        print('   RA  = %.2f+/-%.2f mas (%.2f mas guess)' % (res[key][temp]['ra'], res[key][temp]['dra'], meta.ra_off[j]))
+                        print('   DEC = %.2f+/-%.2f mas (%.2f mas guess)' % (res[key][temp]['de'], res[key][temp]['dde'], meta.de_off[j]))
+                        try:
+                            name = ['b', 'c', 'd', 'e']
+                            pdir = meta.idir[:meta.idir[:-1].rfind('/')]+'/pmags/'
+                            file = [f for f in os.listdir(pdir) if f.lower().endswith(name[j]+'_'+filt.lower()+'.npy')][0]
+                            pmag = np.load(pdir+file)
+                            dmag = pmag-meta.mstar[filt]
+                            cinj = 10**(dmag/(-2.5))
+                            print('   CON = %.2e+/-%.2e (%.2e inj.)' % (res[key][temp]['f'], res[key][temp]['df'], cinj))
+                        except:
+                            print('   CON = %.2e+/-%.2e' % (res[key][temp]['f'], res[key][temp]['df']))
+
+
                 if (meta.nested == True):
 
                     # the fortran code here requires a shorter output file than is nominally passed
                     # so try shortening it and then moving the files after
-                    tempoutput = './temp-multinest'
+                    tempoutput = './temp-multinest/'
                     fit = fitpsf.PlanetEvidence(guess_sep, guess_pa, fitboxsize, tempoutput)
                     print('created PE module')
 
@@ -326,14 +352,29 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                     fit.generate_data_stamp(data_frame, [data_centx, data_centy], dr=dr, exclusion_radius=exc_rad*fwhm)
                     print('generated FM & data stamps')
                     # set kernel, no read noise
-                    corr_len_guess = 3.
+                    try:
+                        corr_len_guess = meta.corr_len_guess
+                    except:
+                        corr_len_guess = 3.
                     corr_len_label = "l"
                     fit.set_kernel("matern32", [corr_len_guess], [corr_len_label])
                     print('set kernel')
-                    x_range = 1. # pix
-                    y_range = 1. # pix
-                    flux_range = 10. # mag
-                    corr_len_range = 1. # mag
+                    try:
+                        x_range = meta.x_range
+                    except:
+                        x_range = 2. # pix
+                    try:
+                        y_range = meta.y_range
+                    except:
+                        y_range = 2. # pix
+                    try:
+                        flux_range = meta.flux_range
+                    except:
+                        flux_range = 10. # mag
+                    try:
+                        corr_len_range = meta.corr_len_range
+                    except:
+                        corr_len_range = 1. # mag
                     fit.set_bounds(x_range, y_range, flux_range, [corr_len_range])
                     print('set bounds')
                     #Run the pymultinest fit
@@ -351,7 +392,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                     null_evidence = evidence[1]['nested sampling global log-evidence']
                     #null parameter distributions, containing the median and percentiles for each
                     null_posteriors = evidence[1]['marginals']
-                    evidence_ratio = np.exp(fm_evidence)/np.exp(null_evidence)
+                    evidence_ratio = np.exp(fm_evidence - null_evidence)
 
                     print('evidence ratio is: ',round(np.log(evidence_ratio), 4),' >5 is strong evidence')
                     residnfig = fit.fm_residuals()
@@ -359,8 +400,12 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                         # savefile = odir+key+'-chains_c%.0f' % (j+1)+'.pdf'
                         # plotting.plot_chains(fma.sampler.chain, savefile)
                         corn, nullcorn = fit.fit_plots()
+                        plt.close()
                         corn
                         plt.savefig(odir+key+'-corner_c%.0f' % (j+1)+'.pdf')
+                        plt.close()
+                        nullcorn
+                        plt.savefig(odir+key+'-nullcorner_c%.0f' % (j+1)+'.pdf')
                         plt.close()
                         fit.fm_residuals()
                         plt.savefig(odir+key+'-model_c%.0f' % (j+1)+'.pdf')
@@ -368,32 +413,35 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
 
                     # move multinest output from temp dir to odir+key
                     import shutil
-                    shutil.move(tempoutput, odir+key)
+                    tempfiles = os.listdir(tempoutput)
+                    for f in tempfiles:
+                        shutil.move(tempoutput + f, odir+key+f)
+                    shutil.rmtree(tempoutput)
 
                     # Write the best fit values into the results dictionary.
                     temp = 'c%.0f' % (j+1)
                     res[key][temp] = {}
-                    res[key][temp]['ra'] = fit.raw_RA_offset.bestfit*pxsc # mas
-                    res[key][temp]['dra'] = fit.raw_RA_offset.error*pxsc # mas
-                    res[key][temp]['de'] = fit.raw_Dec_offset.bestfit*pxsc # mas
-                    res[key][temp]['dde'] = fit.raw_Dec_offset.error*pxsc # mas
-                    res[key][temp]['f'] = fit.raw_flux.bestfit*guess_flux
-                    res[key][temp]['df'] = fit.raw_flux.error*guess_flux
+                    res[key][temp]['ra'] = -(fm_posteriors[0]['median']-data_centx)*pxsc # mas
+                    res[key][temp]['dra'] = (fm_posteriors[0]['sigma'])*pxsc # mas
+                    res[key][temp]['de'] = (fm_posteriors[1]['median']-data_centy)*pxsc # mas
+                    res[key][temp]['dde'] = (fm_posteriors[1]['sigma'])*pxsc # mas
+                    res[key][temp]['f'] = fm_posteriors[2]['median']*guess_flux
+                    res[key][temp]['df'] = fm_posteriors[2]['sigma']*guess_flux
 
-                if (meta.verbose == True):
-                    print('--> Companion %.0f' % (j+1))
-                    print('   RA  = %.2f+/-%.2f mas (%.2f mas guess)' % (res[key][temp]['ra'], res[key][temp]['dra'], meta.ra_off[j]))
-                    print('   DEC = %.2f+/-%.2f mas (%.2f mas guess)' % (res[key][temp]['de'], res[key][temp]['dde'], meta.de_off[j]))
-                    try:
-                        name = ['b', 'c', 'd', 'e']
-                        pdir = meta.idir[:meta.idir[:-1].rfind('/')]+'/pmags/'
-                        file = [f for f in os.listdir(pdir) if f.lower().endswith(name[j]+'_'+filt.lower()+'.npy')][0]
-                        pmag = np.load(pdir+file)
-                        dmag = pmag-meta.mstar[filt]
-                        cinj = 10**(dmag/(-2.5))
-                        print('   CON = %.2e+/-%.2e (%.2e inj.)' % (res[key][temp]['f'], res[key][temp]['df'], cinj))
-                    except:
-                        print('   CON = %.2e+/-%.2e' % (res[key][temp]['f'], res[key][temp]['df']))
+                    if (meta.verbose == True):
+                        print('--> Companion %.0f' % (j+1))
+                        print('   RA  = %.2f+/-%.2f mas (%.2f mas guess)' % (res[key][temp]['ra'], res[key][temp]['dra'], meta.ra_off[j]))
+                        print('   DEC = %.2f+/-%.2f mas (%.2f mas guess)' % (res[key][temp]['de'], res[key][temp]['dde'], meta.de_off[j]))
+                        try:
+                            name = ['b', 'c', 'd', 'e']
+                            pdir = meta.idir[:meta.idir[:-1].rfind('/')]+'/pmags/'
+                            file = [f for f in os.listdir(pdir) if f.lower().endswith(name[j]+'_'+filt.lower()+'.npy')][0]
+                            pmag = np.load(pdir+file)
+                            dmag = pmag-meta.mstar[filt]
+                            cinj = 10**(dmag/(-2.5))
+                            print('   CON = %.2e+/-%.2e (%.2e inj.)' % (res[key][temp]['f'], res[key][temp]['df'], cinj))
+                        except:
+                            print('   CON = %.2e+/-%.2e' % (res[key][temp]['f'], res[key][temp]['df']))
 
         # Save the results
         compfile = odir+key+'-comp_save.json'
