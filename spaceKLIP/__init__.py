@@ -7,3 +7,4 @@ from . import plotting
 from . import rampfit
 from . import subtraction
 from . import utils
+from . import analysis

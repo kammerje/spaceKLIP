@@ -12,12 +12,14 @@ import numpy as np
 from functools import partial
 from scipy.integrate import simpson
 from scipy.interpolate import interp1d
-from scipy.ndimage import shift
+# from scipy.ndimage import shift
+from scipy import ndimage
 
 import pyklip.instruments.JWST as JWST
 import pyklip.fmlib.fmpsf as fmpsf
 import pyklip.fm as fm
 import pyklip.fitpsf as fitpsf
+from pyklip.klip import nan_gaussian_filter
 
 import webbpsf
 webbpsf.setup_logging(level='ERROR')
@@ -170,7 +172,10 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                 guess_dy = meta.de_off[j]/pxsc # pix
                 guess_sep = np.sqrt(guess_dx**2+guess_dy**2) # pix
                 guess_pa = np.rad2deg(np.arctan2(guess_dx, guess_dy)) # deg
-                guess_flux = 1e-4
+                try:
+                    guess_flux = meta.contrast_guess
+                except:
+                    guess_flux = 1e-4
                 guess_spec = np.array([1.])
 
                 # Compute the forward-modeled dataset if it does not exist,
@@ -216,15 +221,27 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                 from pyklip.klip import nan_gaussian_filter
                 with pyfits.open(fmdataset) as hdul:
                     fm_frame = hdul[0].data[KLindex]
+                    try:
+                        fm_frame = nan_gaussian_filter(fm_frame, meta.smooth)
+                    except:
+                        pass
                     fm_centx = hdul[0].header['PSFCENTX']
                     fm_centy = hdul[0].header['PSFCENTY']
                 with pyfits.open(klipdataset) as hdul:
                     data_frame = hdul[0].data[KLindex]
+                    try:
+                        data_frame = nan_gaussian_filter(data_frame, meta.smooth)
+                    except:
+                        pass
                     data_centx = hdul[0].header["PSFCENTX"]
                     data_centy = hdul[0].header["PSFCENTY"]
 
                 # If use_fm_psf is False, replace the forward-modeled PSF in
                 # the fm_frame with a simple offset PSF from WebbPSF.
+                try:
+                    use_fm_psf = meta.use_fm_psf
+                except:
+                    pass
                 if (use_fm_psf == False):
 
                     # Get the coronagraphic mask transmission map.
@@ -243,7 +260,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                         raise UserWarning('Offset PSF needs to be of odd shape')
                     shx = (fm_centx-int(fm_centx))-(guess_dx-int(guess_dx))
                     shy = (fm_centy-int(fm_centy))+(guess_dy-int(guess_dy))
-                    stamp = shift(offsetpsf, (shy, shx), mode='constant', cval=0.)
+                    stamp = ndimage.shift(offsetpsf, (shy, shx), mode='constant', cval=0.)
                     xx = np.arange(sx)-sx//2-(int(guess_dx)+(fm_centx-int(fm_centx)))
                     yy = np.arange(sy)-sy//2+(int(guess_dy)-(fm_centy-int(fm_centy)))
                     stamp_dx, stamp_dy = np.meshgrid(xx, yy)

@@ -97,3 +97,25 @@ corr_len_guess: 3.
 fitboxsize: 31 # pix
 dr: 5
 exc_rad: 3
+
+###########################################
+##### Analysis Input Data / Settings ######
+###########################################
+
+# host
+system_plx: (37.8677,0.0243) #in mas
+# input host_photometry as [['FILTER1NAME',(mag, magerr)],['FILTER2NAME',(mag, magerr)], etc ]
+host_photometry: [['Tycho/Tycho.B',(7.609, 0.03)],['Tycho/Tycho.V',(6.848, 0.03)],['2MASS/2MASS.J',(5.613,0.026)],['2MASS/2MASS.H',(5.312,0.027)],['2MASS/2MASS.Ks',(5.202,0.023)],['WISE/WISE.W1',(5.214,0.192)],['WISE/WISE.W2',(5.066,0.052)],['WISE/WISE.W3',(5.371,0.028)],['WISE/WISE.W4',(5.230,0.038)]]
+host_name: 'HD 114174 A'
+host_tag: 'HOST'
+host_model: 'bt-nextgen'
+host_teff: (5700., 5700.)
+host_logg: (4.4, 4.4)
+host_feh: (0.,0.)
+host_radius: (0.5, 20.)
+
+# companions
+comp_names: ['HD 114174 B']
+comp_photometry: [[['PAN-STARRS/PS1.y',(16.20,0.05)],['2MASS/2MASS.J',(15.66,0.06)],['2MASS/2MASS.H',(15.54,0.3)],['2MASS/2MASS.Ks',(15.22,0.02)],['JWST/NIRCAM.F335M',(15.638, 0.078)],['Keck/NIRC2.Lp',(15.30,0.16)],]]
+comp_model: 'koester-wd'
+comp_teff: (2000., 20000.)

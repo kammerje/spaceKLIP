@@ -2,3 +2,6 @@
 
 __pycache__/
 crds_cache
+tests/data/*
+tests/ultranest
+tests/species_*
