@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>spaceKLIP.io &mdash; spaceKLIP</title>
+      <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../../_static/doctools.js"></script>
+        <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../../index.html">
+            <img src="../../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+              <div class="version">
+                0.0.1
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../TLDR.html">TL;DR setup guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../Installation-and-dependencies.html">Installation and dependencies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../Config_file.html">Configuration file parameters</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Tutorials</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../tutos.html">Running the tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/01_quickstart.html">Quick-start tutorial</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">About</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../Contact.html">Contact</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../Attribution.html">Attribution</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Package content</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../spaceKLIP.html">spaceKLIP package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../gen_index.html">Index</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">spaceKLIP</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home"></a> &raquo;</li>
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+      <li>spaceKLIP.io</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for spaceKLIP.io</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">division</span>
+
+
+<span class="c1"># =============================================================================</span>
+<span class="c1"># IMPORTS</span>
+<span class="c1"># =============================================================================</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">json</span><span class="o">,</span> <span class="nn">yaml</span>
+
+<span class="kn">import</span> <span class="nn">glob</span><span class="o">,</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">copy</span>
+
+<span class="kn">from</span> <span class="nn">astropy.table</span> <span class="kn">import</span> <span class="n">Table</span>
+<span class="kn">import</span> <span class="nn">astropy.io.fits</span> <span class="k">as</span> <span class="nn">pyfits</span>
+
+<span class="kn">import</span> <span class="nn">webbpsf</span>
+<span class="n">webbpsf</span><span class="o">.</span><span class="n">setup_logging</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="s1">&#39;ERROR&#39;</span><span class="p">)</span>
+
+<span class="n">rad2mas</span> <span class="o">=</span> <span class="mf">180.</span><span class="o">/</span><span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="o">*</span><span class="mf">3600.</span><span class="o">*</span><span class="mf">1000.</span>
+
+
+<span class="c1"># =============================================================================</span>
+<span class="c1"># MAIN</span>
+<span class="c1"># =============================================================================</span>
+
+<div class="viewcode-block" id="read_config"><a class="viewcode-back" href="../../spaceKLIP.html#spaceKLIP.io.read_config">[docs]</a><span class="k">def</span> <span class="nf">read_config</span><span class="p">(</span><span class="n">file</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Read a .yaml configuration file that defines the code execution.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    file : str  </span>
+<span class="sd">        File path of .yaml configuration file.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    config : dict</span>
+<span class="sd">        Dictionary of all configuration parameters.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">stream</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">config</span> <span class="o">=</span> <span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="n">stream</span><span class="p">)</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">yaml</span><span class="o">.</span><span class="n">YAMLError</span>
+
+    <span class="n">temp</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="s1">&#39;pa_ranges_bar&#39;</span><span class="p">]</span>
+    <span class="n">Nval</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">temp</span><span class="p">)</span>
+    <span class="n">pa_ranges_bar</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">if</span> <span class="n">Nval</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">UserWarning</span><span class="p">(</span><span class="s1">&#39;pa_ranges_bar needs to be list of 2-tuples&#39;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">Nval</span><span class="o">//</span><span class="mi">2</span><span class="p">):</span>
+        <span class="n">pa_ranges_bar</span> <span class="o">+=</span> <span class="p">[(</span><span class="nb">float</span><span class="p">(</span><span class="n">temp</span><span class="p">[</span><span class="mi">2</span><span class="o">*</span><span class="n">i</span><span class="p">][</span><span class="mi">1</span><span class="p">:]),</span> <span class="nb">float</span><span class="p">(</span><span class="n">temp</span><span class="p">[</span><span class="mi">2</span><span class="o">*</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">][:</span><span class="o">-</span><span class="mi">1</span><span class="p">]))]</span>
+    <span class="n">config</span><span class="p">[</span><span class="s1">&#39;pa_ranges_bar&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pa_ranges_bar</span>
+
+    <span class="k">return</span> <span class="n">config</span></div>
+
+<div class="viewcode-block" id="meta_to_json"><a class="viewcode-back" href="../../spaceKLIP.html#spaceKLIP.io.meta_to_json">[docs]</a><span class="k">def</span> <span class="nf">meta_to_json</span><span class="p">(</span><span class="n">input_meta</span><span class="p">,</span> <span class="n">savefile</span><span class="o">=</span><span class="s1">&#39;./MetaSave.txt&#39;</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    Convert meta object to a dictionary and save into a json file</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">meta</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">input_meta</span><span class="p">)</span>
+
+    <span class="c1"># Remove transmission as it is a function</span>
+    <span class="n">meta</span><span class="o">.</span><span class="n">transmission</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="c1"># Need to convert astropy table to strings</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">meta</span><span class="o">.</span><span class="n">obs</span><span class="p">:</span>
+        <span class="n">meta</span><span class="o">.</span><span class="n">obs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">Table</span><span class="o">.</span><span class="n">pformat_all</span><span class="p">(</span><span class="n">meta</span><span class="o">.</span><span class="n">obs</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+
+    <span class="c1"># Need to find numpy types and convert to default python types</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">vars</span><span class="p">(</span><span class="n">meta</span><span class="p">)</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+        <span class="c1"># Is it a numpy data type?</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="nb">vars</span><span class="p">(</span><span class="n">meta</span><span class="p">)[</span><span class="n">i</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">generic</span><span class="p">):</span>
+            <span class="n">to_py</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">meta</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+            <span class="nb">setattr</span><span class="p">(</span><span class="n">meta</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">to_py</span><span class="p">)</span>
+
+        <span class="c1"># Check another level down</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="nb">vars</span><span class="p">(</span><span class="n">meta</span><span class="p">)[</span><span class="n">i</span><span class="p">],</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="n">d</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">meta</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span>
+
+            <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">d</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">d</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">generic</span><span class="p">):</span>
+                    <span class="n">d</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">d</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+            <span class="nb">setattr</span><span class="p">(</span><span class="n">meta</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">d</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="nb">vars</span><span class="p">(</span><span class="n">meta</span><span class="p">)[</span><span class="n">i</span><span class="p">],</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="n">l</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">meta</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span>
+
+            <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="n">l</span><span class="p">:</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">j</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">generic</span><span class="p">):</span>
+                    <span class="n">l</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">l</span><span class="p">[</span><span class="n">j</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+            <span class="nb">setattr</span><span class="p">(</span><span class="n">meta</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">l</span><span class="p">)</span>
+
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">savefile</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">msavefile</span><span class="p">:</span>
+        <span class="n">json</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="nb">vars</span><span class="p">(</span><span class="n">meta</span><span class="p">),</span> <span class="n">msavefile</span><span class="p">)</span>
+
+    <span class="k">return</span></div>
+
+<div class="viewcode-block" id="read_metajson"><a class="viewcode-back" href="../../spaceKLIP.html#spaceKLIP.io.read_metajson">[docs]</a><span class="k">def</span> <span class="nf">read_metajson</span><span class="p">(</span><span class="n">file</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Load a Meta save file as a json dictionary, don&#39;t convert back into a</span>
+<span class="sd">    class as it doesn&#39;t seem necessary yet.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">file</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">metasave</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">metasave</span></div>
+
+<div class="viewcode-block" id="extract_obs"><a class="viewcode-back" href="../../spaceKLIP.html#spaceKLIP.io.extract_obs">[docs]</a><span class="k">def</span> <span class="nf">extract_obs</span><span class="p">(</span><span class="n">meta</span><span class="p">,</span> <span class="n">fitsfiles_all</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Extract the metadata of the observations from the FITS files. All</span>
+<span class="sd">    observations with the same hash (i.e., INSTRUME, DETECTOR, FILTER, PUPIL,</span>
+<span class="sd">    CORONMSK, SUBARRAY, APERNAME) will be grouped together into a</span>
+<span class="sd">    concatenation. Each concatenation will then be reduced separately by</span>
+<span class="sd">    spaceKLIP. Science and reference PSFs are identified based on their number</span>
+<span class="sd">    of dither positions, assuming that there is no dithering for the science</span>
+<span class="sd">    PSFs and dithering for the reference PSFs.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    meta : object of type meta</span>
+<span class="sd">        Meta object that contains all the metadata of the observations.</span>
+<span class="sd">    fitsfiles_all : list of str</span>
+<span class="sd">        List of the FITS files whose metadata shall be extracted.</span>
+<span class="sd">    </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    meta : object of type meta</span>
+<span class="sd">        Meta object that contains all the metadata of the observations.</span>
+<span class="sd">    </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="c1"># Get all FITS files whose exposure type is compatible with spaceKLIP.</span>
+    <span class="n">fitsfiles</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">file</span> <span class="ow">in</span> <span class="n">fitsfiles_all</span><span class="p">:</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">pyfits</span><span class="o">.</span><span class="n">getheader</span><span class="p">(</span><span class="n">file</span><span class="p">)[</span><span class="s1">&#39;EXP_TYPE&#39;</span><span class="p">]</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;NRC_IMAGE&#39;</span><span class="p">,</span> <span class="s1">&#39;NRC_CORON&#39;</span><span class="p">,</span> <span class="s1">&#39;MIR_IMAGE&#39;</span><span class="p">,</span> <span class="s1">&#39;MIR_LYOT&#39;</span><span class="p">,</span> <span class="s1">&#39;MIR_4QPM&#39;</span><span class="p">]):</span>
+            <span class="n">fitsfiles</span> <span class="o">+=</span> <span class="p">[</span><span class="n">file</span><span class="p">]</span>
+    <span class="n">fitsfiles</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">fitsfiles</span><span class="p">)</span>
+    
+    <span class="c1"># Load the WebbPSF NIRCam and MIRI classes.</span>
+    <span class="n">nrc</span> <span class="o">=</span> <span class="n">webbpsf</span><span class="o">.</span><span class="n">NIRCam</span><span class="p">()</span>
+    <span class="n">mir</span> <span class="o">=</span> <span class="n">webbpsf</span><span class="o">.</span><span class="n">MIRI</span><span class="p">()</span>
+    
+    <span class="c1"># Extract the metadata of the observations from the FITS files.</span>
+    <span class="n">Nfitsfiles</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">fitsfiles</span><span class="p">)</span>
+    <span class="n">TARGPROP</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">Nfitsfiles</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s1">&#39;U100&#39;</span><span class="p">))</span>
+    <span class="n">TARG_RA</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">Nfitsfiles</span><span class="p">)</span> <span class="c1"># deg</span>
+    <span class="n">TARG_DEC</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">Nfitsfiles</span><span class="p">)</span> <span class="c1"># deg</span>
+    <span class="n">INSTRUME</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">Nfitsfiles</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s1">&#39;U100&#39;</span><span class="p">))</span>
+    <span class="n">DETECTOR</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">Nfitsfiles</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s1">&#39;U100&#39;</span><span class="p">))</span>
+    <span class="n">FILTER</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">Nfitsfiles</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s1">&#39;U100&#39;</span><span class="p">))</span>
+    <span class="n">PUPIL</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">Nfitsfiles</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s1">&#39;U100&#39;</span><span class="p">))</span>
+    <span class="n">CORONMSK</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">Nfitsfiles</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s1">&#39;U100&#39;</span><span class="p">))</span>
+    <span class="n">READPATT</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">Nfitsfiles</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s1">&#39;U100&#39;</span><span class="p">))</span>
+    <span class="n">NINTS</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">Nfitsfiles</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
+    <span class="n">NGROUPS</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">Nfitsfiles</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
+    <span class="n">NFRAMES</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">Nfitsfiles</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
+    <span class="n">EFFINTTM</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">Nfitsfiles</span><span class="p">)</span> <span class="c1"># s</span>
+    <span class="n">SUBARRAY</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">Nfitsfiles</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s1">&#39;U100&#39;</span><span class="p">))</span>
+    <span class="n">SUBPXPTS</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">Nfitsfiles</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
+    <span class="n">APERNAME</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">Nfitsfiles</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s1">&#39;U100&#39;</span><span class="p">))</span>
+    <span class="n">PIXSCALE</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">Nfitsfiles</span><span class="p">)</span> <span class="c1"># mas</span>
+    <span class="n">PIXAR_SR</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">Nfitsfiles</span><span class="p">)</span> <span class="c1"># sr</span>
+    <span class="n">RA_REF</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">Nfitsfiles</span><span class="p">)</span> <span class="c1"># deg</span>
+    <span class="n">DEC_REF</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">Nfitsfiles</span><span class="p">)</span> <span class="c1"># deg</span>
+    <span class="n">ROLL_REF</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">Nfitsfiles</span><span class="p">)</span> <span class="c1"># deg</span>
+    <span class="n">HASH</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">Nfitsfiles</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s1">&#39;U100&#39;</span><span class="p">))</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">file</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">fitsfiles</span><span class="p">):</span>
+        <span class="n">hdul</span> <span class="o">=</span> <span class="n">pyfits</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">file</span><span class="p">)</span>
+        
+        <span class="n">head</span> <span class="o">=</span> <span class="n">hdul</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">header</span>
+        <span class="k">if</span> <span class="p">(</span><span class="s1">&#39;SGD&#39;</span> <span class="ow">in</span> <span class="n">file</span><span class="p">):</span> <span class="c1"># MIRI test data</span>
+            <span class="n">TARGPROP</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;CALIBRATOR&#39;</span>
+        <span class="k">elif</span> <span class="p">(</span><span class="s1">&#39;HD141569&#39;</span> <span class="ow">in</span> <span class="n">file</span><span class="p">):</span> <span class="c1"># MIRI test data</span>
+            <span class="n">TARGPROP</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;HD141569&#39;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">TARGPROP</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">head</span><span class="p">[</span><span class="s1">&#39;TARGPROP&#39;</span><span class="p">]</span>        
+        <span class="n">TARG_RA</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">head</span><span class="p">[</span><span class="s1">&#39;TARG_RA&#39;</span><span class="p">]</span> <span class="c1"># deg</span>
+        <span class="n">TARG_DEC</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">head</span><span class="p">[</span><span class="s1">&#39;TARG_DEC&#39;</span><span class="p">]</span> <span class="c1"># deg</span>
+        <span class="n">INSTRUME</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">head</span><span class="p">[</span><span class="s1">&#39;INSTRUME&#39;</span><span class="p">]</span>
+        <span class="n">DETECTOR</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">head</span><span class="p">[</span><span class="s1">&#39;DETECTOR&#39;</span><span class="p">]</span>
+        <span class="n">FILTER</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">head</span><span class="p">[</span><span class="s1">&#39;FILTER&#39;</span><span class="p">]</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">PUPIL</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">head</span><span class="p">[</span><span class="s1">&#39;PUPIL&#39;</span><span class="p">]</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="n">PUPIL</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;NONE&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">CORONMSK</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">head</span><span class="p">[</span><span class="s1">&#39;CORONMSK&#39;</span><span class="p">]</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="n">CORONMSK</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;NONE&#39;</span>
+        <span class="n">READPATT</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">head</span><span class="p">[</span><span class="s1">&#39;READPATT&#39;</span><span class="p">]</span>
+        <span class="n">NINTS</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">head</span><span class="p">[</span><span class="s1">&#39;NINTS&#39;</span><span class="p">]</span>
+        <span class="n">NGROUPS</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">head</span><span class="p">[</span><span class="s1">&#39;NGROUPS&#39;</span><span class="p">]</span>
+        <span class="n">NFRAMES</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">head</span><span class="p">[</span><span class="s1">&#39;NFRAMES&#39;</span><span class="p">]</span>
+        <span class="n">EFFINTTM</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">head</span><span class="p">[</span><span class="s1">&#39;EFFINTTM&#39;</span><span class="p">]</span> <span class="c1"># s</span>
+        <span class="n">SUBARRAY</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">head</span><span class="p">[</span><span class="s1">&#39;SUBARRAY&#39;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="p">(</span><span class="s1">&#39;SGD&#39;</span> <span class="ow">in</span> <span class="n">file</span><span class="p">):</span> <span class="c1"># MIRI test data</span>
+            <span class="n">SUBPXPTS</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="mi">5</span>
+        <span class="k">elif</span> <span class="p">(</span><span class="s1">&#39;HD141569&#39;</span> <span class="ow">in</span> <span class="n">file</span><span class="p">):</span> <span class="c1"># MIRI test data</span>
+            <span class="n">SUBPXPTS</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">SUBPXPTS</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">head</span><span class="p">[</span><span class="s1">&#39;SUBPXPTS&#39;</span><span class="p">]</span>
+            <span class="k">except</span><span class="p">:</span>
+                <span class="n">SUBPXPTS</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">APERNAME</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">head</span><span class="p">[</span><span class="s1">&#39;APERNAME&#39;</span><span class="p">]</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="n">APERNAME</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;NONE&#39;</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">INSTRUME</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;NIRCAM&#39;</span><span class="p">):</span>
+            <span class="k">if</span> <span class="p">(</span><span class="s1">&#39;LONG&#39;</span> <span class="ow">in</span> <span class="n">DETECTOR</span><span class="p">[</span><span class="n">i</span><span class="p">]):</span>
+                <span class="n">PIXSCALE</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">nrc</span><span class="o">.</span><span class="n">_pixelscale_long</span><span class="o">*</span><span class="mf">1e3</span> <span class="c1"># mas</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">PIXSCALE</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">nrc</span><span class="o">.</span><span class="n">_pixelscale_short</span><span class="o">*</span><span class="mf">1e3</span> <span class="c1"># mas</span>
+
+        <span class="k">elif</span> <span class="p">(</span><span class="n">INSTRUME</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;MIRI&#39;</span><span class="p">):</span>
+            <span class="n">PIXSCALE</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">mir</span><span class="o">.</span><span class="n">pixelscale</span><span class="o">*</span><span class="mf">1e3</span> <span class="c1"># mas</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">UserWarning</span><span class="p">(</span><span class="s1">&#39;Unknown instrument&#39;</span><span class="p">)</span>
+        
+        <span class="n">head</span> <span class="o">=</span> <span class="n">hdul</span><span class="p">[</span><span class="s1">&#39;SCI&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">header</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">PIXAR_SR</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">head</span><span class="p">[</span><span class="s1">&#39;PIXAR_SR&#39;</span><span class="p">]</span> <span class="c1"># sr</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="n">PIXAR_SR</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">PIXSCALE</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">**</span><span class="mi">2</span><span class="o">/</span><span class="n">rad2mas</span><span class="o">**</span><span class="mi">2</span> <span class="c1"># sr</span>
+        <span class="n">RA_REF</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">head</span><span class="p">[</span><span class="s1">&#39;RA_REF&#39;</span><span class="p">]</span> <span class="c1"># deg</span>
+        <span class="n">DEC_REF</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">head</span><span class="p">[</span><span class="s1">&#39;DEC_REF&#39;</span><span class="p">]</span> <span class="c1"># deg</span>
+        <span class="k">if</span> <span class="p">(</span><span class="s1">&#39;SGD&#39;</span> <span class="ow">in</span> <span class="n">file</span><span class="p">):</span> <span class="c1"># MIRI test data</span>
+            <span class="n">ROLL_REF</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.</span> <span class="c1"># deg</span>
+        <span class="k">elif</span> <span class="p">(</span><span class="s1">&#39;HD141569&#39;</span> <span class="ow">in</span> <span class="n">file</span><span class="p">):</span> <span class="c1"># MIRI test data</span>
+            <span class="n">ROLL_REF</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">file</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;_&#39;</span><span class="p">)[</span><span class="mi">2</span><span class="p">][</span><span class="mi">2</span><span class="p">:]</span> <span class="c1"># deg</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">ROLL_REF</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">head</span><span class="p">[</span><span class="s1">&#39;ROLL_REF&#39;</span><span class="p">]</span> <span class="c1"># deg</span>
+        
+        <span class="c1"># Create a hash for each observation. All observations with the same</span>
+        <span class="c1"># hash will be grouped together into a concatenation. Each</span>
+        <span class="c1"># concatenation will then be reduced separately by spaceKLIP.</span>
+        <span class="n">HASH</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">INSTRUME</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">+</span><span class="s1">&#39;_&#39;</span><span class="o">+</span><span class="n">DETECTOR</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">+</span><span class="s1">&#39;_&#39;</span><span class="o">+</span><span class="n">FILTER</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">+</span><span class="s1">&#39;_&#39;</span><span class="o">+</span><span class="n">PUPIL</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">+</span><span class="s1">&#39;_&#39;</span><span class="o">+</span><span class="n">CORONMSK</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">+</span><span class="s1">&#39;_&#39;</span><span class="o">+</span><span class="n">SUBARRAY</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">+</span><span class="s1">&#39;_&#39;</span><span class="o">+</span><span class="n">APERNAME</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+        
+        <span class="n">hdul</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+    
+    <span class="c1"># Group together all observations with the same hash into a concatenation.</span>
+    <span class="n">HASH_unique</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">HASH</span><span class="p">)</span>
+    <span class="n">NHASH_unique</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">HASH_unique</span><span class="p">)</span>
+    <span class="n">meta</span><span class="o">.</span><span class="n">instrume</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">meta</span><span class="o">.</span><span class="n">detector</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">meta</span><span class="o">.</span><span class="n">filter</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">meta</span><span class="o">.</span><span class="n">pupil</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">meta</span><span class="o">.</span><span class="n">coronmsk</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">meta</span><span class="o">.</span><span class="n">subarray</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">meta</span><span class="o">.</span><span class="n">apername</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">meta</span><span class="o">.</span><span class="n">pixscale</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">meta</span><span class="o">.</span><span class="n">pixar_sr</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">meta</span><span class="o">.</span><span class="n">obs</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">NHASH_unique</span><span class="p">):</span>
+        <span class="n">ww</span> <span class="o">=</span> <span class="n">HASH</span> <span class="o">==</span> <span class="n">HASH_unique</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+        
+        <span class="c1"># Science and reference PSFs are identified based on their number of</span>
+        <span class="c1"># dither positions, assuming that there is no dithering for the</span>
+        <span class="c1"># science PSFs and dithering for the reference PSFs.</span>
+        <span class="n">dpts</span> <span class="o">=</span> <span class="n">SUBPXPTS</span><span class="p">[</span><span class="n">ww</span><span class="p">]</span>
+        <span class="n">dpts_unique</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">dpts</span><span class="p">)</span>
+        <span class="k">if</span> <span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">dpts_unique</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">dpts_unique</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)):</span>
+            <span class="n">ww_sci</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">dpts</span> <span class="o">==</span> <span class="n">dpts_unique</span><span class="p">[</span><span class="mi">0</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">ww_cal</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">dpts</span> <span class="o">==</span> <span class="n">dpts_unique</span><span class="p">[</span><span class="mi">1</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">UserWarning</span><span class="p">(</span><span class="s1">&#39;Science and reference PSFs are identified based on their number of dither positions, assuming that there is no dithering for the science PSFs and dithering for the reference PSFs&#39;</span><span class="p">)</span>
+        
+        <span class="c1"># These metadata are the same for all observations within one</span>
+        <span class="c1"># concatenation.</span>
+        <span class="n">meta</span><span class="o">.</span><span class="n">instrume</span><span class="p">[</span><span class="n">HASH_unique</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span> <span class="o">=</span> <span class="n">INSTRUME</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_sci</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">meta</span><span class="o">.</span><span class="n">detector</span><span class="p">[</span><span class="n">HASH_unique</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span> <span class="o">=</span> <span class="n">DETECTOR</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_sci</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">meta</span><span class="o">.</span><span class="n">filter</span><span class="p">[</span><span class="n">HASH_unique</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span> <span class="o">=</span> <span class="n">FILTER</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_sci</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">meta</span><span class="o">.</span><span class="n">pupil</span><span class="p">[</span><span class="n">HASH_unique</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span> <span class="o">=</span> <span class="n">PUPIL</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_sci</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">meta</span><span class="o">.</span><span class="n">coronmsk</span><span class="p">[</span><span class="n">HASH_unique</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span> <span class="o">=</span> <span class="n">CORONMSK</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_sci</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">meta</span><span class="o">.</span><span class="n">subarray</span><span class="p">[</span><span class="n">HASH_unique</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span> <span class="o">=</span> <span class="n">SUBARRAY</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_sci</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">meta</span><span class="o">.</span><span class="n">apername</span><span class="p">[</span><span class="n">HASH_unique</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span> <span class="o">=</span> <span class="n">APERNAME</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_sci</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">meta</span><span class="o">.</span><span class="n">pixscale</span><span class="p">[</span><span class="n">HASH_unique</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span> <span class="o">=</span> <span class="n">PIXSCALE</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_sci</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">meta</span><span class="o">.</span><span class="n">pixar_sr</span><span class="p">[</span><span class="n">HASH_unique</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span> <span class="o">=</span> <span class="n">PIXAR_SR</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_sci</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        
+        <span class="c1"># These metadata are different for each observation within the</span>
+        <span class="c1"># concatenation.</span>
+        <span class="c1"># TODO: PIXSCALE and PA_V3 will be removed in a future version because</span>
+        <span class="c1">#       they are duplicates. They are kept for now to ensure backward</span>
+        <span class="c1">#       compatibility.</span>
+        <span class="n">tab</span> <span class="o">=</span> <span class="n">Table</span><span class="p">(</span><span class="n">names</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;TYP&#39;</span><span class="p">,</span> <span class="s1">&#39;TARGPROP&#39;</span><span class="p">,</span> <span class="s1">&#39;TARG_RA&#39;</span><span class="p">,</span> <span class="s1">&#39;TARG_DEC&#39;</span><span class="p">,</span> <span class="s1">&#39;READPATT&#39;</span><span class="p">,</span> <span class="s1">&#39;NINTS&#39;</span><span class="p">,</span> <span class="s1">&#39;NGROUPS&#39;</span><span class="p">,</span> <span class="s1">&#39;NFRAMES&#39;</span><span class="p">,</span> <span class="s1">&#39;EFFINTTM&#39;</span><span class="p">,</span> <span class="s1">&#39;RA_REF&#39;</span><span class="p">,</span> <span class="s1">&#39;DEC_REF&#39;</span><span class="p">,</span> <span class="s1">&#39;ROLL_REF&#39;</span><span class="p">,</span> <span class="s1">&#39;FITSFILE&#39;</span><span class="p">,</span> <span class="s1">&#39;PIXSCALE&#39;</span><span class="p">,</span> <span class="s1">&#39;PA_V3&#39;</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;S&#39;</span><span class="p">,</span> <span class="s1">&#39;S&#39;</span><span class="p">,</span> <span class="s1">&#39;f&#39;</span><span class="p">,</span> <span class="s1">&#39;f&#39;</span><span class="p">,</span> <span class="s1">&#39;S&#39;</span><span class="p">,</span> <span class="s1">&#39;i&#39;</span><span class="p">,</span> <span class="s1">&#39;i&#39;</span><span class="p">,</span> <span class="s1">&#39;i&#39;</span><span class="p">,</span> <span class="s1">&#39;f&#39;</span><span class="p">,</span> <span class="s1">&#39;f&#39;</span><span class="p">,</span> <span class="s1">&#39;f&#39;</span><span class="p">,</span> <span class="s1">&#39;f&#39;</span><span class="p">,</span> <span class="s1">&#39;S&#39;</span><span class="p">,</span> <span class="s1">&#39;f&#39;</span><span class="p">,</span> <span class="s1">&#39;f&#39;</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">ww_sci</span><span class="p">)):</span>
+            <span class="n">tab</span><span class="o">.</span><span class="n">add_row</span><span class="p">((</span><span class="s1">&#39;SCI&#39;</span><span class="p">,</span> <span class="n">TARGPROP</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_sci</span><span class="p">][</span><span class="n">j</span><span class="p">],</span> <span class="n">TARG_RA</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_sci</span><span class="p">][</span><span class="n">j</span><span class="p">],</span> <span class="n">TARG_DEC</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_sci</span><span class="p">][</span><span class="n">j</span><span class="p">],</span> <span class="n">READPATT</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_sci</span><span class="p">][</span><span class="n">j</span><span class="p">],</span> <span class="n">NINTS</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_sci</span><span class="p">][</span><span class="n">j</span><span class="p">],</span> <span class="n">NGROUPS</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_sci</span><span class="p">][</span><span class="n">j</span><span class="p">],</span> <span class="n">NFRAMES</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_sci</span><span class="p">][</span><span class="n">j</span><span class="p">],</span> <span class="n">EFFINTTM</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_sci</span><span class="p">][</span><span class="n">j</span><span class="p">],</span> <span class="n">RA_REF</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_sci</span><span class="p">][</span><span class="n">j</span><span class="p">],</span> <span class="n">DEC_REF</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_sci</span><span class="p">][</span><span class="n">j</span><span class="p">],</span> <span class="n">ROLL_REF</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_sci</span><span class="p">][</span><span class="n">j</span><span class="p">],</span> <span class="n">fitsfiles</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_sci</span><span class="p">][</span><span class="n">j</span><span class="p">],</span> <span class="n">PIXSCALE</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_sci</span><span class="p">][</span><span class="n">j</span><span class="p">],</span> <span class="n">ROLL_REF</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_sci</span><span class="p">][</span><span class="n">j</span><span class="p">]))</span>
+        <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">ww_cal</span><span class="p">)):</span>
+            <span class="n">tab</span><span class="o">.</span><span class="n">add_row</span><span class="p">((</span><span class="s1">&#39;CAL&#39;</span><span class="p">,</span> <span class="n">TARGPROP</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_cal</span><span class="p">][</span><span class="n">j</span><span class="p">],</span> <span class="n">TARG_RA</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_cal</span><span class="p">][</span><span class="n">j</span><span class="p">],</span> <span class="n">TARG_DEC</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_cal</span><span class="p">][</span><span class="n">j</span><span class="p">],</span> <span class="n">READPATT</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_cal</span><span class="p">][</span><span class="n">j</span><span class="p">],</span> <span class="n">NINTS</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_cal</span><span class="p">][</span><span class="n">j</span><span class="p">],</span> <span class="n">NGROUPS</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_cal</span><span class="p">][</span><span class="n">j</span><span class="p">],</span> <span class="n">NFRAMES</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_cal</span><span class="p">][</span><span class="n">j</span><span class="p">],</span> <span class="n">EFFINTTM</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_cal</span><span class="p">][</span><span class="n">j</span><span class="p">],</span> <span class="n">RA_REF</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_cal</span><span class="p">][</span><span class="n">j</span><span class="p">],</span> <span class="n">DEC_REF</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_cal</span><span class="p">][</span><span class="n">j</span><span class="p">],</span> <span class="n">ROLL_REF</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_cal</span><span class="p">][</span><span class="n">j</span><span class="p">],</span> <span class="n">fitsfiles</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_cal</span><span class="p">][</span><span class="n">j</span><span class="p">],</span> <span class="n">PIXSCALE</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_cal</span><span class="p">][</span><span class="n">j</span><span class="p">],</span> <span class="n">ROLL_REF</span><span class="p">[</span><span class="n">ww</span><span class="p">][</span><span class="n">ww_cal</span><span class="p">][</span><span class="n">j</span><span class="p">]))</span>
+        <span class="n">meta</span><span class="o">.</span><span class="n">obs</span><span class="p">[</span><span class="n">HASH_unique</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span> <span class="o">=</span> <span class="n">tab</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">del</span> <span class="n">tab</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="n">meta</span><span class="o">.</span><span class="n">verbose</span> <span class="o">==</span> <span class="kc">True</span><span class="p">):</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;--&gt; Identified </span><span class="si">%.0f</span><span class="s1"> concatenations&#39;</span> <span class="o">%</span> <span class="nb">len</span><span class="p">(</span><span class="n">meta</span><span class="o">.</span><span class="n">obs</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">meta</span><span class="o">.</span><span class="n">obs</span><span class="o">.</span><span class="n">keys</span><span class="p">()):</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;--&gt; Concatenation </span><span class="si">%.0f</span><span class="s1">: &#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">+</span><span class="n">key</span><span class="p">)</span>
+            <span class="n">print_tab</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">meta</span><span class="o">.</span><span class="n">obs</span><span class="p">[</span><span class="n">key</span><span class="p">])</span>
+            <span class="n">print_tab</span><span class="o">.</span><span class="n">remove_column</span><span class="p">(</span><span class="s1">&#39;FITSFILE&#39;</span><span class="p">)</span>
+            <span class="n">print_tab</span><span class="o">.</span><span class="n">pprint</span><span class="p">(</span><span class="n">max_lines</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">max_width</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
+    
+    <span class="k">return</span> <span class="n">meta</span></div>
+
+<div class="viewcode-block" id="get_working_files"><a class="viewcode-back" href="../../spaceKLIP.html#spaceKLIP.io.get_working_files">[docs]</a><span class="k">def</span> <span class="nf">get_working_files</span><span class="p">(</span><span class="n">meta</span><span class="p">,</span> <span class="n">runcheck</span><span class="p">,</span> <span class="n">subdir</span><span class="o">=</span><span class="s1">&#39;RAMPFIT&#39;</span><span class="p">,</span> <span class="n">search</span><span class="o">=</span><span class="s1">&#39;uncal.fits&#39;</span><span class="p">):</span>
+
+    <span class="c1"># Add wild card to the start of the search string</span>
+    <span class="n">search</span> <span class="o">=</span> <span class="s1">&#39;*&#39;</span> <span class="o">+</span> <span class="n">search</span> 
+    <span class="c1"># Figure out where to look for files</span>
+    <span class="k">if</span> <span class="n">runcheck</span><span class="p">:</span>
+        <span class="c1">#Use an output directory that was just created</span>
+        <span class="n">rdir</span> <span class="o">=</span> <span class="n">meta</span><span class="o">.</span><span class="n">odir</span> <span class="o">+</span> <span class="n">subdir</span> <span class="o">+</span> <span class="s1">&#39;/&#39;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1">#Use the specified input directory</span>
+        <span class="n">rdir</span> <span class="o">=</span> <span class="n">meta</span><span class="o">.</span><span class="n">idir</span>
+
+    <span class="c1"># Grab the files</span>
+    <span class="n">files</span> <span class="o">=</span> <span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="n">rdir</span> <span class="o">+</span> <span class="n">search</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">files</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="c1"># Let&#39;s look for a subdir</span>
+        <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">rdir</span> <span class="o">+</span> <span class="n">subdir</span><span class="p">):</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Located </span><span class="si">{}</span><span class="s1"> folder within input directory.&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">subdir</span><span class="p">))</span>
+            <span class="n">rdir</span> <span class="o">+=</span> <span class="n">subdir</span> <span class="o">+</span> <span class="s1">&#39;/&#39;</span> <span class="o">+</span> <span class="n">search</span>
+            <span class="n">files</span> <span class="o">=</span> <span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="n">rdir</span><span class="p">)</span>
+        
+        <span class="c1"># If there are still no files, look in output directory</span>
+        <span class="k">if</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">files</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="s1">&#39;/</span><span class="si">{}</span><span class="s1">/&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">subdir</span><span class="p">)</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">rdir</span><span class="p">):</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;WARNING: No </span><span class="si">{}</span><span class="s1"> files found in input directory, searching output directory.&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">search</span><span class="p">))</span>
+            <span class="n">rdir</span> <span class="o">=</span> <span class="n">meta</span><span class="o">.</span><span class="n">odir</span> <span class="o">+</span> <span class="n">subdir</span> <span class="o">+</span> <span class="s1">&#39;/&#39;</span> <span class="o">+</span> <span class="n">search</span>
+            <span class="n">files</span> <span class="o">=</span> <span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="n">rdir</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">files</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Unable to find any </span><span class="si">{}</span><span class="s1"> files in specified input or output directories.&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">search</span><span class="p">))</span>
+
+    <span class="k">if</span> <span class="n">meta</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;--&gt; Found </span><span class="si">{}</span><span class="s1"> files under: </span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">files</span><span class="p">),</span> <span class="n">rdir</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">files</span></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright ERS-1386 Collaboration.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
