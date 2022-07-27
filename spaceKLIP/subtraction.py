@@ -11,6 +11,7 @@ from pyklip.instruments.Instrument import GenericData
 import pyklip.rdi as rdi
 import pyklip.instruments.JWST as JWST
 import pyklip.parallelized as parallelized
+import pyklip.instruments.utils.bkgd as bkgd
 
 from . import io
 from . import utils
@@ -27,7 +28,13 @@ def perform_subtraction(meta):
         engine.py.
 
     '''
-    files = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS', search=meta.sub_ext)
+
+    if meta.use_cleaned:
+        ext = '_CLEAN'
+    else:
+        ext = ''
+
+    files = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS/SCI+REF'+ext, search=meta.sub_ext)
     # Run some preparation steps on the meta object
     meta = utils.prepare_meta(meta, files)
 
@@ -35,19 +42,25 @@ def perform_subtraction(meta):
         print('WARNING: Background subtraction only works if running one filter at a time!')
         bgout = bg_subtraction(meta)
         # Reinitialise meta info for pyKLIP
-        files = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS+BGSUB', search=meta.sub_ext)
+        files = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS/BGSUB', search=meta.sub_ext)
         meta = utils.prepare_meta(meta, files)
 
     # Perform KLIP subtraction
-    klip_subtraction(meta, files)
+    if not meta.bgonly:
+        klip_subtraction(meta, files)
 
 def bg_subtraction(meta):
     '''
     Perform background subtraction on the processed images
     '''
-    if meta.bgsub == 'default' or meta.bgsub == 'pyklip':
-        bgsci_files = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS_BGSCI', search=meta.sub_ext)
-        bgref_files = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS_BGREF', search=meta.sub_ext)
+    if meta.use_cleaned:
+        ext = '_CLEAN'
+    else:
+        ext = ''
+
+    if meta.bgsub in ['default', 'pyklip', 'leastsq']:
+        bgsci_files = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS/BGSCI'+ext, search=meta.sub_ext)
+        bgref_files = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS/BGREF'+ext, search=meta.sub_ext)
     elif meta.bgsub == 'saved':
         # Use saved files
         return None
@@ -97,13 +110,15 @@ def bg_subtraction(meta):
                             temp_data = hdul[ext].data
                             hdul[ext].data = np.array(temp_data[data_start:])
 
-                    savedir = '/'.join(file.split('/')[:-1]).replace('IMGPROCESS', 'IMGPROCESS+BGSUB')
+                    savedir = '/'.join(file.split('/')[:-2])+'/BGSUB'
                     savefile = file.split('/')[-1].replace('calints', 'bg_calints')
                     if not os.path.exists(savedir):
                         os.makedirs(savedir)
                     hdul.writeto(savedir+'/'+savefile, overwrite=meta.overwrite)
         elif meta.bgsub == 'pyklip':
             klip_bg(basefiles, files, data_start=data_start, overwrite=meta.overwrite)
+        elif meta.bgsub == 'leastsq':
+            leastsq_bg(meta, basefiles, files, data_start=data_start, overwrite=meta.overwrite)
 
     return
 
@@ -140,7 +155,7 @@ def median_bg(files, data_start=0):
 
     return bg_median
 
-def klip_bg(basefiles, files, data_start=0, overwrite=True):
+def klip_bg(basefiles, bgfiles, data_start=0, overwrite=True):
 
     data = []
     pas = []
@@ -181,7 +196,7 @@ def klip_bg(basefiles, files, data_start=0, overwrite=True):
     # Now prep the PSF Library
     psflib_imgs = []
     psflib_filenames = []
-    for file in files:
+    for file in bgfiles:
         with fits.open(file) as hdu:
             nints = hdu[0].header['NINTS'] - data_start
             filt = hdu[0].header['FILTER']
@@ -232,7 +247,109 @@ def klip_bg(basefiles, files, data_start=0, overwrite=True):
                     hdu[ext].data = np.array(temp_data[data_start:])
 
             # Save file
-            savedir = '/'.join(file.split('/')[:-1]).replace('IMGPROCESS', 'IMGPROCESS+BGSUB')
+            savedir = '/'.join(file.split('/')[:-2])+'/BGSUB'
+            savefile = file.split('/')[-1].replace('calints', 'bg_calints')
+            if not os.path.exists(savedir):
+                os.makedirs(savedir)
+            hdu.writeto(savedir+'/'+savefile, overwrite=overwrite)
+
+    return
+
+def leastsq_bg(meta, basefiles, bgfiles, data_start=0, overwrite=True):
+    '''
+    Compute background subtraction using a least squares combination of images
+    on specific regions of the detector. 
+    '''
+
+    # Get filter
+    filt = fits.getheader(basefiles[0])['FILTER']
+
+    # Create cube of backgrounds
+    bkgd_cube = []
+    for file in bgfiles:
+        with fits.open(file) as hdu:
+            bkgd_cube.append(hdu['SCI'].data[data_start:])
+    bkgd_cube = np.concatenate(bkgd_cube)
+
+    if filt == 'F1065C':
+        mask_x, mask_y = 120.81, 111.89
+    elif filt == 'F1140C':
+        mask_x, mask_y = 119.99, 112.2
+    elif filt == 'F1550C':
+        mask_x, mask_y = 119.84, 113.33
+        mask_str = '/../resources/miri_transmissions/jwst_miri_psfmask_1550_jasonrotate.fits'
+        maskfile = os.path.join(os.path.dirname(__file__) + mask_str)
+        bmask_str = '/../resources/miri_transmissions/jwst_miri_psfmask_1550_raw_extract.fits'
+        bmaskfile = os.path.join(os.path.dirname(__file__) + bmask_str)
+
+    # Get mask
+    with fits.open(maskfile) as hdu:
+        full_mask = hdu['SCI'].data
+
+    # Get blank mask
+    with fits.open(bmaskfile) as hdu:
+        blank = hdu['SCI'].data
+
+    y, x = np.indices(blank.shape)
+    r = np.sqrt((x - mask_x)**2 + (y - mask_y)**2)
+
+    # Create glowstick subtraction
+    glowstick_sub = np.copy(blank)
+    glowstick_sub[np.where((full_mask > 0.5))] = 0 # this basically just selects the glowstick
+    glowstick_opt = np.copy(glowstick_sub) 
+    glowstick_opt[np.where(r < 40)] = 0 # the optimizaiton region should not include the mask center that contains the star
+
+    ## create the mask for the rest of the thermal background
+    therm_sub = np.copy(blank)
+    therm_sub[np.where((glowstick_sub == 1) & (blank == 1)) ] = 0 # mask out valid regions that the glowstick mask is using
+    therm_opt = np.copy(therm_sub)
+    therm_opt[np.where(r < 40)] = 0 # mask out central star
+
+    glowstick_sub[140:,:] = 0
+    glowstick_sub[:75,:] = 0
+    glowstick_opt[140:,:] = 0
+    glowstick_opt[:75,:] = 0
+
+    # fig = plt.figure(figsize=(7,4))
+    # fig.add_subplot(1,2,1)
+    # plt.imshow(glowstick_sub)
+    # plt.title("Subtraction zone")
+
+    # fig.add_subplot(1,2,2)
+    # plt.imshow(glowstick_opt)
+    # plt.title("Optimization zone")
+    # plt.show()
+
+    # fig = plt.figure(figsize=(7,4))
+    # fig.add_subplot(1,2,1)
+    # plt.imshow(therm_sub)
+    # plt.title("Subtraction zone")
+
+    # fig.add_subplot(1,2,2)
+    # plt.imshow(therm_opt)
+    # plt.title("Optimization zone")
+    # plt.show()
+    # exit()
+
+    bkgd_cube[np.where(np.isnan(bkgd_cube))] = 0
+
+    for file in basefiles:
+        with fits.open(file) as hdu:
+            hdu[0].header['NINTS'] -= data_start
+            sci_cube = hdu['SCI'].data[data_start:]
+            bkgdsub_cube = bkgd.subtract_bkgd(sci_cube, bkgd_cube, [therm_opt, glowstick_opt], [therm_sub, glowstick_sub], conserve_flux=True)
+
+            bkgdsub_cube = np.nan_to_num(bkgdsub_cube, 0)
+            hdu['SCI'].data = bkgdsub_cube
+            
+            # Trim if necessary
+            if data_start == 1:
+                for ext in ['ERR', 'DQ', 'VAR_POISSON', 'VAR_RNOISE', 'VAR_FLAT']:  
+                    temp_data = hdu[ext].data
+                    hdu[ext].data = np.array(temp_data[data_start:])
+
+            # Save file
+            savedir = '/'.join(file.split('/')[:-2])+'/BGSUB'
             savefile = file.split('/')[-1].replace('calints', 'bg_calints')
             if not os.path.exists(savedir):
                 os.makedirs(savedir)
@@ -302,7 +419,8 @@ def klip_subtraction(meta, files):
                     psflib_filepaths = np.array(meta.obs[key]['FITSFILE'][ww_cal], dtype=str).tolist()
                     dataset = JWST.JWSTData(filepaths=filepaths,
                                             psflib_filepaths=psflib_filepaths, centering=meta.centering_alg, badpix_threshold=meta.badpix_threshold,
-                                            scishiftfile=meta.ancildir+'shifts/scishifts', refshiftfile=meta.ancildir+'shifts/refshifts')
+                                            scishiftfile=meta.ancildir+'shifts/scishifts', refshiftfile=meta.ancildir+'shifts/refshifts',
+                                            fiducial_point_override=meta.fiducial_point_override)
 
                     parallelized.klip_dataset(dataset=dataset,
                                               mode=mode,

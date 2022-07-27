@@ -328,6 +328,8 @@ def get_working_files(meta, runcheck, subdir='RAMPFIT', search='uncal.fits', ity
         elif itype == 'bgref':
             rdir = meta.bg_ref_dir
 
+    print(subdir)
+
     # Grab the files
     files = glob.glob(rdir + search)
     if len(files) == 0:
