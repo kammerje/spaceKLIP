@@ -47,3 +47,6 @@ You will also need to install some other specific packages, namely:
 
 Finally, and very importantly, you will need to download reference files to support the functioning of 
 the :code:`webbpsf` and :code:`webbpsf_ext`. Instructions to do this can be found at the respective package websites (`WebbPSF <https://webbpsf.readthedocs.io/en/latest/installation.html#installing-the-required-data-files>`_, `webbpsf_ext <https://github.com/JarronL/webbpsf_ext>`_). Ensure that if you edit your .bashrc file that you reopen and close your terminal to fully apply the changes (:code:`source ~/.bashrc` or :code:`source ~/.zshrc` may also work)
+
+spaceKLIP also makes use of the JWST Calibration Reference Data System (CRDS) and you will need to set some environment variables. Follow the instructions here for bash or zsh: https://jwst-crds.stsci.edu/docs/cmdline_bestrefs/
+Note you do not have to install astroconda, just set the environment variables (taking care that the CRDS path you set actually exists, i.e., you may need to create the directory).

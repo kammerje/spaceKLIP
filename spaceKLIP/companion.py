@@ -28,7 +28,7 @@ import webbpsf_ext
 from . import utils
 from . import io
 from . import plotting
-
+from . import psf
 
 # =============================================================================
 # MAIN
@@ -60,8 +60,8 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
 
     # If necessary, extract the metadata of the observations.
     if (not meta.done_subtraction):
-        if meta.usebgsub_companion:
-            subdir = 'IMGPROCESS+BGSUB'
+        if meta.comp_usefile == 'bgsub':
+            subdir = 'IMGPROCESS/BGSUB'
         else:
             subdir = 'IMGPROCESS'
         basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir=subdir, search=meta.sub_ext)
@@ -133,35 +133,30 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
             # PSFs.
             if meta.repeatcentering_companion == False:
                 centering_alg = 'savefile'
-                print('Loading shifts from saved file...')
             else:
                 centering_alg = meta.repeatcentering_companion
             dataset = JWST.JWSTData(filepaths=filepaths,
                                     psflib_filepaths=psflib_filepaths, centering=centering_alg, badpix_threshold=meta.badpix_threshold,
-                                    scishiftfile=meta.ancildir+'scishifts', refshiftfile=meta.ancildir+'refshifts')
+                                    scishiftfile=meta.ancildir+'shifts/scishifts', refshiftfile=meta.ancildir+'shifts/refshifts',
+                                    fiducial_point_override=meta.fiducial_point_override)
 
             # Get the coronagraphic mask transmission map.
             utils.get_transmission(meta, key, odir, derotate=False)
 
             # Get an offset PSF that is normalized to the total intensity of
             # the host star.
-            try:
-                offsetpsf = pyfits.getdata(meta.TA_file, 'SCI')
-                offsetpsf -= np.nanmedian(offsetpsf)
-                shift = utils.recenter(offsetpsf)
-                offsetpsf = utils.fourier_imshift(offsetpsf, shift)
-                if ('ND' in pyfits.getheader(meta.TA_file, 0)['SUBARRAY']):
-                    wd, od = webbpsf_ext.bandpasses.nircam_com_nd()
-                    od_interp = interp1d(wd*1e-6, od)
-                    nodes = np.linspace(wave-weff/2., wave+weff/2., 1000)
-                    odens = simpson(10**od_interp(nodes), nodes)/weff
-                    offsetpsf *= odens
-                TA_filt = pyfits.getheader(meta.TA_file, 0)['FILTER']
-                if (TA_filt != filt):
-                    offsetpsf *= 10**(-(meta.mstar[filt]-meta.mstar[TA_filt])/2.5)
-            except:
+            if meta.offpsf == 'webbpsf':
                 offsetpsf = utils.get_offsetpsf(meta, key, recenter_offsetpsf=recenter_offsetpsf, derotate=False)
                 offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
+            elif meta.offpsf == 'webbpsf_ext':
+                # Define some quantities
+                if pxsc > 100:
+                    inst = 'MIRI'
+                else:
+                    inst = 'NIRCAM'
+                if inst == 'MIRI':
+                    immask = 'FQPM{}'.format(filt[1:5])
+                offsetpsf_func = psf.JWST_PSF(inst, filt, immask, fov_pix=65, sp=None, use_coeff=True, date=meta.psfdate)
 
             # Loop through all companions.
             res[key] = {}
@@ -177,6 +172,12 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                 except:
                     guess_flux = 1e-4
                 guess_spec = np.array([1.])
+
+                if meta.offpsf == 'webbpsf_ext':
+                    # Generate PSF for initial guess, if very different this could be garbage
+                    # Negative sign on ra as webbpsf_ext expects in x,y space
+                    offsetpsf = offsetpsf_func.gen_psf([-meta.ra_off[j]/1e3,meta.de_off[j]/1e3], do_shift=False, quick=False)
+                    offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
 
                 # Compute the forward-modeled dataset if it does not exist,
                 # yet, or if overwrite is True.
@@ -238,20 +239,21 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
 
                 # If use_fm_psf is False, replace the forward-modeled PSF in
                 # the fm_frame with a simple offset PSF from WebbPSF.
-                try:
-                    use_fm_psf = meta.use_fm_psf
-                except:
-                    pass
+
                 if (use_fm_psf == False):
-
-                    # Get the coronagraphic mask transmission map.
-                    utils.get_transmission(meta, key, odir, derotate=True)
-
                     # Get a derotated and integration time weighted average of
                     # an offset PSF from WebbPSF. Apply the field-dependent
                     # correction and insert it at the correct companion
                     # position into the fm_frame.
-                    offsetpsf = utils.get_offsetpsf(meta, key, recenter_offsetpsf=recenter_offsetpsf, derotate=True)
+                    if meta.offpsf == 'webbpsf_ext':
+                        # Generate PSF for initial guess, if very different this could be garbage
+                        # Negative sign on ra as webbpsf_ext expects in x,y space
+                        offsetpsf = offsetpsf_func.gen_psf([-meta.ra_off[j]/1e3,meta.de_off[j]/1e3], do_shift=False, quick=False)
+                    else:
+                        # Get the coronagraphic mask transmission map.
+                        utils.get_transmission(meta, key, odir, derotate=True)
+                        offsetpsf = utils.get_offsetpsf(meta, key, recenter_offsetpsf=recenter_offsetpsf, derotate=True)
+
                     offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
                     offsetpsf *= guess_flux
                     sx = offsetpsf.shape[1]
@@ -260,11 +262,15 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                         raise UserWarning('Offset PSF needs to be of odd shape')
                     shx = (fm_centx-int(fm_centx))-(guess_dx-int(guess_dx))
                     shy = (fm_centy-int(fm_centy))+(guess_dy-int(guess_dy))
-                    stamp = ndimage.shift(offsetpsf, (shy, shx), mode='constant', cval=0.)
-                    xx = np.arange(sx)-sx//2-(int(guess_dx)+(fm_centx-int(fm_centx)))
-                    yy = np.arange(sy)-sy//2+(int(guess_dy)-(fm_centy-int(fm_centy)))
-                    stamp_dx, stamp_dy = np.meshgrid(xx, yy)
-                    stamp = utils.field_dependent_correction(stamp, stamp_dx, stamp_dy, meta)
+                    stamp = shift(offsetpsf, (shy, shx), mode='constant', cval=0.)
+
+                    if meta.offpsf == 'webbpsf':
+                        # Need to multiply offaxis by coronagraph transmission
+                        xx = np.arange(sx)-sx//2-(int(guess_dx)+(fm_centx-int(fm_centx)))
+                        yy = np.arange(sy)-sy//2+(int(guess_dy)-(fm_centy-int(fm_centy)))
+                        stamp_dx, stamp_dy = np.meshgrid(xx, yy)
+                        stamp = utils.field_dependent_correction(stamp, stamp_dx, stamp_dy, meta)
+
                     fm_frame[:, :] = 0.
                     fm_frame[int(fm_centy)+int(guess_dy)-sy//2:int(fm_centy)+int(guess_dy)+sy//2+1, int(fm_centx)-int(guess_dx)-sx//2:int(fm_centx)-int(guess_dx)+sx//2+1] = stamp
 

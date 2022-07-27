@@ -62,10 +62,10 @@ def raw_contrast_curve(meta):
 
     # If necessary, extract the metadata of the observations.
     if (not meta.done_subtraction):
-        if meta.usebgsub_contrast:
-            subdir = 'IMGPROCESS+BGSUB'
+        if meta.conc_usefile:
+            subdir = 'IMGPROCESS/BGSUB'
         else:
-            subdir = 'IMGPROCESS'
+            subdir = 'IMGPROCESS/SCI+REF'
         basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir=subdir, search=meta.sub_ext)
         meta = utils.prepare_meta(meta, basefiles)
         meta.done_subtraction = True # set the subtraction flag for the subsequent pipeline stages
@@ -220,7 +220,7 @@ def calibrated_contrast_curve(meta):
     # If necessary, build the obs dictionary etc
     # If necessary, extract the metadata of the observations.
     if (not meta.done_subtraction):
-        if meta.usebgsub_contrast:
+        if meta.conc_usefile == 'bgsub':
             subdir = 'IMGPROCESS+BGSUB'
         else:
             subdir = 'IMGPROCESS'
@@ -663,7 +663,8 @@ def inject_recover(meta,
     while (finished == False):
         dataset = JWST.JWSTData(filepaths=filepaths,
                                 psflib_filepaths=psflib_filepaths, centering=meta.centering_alg, badpix_threshold=meta.badpix_threshold,
-                                scishiftfile=meta.ancildir+'scishifts', refshiftfile=meta.ancildir+'refshifts')
+                                scishiftfile=meta.ancildir+'shifts/scishifts', refshiftfile=meta.ancildir+'shifts/refshifts',
+                                fiducial_point_override=meta.fiducial_point_override)
 
         # Inject fake companions. Make sure that no other fake companion
         # closer than mrad will be injected into the same dataset.
