@@ -58,9 +58,14 @@ def raw_contrast_curve(meta):
     
     # If necessary, extract the metadata of the observations.
     if (not meta.done_subtraction):
-        basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS', search=meta.sub_ext)
+        if meta.conc_usefile:
+            subdir = 'IMGPROCESS/BGSUB'
+        else:
+            subdir = 'IMGPROCESS/SCI+REF'
+        basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir=subdir, search=meta.sub_ext)
         meta = utils.prepare_meta(meta, basefiles)
         meta.done_subtraction = True # set the subtraction flag for the subsequent pipeline stages
+    
     
     # Loop through all directories of subtracted images.
     for counter, rdir in enumerate(meta.rundirs):
@@ -91,10 +96,12 @@ def raw_contrast_curve(meta):
             
             # Mask out known companions and the location of the bar mask in
             # both rolls.
-            if ('4QPM' in mask):
-                fwhm_scale = 4.
-            else:
-                fwhm_scale = 12.
+            fwhm_scale = meta.fwhm_scale
+            # if ('4QPM' in mask):
+            #     fwhm_scale = 4.
+            #     print('HERE')
+            # else:
+            #     fwhm_scale = 12.
             data_masked = mask_companions(data, pxsc, cent, fwhm_scale*fwhm, meta.ra_off, meta.de_off)
 
             if (('LWB' in mask) or ('SWB' in mask)):
@@ -120,7 +127,7 @@ def raw_contrast_curve(meta):
             # cons = np.array(cons)
 
             # Save the contrast curve as a dictionary
-            save_dict = {'seps':seps[0].tolist(), 'cons':{}}
+            save_dict = {'seps':seps[0].tolist(), 'cons':{}, 'mstar':meta.mstar}
             for j, con in enumerate(cons):
                 save_dict['cons']['KL{}'.format(meta.numbasis[j])] = cons[j].tolist()
             rawconfile = odir+key+'-raw_save.json'
@@ -184,11 +191,16 @@ def calibrated_contrast_curve(meta):
         If true overwrite existing data.
     """
     # If necessary, build the obs dictionary etc
-    if not meta.done_subtraction:
-        basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS', search=meta.sub_ext)
+    # If necessary, extract the metadata of the observations.
+    if (not meta.done_subtraction):
+        if meta.conc_usefile == 'bgsub':
+            subdir = 'IMGPROCESS+BGSUB'
+        else:
+            subdir = 'IMGPROCESS'
+        basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir=subdir, search=meta.sub_ext)
         meta = utils.prepare_meta(meta, basefiles)
-        # Set the subtraction flag for other stages
-        meta.done_subtraction = True
+        meta.done_subtraction = True # set the subtraction flag for the subsequent pipeline stages
+    
 
     if (meta.verbose == True):
         print('--> Computing calibrated contrast curve...')
@@ -327,14 +339,15 @@ def calibrated_contrast_curve(meta):
                 # these need to be filtered out before feeding the
                 # fluxes into the injection and recovery routine.
                 good = np.isnan(flux_inject) == False
+                fwhm_scale = meta.fwhm_scale
                 if (mask in ['MASKASWB', 'MASKALWB']):
-                    fwhm_scale = 10
+                    # fwhm_scale = 10
                     flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, inst, filt, mask, fwhm_scale*fwhm, flux_inject[good], seps_inject_bar[good], pas_inject_bar, KLindex, meta.ra_off, meta.de_off)
                 elif ('4QPM' in mask):
-                    fwhm_scale = 4
+                    #fwhm_scale = 4
                     flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, inst, filt, mask, fwhm_scale*fwhm, flux_inject[good], seps_inject_fqpm[good], pas_inject_fqpm, KLindex, meta.ra_off, meta.de_off)
                 else:
-                    fwhm_scale = 10
+                    #fwhm_scale = 10
                     flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, inst, filt, mask, fwhm_scale*fwhm, flux_inject[good], seps_inject_rnd[good], pas_inject_rnd, KLindex, meta.ra_off, meta.de_off)
 
                 # np.save(odir+key+'-flux_all.npy', flux_all) # MJy/sr
@@ -617,7 +630,9 @@ def inject_recover(meta,
     ctr = 0
     while (finished == False):
         dataset = JWST.JWSTData(filepaths=filepaths,
-                                psflib_filepaths=psflib_filepaths, centering=meta.centering_alg)
+                                psflib_filepaths=psflib_filepaths, centering=meta.centering_alg, badpix_threshold=meta.badpix_threshold,
+                                scishiftfile=meta.ancildir+'shifts/scishifts', refshiftfile=meta.ancildir+'shifts/refshifts',
+                                fiducial_point_override=meta.fiducial_point_override)
         
         # Inject fake companions. Make sure that no other fake companion
         # closer than mrad will be injected into the same dataset.

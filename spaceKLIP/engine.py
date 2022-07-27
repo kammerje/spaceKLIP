@@ -136,6 +136,8 @@ class JWST(Pipeline):
         # Define the ancillary directories.
         if (not os.path.isdir(self.meta.ancildir)):
             self.meta.ancildir = self.meta.odir+'ANCILLARY/'
+            if not os.path.exists(self.meta.ancildir):
+                os.makedirs(self.meta.ancildir)
         self.meta.psfmaskdir = self.meta.ancildir+'psfmasks/' # no longer required
         self.meta.offsetpsfdir = self.meta.ancildir+'offsetpsfs/'
         
@@ -278,7 +280,7 @@ class JWST(Pipeline):
         self.meta.done_subtraction = True
         
         # Run KLIP subtraction stage.
-        sub = subtraction.klip_subtraction(self.meta)
+        sub = subtraction.perform_subtraction(self.meta)
         
         return None
     

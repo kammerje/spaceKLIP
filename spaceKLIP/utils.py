@@ -301,8 +301,11 @@ def get_transmission(meta, key, odir, derotate=False):
             filt = 'f1550c'
         elif mask.lower() == 'lyot_2300':
             filt = 'f2300c'
-
-        tp, _ = JWST.trim_miri_data([hdul['SCI'].data[None, :, :]], filt)
+        
+        try:
+            tp, _ = JWST.trim_miri_data([hdul['SCI'].data[None, :, :]], filt)
+        except:
+            tp, _ = JWST.trim_miri_data([hdul[0].data[None, :, :]], filt)
         tp = tp[0][0] #Just want the 2D array 
         #tp = tp[0, 1:-1, 1:-2]
     
@@ -545,8 +548,20 @@ def get_psfmasknames(meta):
     # Get the correct PSF mask for each concatenation.
     meta.psfmask = {}
     for key in meta.obs.keys():
-        model = datamodels.open(meta.obs[key]['FITSFILE'][0])
-        meta.psfmask[key] = step.get_reference_file(model, 'psfmask')
+        if '1065' in key:
+            # TODO
+            raise ValueError('Get a 1065 mask!')
+        elif '1140' in key:
+            trstring = '/../resources/miri_transmissions/JWST_MIRI_F1140C_transmission_webbpsf-ext_v0.fits'
+            trfile = os.path.join(os.path.dirname(__file__) + trstring)
+            meta.psfmask[key] = trfile
+        elif '1550' in key:
+            trstring = '/../resources/miri_transmissions/JWST_MIRI_F1550C_transmission_webbpsf-ext_v0.fits'
+            trfile = os.path.join(os.path.dirname(__file__) + trstring)
+            meta.psfmask[key] = trfile
+        else:
+            model = datamodels.open(meta.obs[key]['FITSFILE'][0])
+            meta.psfmask[key] = step.get_reference_file(model, 'psfmask')
     del step
     
     return meta
