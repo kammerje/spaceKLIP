@@ -3,8 +3,8 @@ sys.path.append('..')
 from spaceKLIP.engine import JWST
 import spaceKLIP as sklip
 
-config_file = os.path.dirname(__file__)+'/HIP65426_F1550_aarynn.yaml'
-# config_file = os.path.dirname(__file__)+'/HIP65426_F1140_aarynn.yaml'
+# config_file = os.path.dirname(__file__)+'/HIP65426-F1550.yaml'
+config_file = os.path.dirname(__file__)+'/HIP65426-F1140.yaml'
 # config_file = os.path.dirname(__file__)+'/HD114174-round.yaml'
 
 if __name__ == '__main__':
@@ -14,4 +14,5 @@ if __name__ == '__main__':
 				 skip_sub=True,
 				 skip_rawcon=True,
 				 skip_calcon=True,
-				 skip_comps=False)
+				 skip_comps=False,
+				 skip_analysis=True)

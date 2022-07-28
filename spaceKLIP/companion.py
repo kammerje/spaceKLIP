@@ -201,7 +201,9 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                                                  field_dependent_correction=partial(utils.field_dependent_correction, meta=meta))
 
                     # Compute the forward-modeled dataset.
-                    annulus = [[guess_sep-20., guess_sep+20.]] # pix
+                    annulus = meta.annuli#[[guess_sep-20., guess_sep+20.]] # pix
+                    if len(annulus) == 1:
+                        annulus = annulus[0]
                     subsection = 1
                     fm.klip_dataset(dataset=dataset,
                                     fm_class=fm_class,
@@ -307,7 +309,10 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                                             exclusion_radius=exc_rad*fwhm)
                     corr_len_guess = 3. # pix
                     corr_len_label = r'$l$'
-                    fma.set_kernel('matern32', [corr_len_guess], [corr_len_label])
+                    try:
+                        fma.set_kernel(meta.fitkernel, [corr_len_guess], [corr_len_label])
+                    except:
+                        fma.set_kernel("diag", [corr_len_guess], [corr_len_label])
                     x_range = 1. # pix
                     y_range = 1. # pix
                     flux_range = 10. # mag
@@ -380,7 +385,10 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                     except:
                         corr_len_guess = 3.
                     corr_len_label = "l"
-                    fit.set_kernel("matern32", [corr_len_guess], [corr_len_label])
+                    try:
+                        fit.set_kernel(meta.fitkernel, [corr_len_guess], [corr_len_label])
+                    except:
+                        fit.set_kernel("diag", [corr_len_guess], [corr_len_label])
                     print('set kernel')
                     try:
                         x_range = meta.x_range
