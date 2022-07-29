@@ -8,7 +8,7 @@ if __name__ == '__main__':
 	pipe = JWST(config_file)
 	pipe.run_all(skip_ramp=True, 
 				 skip_imgproc=False, 
-				 skip_sub=True, 
+				 skip_sub=False, 
 				 skip_rawcon=True, 
 				 skip_calcon=True, 
 				 skip_comps=True)

@@ -106,6 +106,21 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
 									sub[1,1] = np.nan
 									cleaned[pix[0],pix[1]] = np.nanmedian(sub)
 						data[i] = cleaned
+				if 'custom' in meta.outlier_corr:
+					badpix = np.loadtxt(meta.custom_file, delimiter=',', dtype=int)
+					badpix -= trim # To account for trimming of MIRI array
+					badpix -= [1,1] #To account for DS9 offset
+					for i, arr in enumerate(data):
+						cleaned = np.copy(arr)
+						for pix in badpix:	
+							if pix[0] > 2 and pix[1] > 2 and pix[0]<arr.shape[0]-2 and pix[1]<arr.shape[1]-2:
+								ylo, yhi = pix[0]-1, pix[0]+2
+								xlo, xhi = pix[1]-1, pix[1]+2
+								sub = arr[ylo:yhi, xlo:xhi]
+								if len(sub != 0):
+									sub[1,1] = np.nan
+									cleaned[pix[1],pix[0]] = np.nanmedian(sub)
+						data[i] = cleaned
 
 				#Assign to original array
 				if inst == 'MIRI':
