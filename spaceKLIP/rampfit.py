@@ -14,6 +14,7 @@ def run_ramp_fitting(meta, idir, osubdir):
 		pipeline.jump.skip = meta.skip_jump
 		pipeline.jump.rejection_threshold = meta.jump_threshold
 		pipeline.ramp_fit.maximum_cores = meta.ramp_fit_max_cores
+		pipeline.dark_current.skip = meta.skip_dark_current
 		pipeline.save_results = True
 
 		# Set up directory to save into

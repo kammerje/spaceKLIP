@@ -45,6 +45,7 @@ rampfit_bgdirs: True  #Toggle if you want to rampfit the backgrounds
 ramp_ext: 'uncal.fits'
 skip_jump: False     #Whether to skip the jump detection step of the pipeline
 jump_threshold: 8  #Adjust the jump detection threshold if not skipped
+skip_dark_current: False
 ramp_fit_max_cores: 'half' #Options are 'none', 'quarter', 'half', 'all'
 
 #####################################
@@ -54,9 +55,10 @@ imgproc_idir: True  #Toggle if you just want to imgproc the backgrounds
 imgproc_bgdirs: True
 imgproc_ext: 'rateints.fits'
 outlier_only: True        #Must have already run image processing
-outlier_corr: 'dqmed'
+outlier_corr: 'dqmed+custom'
 outmed_blur: 3             #Size of median blurring window
 outmed_threshold: 20       #Threshold to detect outliers
+custom_file: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/pixmask_1140.txt'
 
 ####################################
 ##### PSF Subtraction Settings #####
