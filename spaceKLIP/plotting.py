@@ -1,7 +1,9 @@
+import jFits
 import glob, os
 
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gs
+from matplotlib import font_manager
 
 import numpy as np
 from astropy.io import fits
@@ -203,7 +205,7 @@ def plot_fm_psf(meta, fm_frame, data_frame, guess_flux, pxsc=None, j=0, savefile
     c0.set_label('DN', rotation=270, labelpad=20)
     cc = plt.Circle((meta.ra_off[j]/1000., meta.de_off[j]/1000.), 10.*pxsc/1000., fill=False, edgecolor='green', linewidth=3)
     ax[0].add_artist(cc)
-    ax[0].set_xlim([5., -5])
+    ax[0].set_xlim([5., -5.])
     ax[0].set_ylim([-5., 5.])
     ax[0].set_xlabel(xlabel)
     ax[0].set_ylabel(ylabel)
@@ -246,10 +248,12 @@ def plot_chains(chain, savefile):
     plt.savefig(savefile)
     plt.close()
 
-def plot_subimages(imgdirs, subdirs, filts, submodes):
+def plot_subimages(imgdirs, subdirs, filts, submodes, numKL, **imshowkwargs):
     '''
     Create a "publication ready" plot of the coronagraphic images, alongside
-    the PSF subtracted images. 
+    the PSF subtracted images. A grid of images will be made. Rows will correspond to 
+    filters, first column the unsubtracted PSF, following columns different
+    submodes and numKLs
 
     Parameters
     ----------
@@ -260,23 +264,31 @@ def plot_subimages(imgdirs, subdirs, filts, submodes):
         Parent directories of the subtracted images
     filts : list of strings
         List of filter strings to include in the plot
+    submodes : list of strings
+        'ADI', 'RDI', 'RDI+ADI' (or 'ADI+RDI', if that's what your filenames
+        include)
+    KLmodes : list of ints
+        output images are 3-D with the third axis corresponding to different KL
+        modes used in subtraction. Indicate the number of KL modes you want to
+        display, if more than one, display all.
     '''
 
     # Get the files we care about
-    imgfiles = list(chain.from_iterable([glob.glob(imgdir+'*') for imgdir in imgdirs]))
+    imgfiles = sorted(list(chain.from_iterable([glob.glob(imgdir+'*') for imgdir in imgdirs])))
     subfiles = list(chain.from_iterable([glob.glob(subdir+'*') for subdir in subdirs]))
     filts = [filt.upper() for filt in filts]
 
     # Filter the imgfiles
     used_filts = []
-    true_imgfiles = []
+    true_imgfiles = {}
     for imgfile in imgfiles:
         hdr = fits.getheader(imgfile)
-        if hdr['SUBPXPTS'] != 1:
-            # This is a dithered reference observation, which we don't want.
+        if hdr.get('SUBPXPTS') is not None:
+            # This keyword only exists when larger than 1. If so,
+            # this is a dithered reference observation, which we don't want.
             continue
-        elif 'TACQ' in hdr['EXP_TYPE']:
-            # This is a target acquisition image
+        elif hdr['EXP_TYPE'] != 'NRC_CORON':
+            # Don't want TACONFIRM or TACQ
             continue
         elif hdr['FILTER'] not in filts:
             # We don't want this filter
@@ -286,34 +298,73 @@ def plot_subimages(imgdirs, subdirs, filts, submodes):
             continue
         else:
             # We want this file
-            true_imgfiles.append(imgfile)
+            print(imgfile)
+            true_imgfiles[hdr['FILTER']] = imgfile
             used_filts.append(hdr['FILTER'])
 
     # Filter the subfiles
     # Note that we allow repeat filters for different reductions.
     true_subfiles = []
     for subfile in subfiles:
+        print(subfile)
         if any(filt in subfile for filt in filts):
             true_subfiles.append(subfile)
 
-    ydim = len(true_imgfiles)
-    xdim = int(len(true_subfiles) / ydim) + 1
+    subfn_list = [ []*len(submodes) ] * len(filts)
+    sub_dict = {}
+    for flt in filts:
+        for fn in true_subfiles:
+            if flt in fn:
+                with fits.open(fn) as hdul:
+                    imgcube = hdul[0].data
+                    psfparam = hdul[0].header['PSFPARAM']
+                mode = psfparam.split('mode=')[-1].split(',')[0]
+                numbasis = [int(KLnum) for KLnum in 
+                      psfparam.split('numbasis=')[-1].split(',')[0].split(']')[0].split('[')[-1].split()]
+                if flt in sub_dict.keys():
+                    sub_dict[flt][mode] ={'image':imgcube,'numbasis':numbasis, 'filename':fn}
+                else:
+                    sub_dict[flt] = {mode:{'image':imgcube,'numbasis':numbasis, 'filename':fn}}
+
+    ydim = len(filts)
+    xdim = len(submodes)*len(numKL) + 1
 
     # Start making the figure
     fig = plt.figure(figsize=[xdim*5, ydim*5])
     grid = gs.GridSpec(ydim, xdim, figure=fig)
 
-    for i, imgfile in enumerate(true_imgfiles):
-        hdr = fits.getheader(imgfile)
-        row = filts.index(hdr['FILTER'])
-
+    for row, flt in enumerate(filts):
+        hdr = fits.getheader(true_imgfiles[flt])
         ax = plt.subplot(grid[row, 0])
-        with fits.open(imgfile) as hdul:
+        with fits.open(true_imgfiles[flt]) as hdul:
             img = hdul['SCI'].data[-1]
-        ax.imshow(img)
+        ax.imshow(img, **imshowkwargs)
+        ax.set_ylabel(hdr['FILTER'])
+        for mm, mde in enumerate(submodes):
+            for kk, nkl in enumerate(numKL):
+                column = 1 + (len(numKL)*mm + kk)
+                ax = plt.subplot(grid[row, column])
+                print(sub_dict[flt][mde]['filename'], numbasis, nkl, numbasis.index(nkl))
+                ax.imshow(sub_dict[flt][mde]['image'][numbasis.index(nkl),:,:], **imshowkwargs)
+                if row == 0:
+                    ax.set_title('{:s} {:d} modes'.format(mde, nkl))
+    plt.show()
 
-    # for i, subfile in enumerate(true_subfiles):
+    disp = jFits.jInteractive_Display(img)
+    disp = jFits.jInteractive_Display(sub_dict[flt][mde]['image'][-1])
 
-    # plt.show()
 
     return
+
+def tickFont(ax, xy='x', fontproperties=None):
+    if xy == 'x':
+        plt.setp(ax.get_xticklabels(), fontproperties=fontproperties)
+    if xy == 'y':
+        plt.setp(ax.get_yticklabels(), fontproperties=fontproperties)
+
+def compModern(size=20):
+    computerModern = font_manager.FontProperties(size=size,
+                                            fname=os.path.join(os.path.dirname(__file__),
+                                            'cmunrm.ttf'))
+    return computerModern
+
