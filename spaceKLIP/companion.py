@@ -294,6 +294,26 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                     exc_rad = meta.exc_rad
                 except:
                     exc_rad = 3
+                try:
+                    corr_len_guess = meta.corr_len_guess
+                except:
+                    corr_len_guess = 3.
+                try:
+                    x_range = meta.x_range
+                except:
+                    x_range = 2. # pix
+                try:
+                    y_range = meta.y_range
+                except:
+                    y_range = 2. # pix
+                try:
+                    flux_range = meta.flux_range
+                except:
+                    flux_range = 10. # mag
+                try:
+                    corr_len_range = meta.corr_len_range
+                except:
+                    corr_len_range = 1. # mag
 
                 if (meta.mcmc == True):
 
@@ -307,16 +327,11 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                                             data_center=[data_centx, data_centy],
                                             dr=dr,
                                             exclusion_radius=exc_rad*fwhm)
-                    corr_len_guess = 3. # pix
                     corr_len_label = r'$l$'
                     try:
                         fma.set_kernel(meta.fitkernel, [corr_len_guess], [corr_len_label])
                     except:
                         fma.set_kernel("diag", [corr_len_guess], [corr_len_label])
-                    x_range = 1. # pix
-                    y_range = 1. # pix
-                    flux_range = 10. # mag
-                    corr_len_range = 1. # mag
                     fma.set_bounds(x_range, y_range, flux_range, [corr_len_range])
 
                     # Make sure that noise map is invertible.
@@ -390,22 +405,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                     except:
                         fit.set_kernel("diag", [corr_len_guess], [corr_len_label])
                     print('set kernel')
-                    try:
-                        x_range = meta.x_range
-                    except:
-                        x_range = 2. # pix
-                    try:
-                        y_range = meta.y_range
-                    except:
-                        y_range = 2. # pix
-                    try:
-                        flux_range = meta.flux_range
-                    except:
-                        flux_range = 10. # mag
-                    try:
-                        corr_len_range = meta.corr_len_range
-                    except:
-                        corr_len_range = 1. # mag
+
                     fit.set_bounds(x_range, y_range, flux_range, [corr_len_range])
                     print('set bounds')
                     #Run the pymultinest fit
@@ -452,12 +452,12 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                     # Write the best fit values into the results dictionary.
                     temp = 'c%.0f' % (j+1)
                     res[key][temp] = {}
-                    res[key][temp]['ra'] = -(fm_posteriors[0]['median']-data_centx)*pxsc # mas
-                    res[key][temp]['dra'] = (fm_posteriors[0]['sigma'])*pxsc # mas
-                    res[key][temp]['de'] = (fm_posteriors[1]['median']-data_centy)*pxsc # mas
-                    res[key][temp]['dde'] = (fm_posteriors[1]['sigma'])*pxsc # mas
-                    res[key][temp]['f'] = fm_posteriors[2]['median']*guess_flux
-                    res[key][temp]['df'] = fm_posteriors[2]['sigma']*guess_flux
+                    res[key][temp]['ra'] = -(fit.fit_x.bestfit-data_centx)*pxsc # mas
+                    res[key][temp]['dra'] = (fit.fit_x.error)*pxsc # mas
+                    res[key][temp]['de'] = (fit.fit_y.bestfit-data_centy)*pxsc # mas
+                    res[key][temp]['dde'] = (fit.fit_y.error)*pxsc # mas
+                    res[key][temp]['f'] = fit.fit_flux.bestfit*guess_flux
+                    res[key][temp]['df'] = fit.fit_flux.error*guess_flux
 
                     if (meta.verbose == True):
                         print('--> Companion %.0f' % (j+1))
