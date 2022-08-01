@@ -36,7 +36,7 @@ rad2mas = 180./np.pi*3600.*1000.
 # MAIN
 # =============================================================================
 
-def raw_contrast_curve(meta):
+def raw_contrast_curve(meta, fourier=True):
     """
     Compute the raw contrast curves. Known companions and the location of
     the bar mask in both rolls will be masked out.
@@ -54,6 +54,10 @@ def raw_contrast_curve(meta):
     ----------
     meta : object of type meta
         Meta object that contains all the metadata of the observations.
+    fourier : bool
+        Whether to perform shifts in the Fourier plane. This better preserves
+        the total flux, however it can introduce Gibbs artefacts for the
+        shortest NIRCAM filters as the PSF is undersampled.
 
     """
 
@@ -119,6 +123,10 @@ def raw_contrast_curve(meta):
             # Convert the units and compute the contrast. Use the peak pixel
             # count of the recentered offset PSF (discussed with Jason Wang on
             # 12 May 2022).
+            offsetpsf = utils.get_offsetpsf(meta, key, recenter_offsetpsf=True,
+                                            derotate=True, fourier=fourier)
+            Fstar = meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6*np.max(offsetpsf) # MJy; convert the host star brightness from vegamag to MJy
+            Fdata = data_masked*pxar # MJy; convert the data from MJy/sr to MJy
             seps = [] # arcsec
             cons = []
             try:
@@ -174,7 +182,7 @@ def raw_contrast_curve(meta):
 
     return None
 
-def calibrated_contrast_curve(meta):
+def calibrated_contrast_curve(meta, fourier=False):
     """
     Compute the calibrated contrast curves. Injection and recovery tests
     are performed to estimate the algo & coronmsk throughput.
@@ -216,6 +224,10 @@ def calibrated_contrast_curve(meta):
         and the companion properties shall be computed.
     overwrite: bool
         If true overwrite existing data.
+    fourier : bool
+        Whether to perform shifts in the Fourier plane. This better preserves
+        the total flux, however it can introduce Gibbs artefacts for the
+        shortest NIRCAM filters as the PSF is undersampled.
     """
     # If necessary, build the obs dictionary etc
     # If necessary, extract the metadata of the observations.
@@ -347,7 +359,9 @@ def calibrated_contrast_curve(meta):
                 # time weighted average of the unocculted offset
                 # PSF over the rolls (does account for pupil mask
                 # throughput).
-                offsetpsf = utils.get_offsetpsf(meta, key, recenter_offsetpsf=False, derotate=True)
+                offsetpsf = utils.get_offsetpsf(meta, key,
+                                                recenter_offsetpsf=False,
+                                                derotate=True, fourier=fourier)
 
                 # Convert the units and compute the injected
                 # fluxes. They need to be in the units of the data
@@ -369,13 +383,13 @@ def calibrated_contrast_curve(meta):
                 fwhm_scale = meta.fwhm_scale
                 if (mask in ['MASKASWB', 'MASKALWB']):
                     # fwhm_scale = 10
-                    flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, inst, filt, mask, fwhm_scale*fwhm, flux_inject[good], seps_inject_bar[good], pas_inject_bar, KLindex, meta.ra_off, meta.de_off)
+                    flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, inst, filt, mask, fwhm_scale*fwhm, flux_inject[good], seps_inject_bar[good], pas_inject_bar, KLindex, meta.ra_off, meta.de_off, fourier)
                 elif ('4QPM' in mask):
                     #fwhm_scale = 4
-                    flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, inst, filt, mask, fwhm_scale*fwhm, flux_inject[good], seps_inject_fqpm[good], pas_inject_fqpm, KLindex, meta.ra_off, meta.de_off)
+                    flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, inst, filt, mask, fwhm_scale*fwhm, flux_inject[good], seps_inject_fqpm[good], pas_inject_fqpm, KLindex, meta.ra_off, meta.de_off, fourier)
                 else:
                     #fwhm_scale = 10
-                    flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, inst, filt, mask, fwhm_scale*fwhm, flux_inject[good], seps_inject_rnd[good], pas_inject_rnd, KLindex, meta.ra_off, meta.de_off)
+                    flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, inst, filt, mask, fwhm_scale*fwhm, flux_inject[good], seps_inject_rnd[good], pas_inject_rnd, KLindex, meta.ra_off, meta.de_off, fourier)
 
                 # np.save(odir+key+'-flux_all.npy', flux_all) # MJy/sr
                 # np.save(odir+key+'-seps_all.npy', seps_all) # pix
@@ -556,7 +570,8 @@ def inject_recover(meta,
                    pas_inject=[], # deg
                    KL=-1,
                    ra_off=[], # mas
-                   de_off=[]): # mas
+                   de_off=[],
+                   fourier=True): # mas
     """
     Inject fake companions and recover them by fitting a 2D Gaussian.
     Makes sure that the injected fake companions are not too close to any
@@ -613,6 +628,10 @@ def inject_recover(meta,
         RA offset of the companions that shall be masked out.
     de_off: list of float
         DEC offset of the companions that shall be masked out.
+    fourier : bool
+        Whether to perform shifts in the Fourier plane. This better preserves
+        the total flux, however it can introduce Gibbs artefacts for the
+        shortest NIRCAM filters as the PSF is undersampled.
 
     Returns
     -------
@@ -634,7 +653,8 @@ def inject_recover(meta,
     # Offset PSF from WebbPSF, i.e., an integration time weighted average
     # of the unocculted offset PSF over the rolls (normalized to a peak
     # flux of 1).
-    offsetpsf = utils.get_offsetpsf(meta, key, recenter_offsetpsf=False, derotate=True)
+    offsetpsf = utils.get_offsetpsf(meta, key, recenter_offsetpsf=False,
+                                    derotate=True, fourier=fourier)
     offsetpsf /= np.max(offsetpsf)
 
     # Initialize outputs.

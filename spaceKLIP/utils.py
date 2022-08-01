@@ -125,7 +125,8 @@ def recenter(image):
 
     return shift
 
-def get_offsetpsf(meta, key, recenter_offsetpsf=False, derotate=True):
+def get_offsetpsf(meta, key, recenter_offsetpsf=False, derotate=True,
+                  fourier=True):
     """
     Get a derotated and integration time weighted average of an offset PSF
     from WebbPSF. Try to load it from the offsetpsfdir and generate it if it
@@ -139,12 +140,16 @@ def get_offsetpsf(meta, key, recenter_offsetpsf=False, derotate=True):
     key : str
         Dictionary key of the meta.obs dictionary specifying the considered
         concatenation.
-    recenter : bool
+    recenter_offsetpsf : bool
         Recenter the offset PSF? The offset PSF from WebbPSF is not properly
         centered because the wedge mirror that folds the light onto the
         coronagraphic subarrays introduces a chromatic shift.
     derotate : bool
         Derotate (and integreation time weigh) the offset PSF?
+    fourier : bool
+        Whether to perform shifts in the Fourier plane. This better preserves
+        the total flux, however it can introduce Gibbs artefacts for the
+        shortest NIRCAM filters as the PSF is undersampled.
 
     Returns
     -------
@@ -167,8 +172,11 @@ def get_offsetpsf(meta, key, recenter_offsetpsf=False, derotate=True):
 
     # Recenter the offset PSF.
     if (recenter_offsetpsf == True):
-        shift = recenter(offsetpsf)
-        offsetpsf = fourier_imshift(offsetpsf, shift)
+        shifts = recenter(offsetpsf)
+        if fourier:
+            offsetpsf = fourier_imshift(offsetpsf, shifts)
+        else:
+            offsetpsf = shift(offsetpsf, shifts, mode='constant', cval=0.)
 
     # Find the science target observations.
     ww_sci = np.where(meta.obs[key]['TYP'] == 'SCI')[0]
@@ -348,7 +356,9 @@ def get_transmission(meta, key, odir, derotate=False):
     # Plot.
     plt.figure(figsize=(6.4, 4.8))
     ax = plt.gca()
-    pp = ax.imshow(totmsk, origin='lower', extent=(tp.shape[1]/2., -tp.shape[1]/2., -tp.shape[0]/2., tp.shape[0]/2.), cmap='viridis', vmin=0, vmax=1)
+    pp = ax.imshow(totmsk, origin='lower',
+                   extent=(tp.shape[1]/2., -tp.shape[1]/2., -tp.shape[0]/2.,
+                           tp.shape[0]/2.), cmap='viridis', vmin=0, vmax=1)
     cc = plt.colorbar(pp, ax=ax)
     cc.set_label('Transmission', rotation=270, labelpad=20)
     if (derotate == True):

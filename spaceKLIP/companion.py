@@ -34,7 +34,8 @@ from . import psf
 # MAIN
 # =============================================================================
 
-def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
+def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
+                       fourier=True):
     """
     Extract astrometry and photometry from any detected companions using
     the pyKLIP forward modeling class.
@@ -52,7 +53,11 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
         coronagraphic subarrays introduces a chromatic shift.
     use_fm_psf : bool
         Use a pyKLIP forward-modeled offset PSF instead of a simple offset PSF.
-
+    fourier : bool
+        [meta.offpsf = 'webbpsf] Whether to perform the recentering shift in
+        the Fourier plane. This better preserves the total flux, however it can
+        introduce Gibbs artefacts for the shortest NIRCAM filters as the PSF is
+        undersampled.
     """
 
     if (meta.verbose == True):
@@ -65,6 +70,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
         else:
             subdir = 'IMGPROCESS'
         basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir=subdir, search=meta.sub_ext)
+
         meta = utils.prepare_meta(meta, basefiles)
         meta.done_subtraction = True # set the subtraction flag for the subsequent pipeline stages
 
@@ -146,7 +152,9 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
             # Get an offset PSF that is normalized to the total intensity of
             # the host star.
             if meta.offpsf == 'webbpsf':
-                offsetpsf = utils.get_offsetpsf(meta, key, recenter_offsetpsf=recenter_offsetpsf, derotate=False)
+                offsetpsf = utils.get_offsetpsf(meta, key,
+                                                recenter_offsetpsf=recenter_offsetpsf,
+                                                derotate=False, fourier=fourier)
                 offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
             elif meta.offpsf == 'webbpsf_ext':
                 # Define some quantities
@@ -156,7 +164,9 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                     inst = 'NIRCAM'
                 if inst == 'MIRI':
                     immask = 'FQPM{}'.format(filt[1:5])
-                offsetpsf_func = psf.JWST_PSF(inst, filt, immask, fov_pix=65, sp=None, use_coeff=True, date=meta.psfdate)
+                offsetpsf_func = psf.JWST_PSF(inst, filt, immask, fov_pix=65,
+                                              sp=None, use_coeff=True,
+                                              date=meta.psfdate)
 
             # Loop through all companions.
             res[key] = {}
@@ -254,7 +264,9 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
                     else:
                         # Get the coronagraphic mask transmission map.
                         utils.get_transmission(meta, key, odir, derotate=True)
-                        offsetpsf = utils.get_offsetpsf(meta, key, recenter_offsetpsf=recenter_offsetpsf, derotate=True)
+                        offsetpsf = utils.get_offsetpsf(meta, key,
+                                                        recenter_offsetpsf=recenter_offsetpsf,
+                                                        derotate=True, fourier=fourier)
 
                     offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
                     offsetpsf *= guess_flux

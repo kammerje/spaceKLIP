@@ -1,6 +1,7 @@
 import glob, os, sys
 
 import numpy as np
+import numpy.core.numeric as npnum
 import copy
 
 from datetime import date
@@ -87,9 +88,10 @@ def bg_subtraction(meta):
         for key in meta.obs.keys():
             ww = np.where(meta.obs[key]['TYP'] == types[i])[0]
         basefiles = np.array(meta.obs[key]['FITSFILE'][ww], dtype=str).tolist()
+        bgmed_split = meta.bgmed_splits[i]
 
         if meta.bgsub == 'default':
-            bg_sub = median_bg(files, data_start=data_start)
+            bg_sub = median_bg(files, data_start=data_start, med_split=bgmed_split)
             #Save the median_bg
             primary = fits.PrimaryHDU(bg_sub)
             hdul = fits.HDUList([primary])
@@ -100,10 +102,15 @@ def bg_subtraction(meta):
 
             for file in basefiles:
                 with fits.open(file) as hdul:
-                    data = hdul['SCI'].data
-                    data -= bg_sub[None,:,:]
+                    data = hdul['SCI'].data[data_start:] 
+                    # Split up the array the same way as numpy split the medians
+                    data_split = np.array_split(data, bgmed_split, axis=0)
+                    # Loop over splits and subtract corresponding median
+                    for j in range(bgmed_split):
+                        data_split[j] -=  bg_sub[j]
+                    # Recombine data
+                    hdul['SCI'].data = np.concatenate(data_split,axis=0)
 
-                    hdul['SCI'].data = data[data_start:]
                     if data_start != 0:
                         hdul[0].header['NINTS'] -= data_start 
                         for ext in ['ERR', 'DQ', 'VAR_POISSON', 'VAR_RNOISE', 'VAR_FLAT']:  
@@ -123,7 +130,7 @@ def bg_subtraction(meta):
     return
 
 
-def median_bg(files, data_start=0):
+def median_bg(files, data_start=0, med_split=1):
     '''
     Take a list of bg files and median combine them
     '''
@@ -149,9 +156,11 @@ def median_bg(files, data_start=0):
             bg_data[start:] = fits.getdata(file, 'SCI')[data_start:]
 
     # Take a median of the data
-    bg_median = np.nanmedian(bg_data, axis=0)
-
-    # TODO Add outlier cleanin
+    bg_data = np.array_split(bg_data, med_split, axis=0)
+    bg_median = []
+    for bgd in bg_data:
+        bg_median.append(np.median(bgd, axis=0))
+    bg_median = np.stack(bg_median, axis=0)
 
     return bg_median
 

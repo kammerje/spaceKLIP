@@ -45,12 +45,15 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
 				# Grab the data
 				filt = hdu[0].header['FILTER']
 				inst = hdu[0].header['INSTRUME']
+
 				raw_data = hdu['SCI'].data
+				raw_dq = hdu['DQ'].data
 
 				# Trim data if needed
 				if inst == 'MIRI':
-					data_trim, trim = trim_miri_data([raw_data], filt)
+					data_trim, trim = trim_miri_data([raw_data, raw_dq], filt)
 					data = data_trim[0] # Only one cube so just want first index
+					dq = data_trim[1]
 
 				# Clean each image of outlier bad pixels
 				if 'median' in meta.outlier_corr:
@@ -71,7 +74,7 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
 							arr[int(3*arry/5):int(4*arry/5),int(3*arrx/5):int(4*arrx/5)]
 
 						data[i] = cleaned
-				elif 'timemed' in meta.outlier_corr:
+				if 'timemed' in meta.outlier_corr:
 					z, y, x = data.shape
 					datacopy = np.copy(data)
 					for row in range(y):
@@ -90,6 +93,34 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
 								mask[j] = 999
 
 							data[1:,row,col] = cleaned
+				if 'dqmed' in meta.outlier_corr:
+					for i, arr in enumerate(data):
+						baddq = np.argwhere(dq[i]>0)
+						cleaned = np.copy(arr)
+						for pix in baddq:	
+							if pix[0] > 2 and pix[1] > 2 and pix[0]<arr.shape[0]-2 and pix[1]<arr.shape[1]-2:
+								ylo, yhi = pix[0]-1, pix[0]+2
+								xlo, xhi = pix[1]-1, pix[1]+2
+								sub = arr[ylo:yhi, xlo:xhi]
+								if len(sub != 0):
+									sub[1,1] = np.nan
+									cleaned[pix[0],pix[1]] = np.nanmedian(sub)
+						data[i] = cleaned
+				if 'custom' in meta.outlier_corr:
+					badpix = np.loadtxt(meta.custom_file, delimiter=',', dtype=int)
+					badpix -= trim # To account for trimming of MIRI array
+					badpix -= [1,1] #To account for DS9 offset
+					for i, arr in enumerate(data):
+						cleaned = np.copy(arr)
+						for pix in badpix:	
+							if pix[0] > 2 and pix[1] > 2 and pix[0]<arr.shape[0]-2 and pix[1]<arr.shape[1]-2:
+								ylo, yhi = pix[0]-1, pix[0]+2
+								xlo, xhi = pix[1]-1, pix[1]+2
+								sub = arr[ylo:yhi, xlo:xhi]
+								if len(sub != 0):
+									sub[1,1] = np.nan
+									cleaned[pix[1],pix[0]] = np.nanmedian(sub)
+						data[i] = cleaned
 
 				#Assign to original array
 				if inst == 'MIRI':

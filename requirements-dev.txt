@@ -1,0 +1,6 @@
+-r requirements.txt
+sphinx
+pandoc
+nbsphinx
+sphinx-rtd-theme
+webbpsf_ext
