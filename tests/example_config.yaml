@@ -2,14 +2,14 @@
 ##### Configuration File for JWST Coronagraphy Pipeline #####
 #############################################################
 
-# TODO: Create readthedocs page that describe each setting in detail. 
+# TODO: Create readthedocs page that describe each setting in detail.
 
 #######################
 ##### Directories #####
 #######################
 
 ##### REQUIRED #####
-# Input Directory 
+# Input Directory
 idir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1140C/SCI+REF/'
 odir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/20220801_F1140C/' # Output Directory
 sdir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/hip65426.vot' #VOT table or stellar model file.
@@ -23,7 +23,7 @@ bg_ref_dir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/
 ############################
 ##### General Settings #####
 ############################
-verbose: True 
+verbose: True
 plotting: True    # Produce matplotlib plots
 use_psfmask: True # if true use PSF masks from CRDS, if false use transmission functions
 fiducial_point_override: False # if true uses narrow end of the bar masks, if false use filter dependent position
@@ -35,7 +35,7 @@ badpix_threshold: 1
 ########################################
 spt: 'A2V' # Spectral type of target, only necessary for VOTable
 ra_off: [558]  # mas; RA offset of the known companions
-de_off:  [-651] # mas; DEC offset of the known companions 
+de_off:  [-651] # mas; DEC offset of the known companions
 
 #################################
 ##### Ramp Fitting Settings #####
@@ -51,8 +51,6 @@ ramp_fit_max_cores: 'all' #Options are 'none', 'quarter', 'half', 'all'
 #####################################
 ##### Image Processing Settings #####
 #####################################
-imgproc_idir: True  #Toggle if you just want to imgproc the backgrounds
-imgproc_bgdirs: True
 imgproc_ext: 'rateints.fits'
 outlier_only: False        #Must have already run image processing
 outlier_corr: 'dqmed+timemed+custom'
@@ -84,27 +82,33 @@ repeatcentering_contrast: 'basic' # False to not repeat, "basic" is not saved an
 KL: 15 # Number of KL components for which the calibrated contrast curve and the companion properties shall be computed (must be in subtracted numbasis)
 
 seps_inject_rnd: [5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 25., 30.0, 35.0, 40.0] # pix; list of separations at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
+#seps_inject_rnd: [5.0, 25.0, 40.0] # pix; list
 pas_inject_rnd: [0., 45., 90., 135., 180., 225., 270., 315.] # deg; list of position angles at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
 
 pa_ranges_bar: [(105, 105), (285, 285)] # deg; list of tuples defining the pizza slices that shall be considered when computing the contrast curves for the bar masks
 seps_inject_bar: [2.0, 4.0, 6.0, 8.0, 10.0, 12.5, 15.0, 17.5, 20.0, 25.0, 30.0] # pix; list of separations at which fake planets shall be injected to compute the calibrated contrast curve for the bar masks
 pas_inject_bar: [45., 135., 225., 315.] # deg; list of position angles at which fake planets shall be injected to compute the calibrated contrast curve for the bar masks
 
-seps_inject_fqpm: [5, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 25., 30.0, 35.0, 40.0]
-pas_inject_fqpm: [45., 135., 225., 315.]
-
 #######################################################
 ##### Companion Photometry / Astrometry Settings ######
 #######################################################
 comp_usefile: False  # Either "bgsub" for background subtracted or False for regular
 repeatcentering_companion: 'basic' # False to not repeat, "basic" is not saved and must be repeated
-offpsf: 'webbpsf_ext'   #'webbpsf' for shifted offaxis, 'webbpsf_ext' for ~at location and time 
+offpsf: 'webbpsf_ext'   #'webbpsf' for shifted offaxis, 'webbpsf_ext' for ~at location and time
 psfdate: '2022-07-18T00:00:00'  #Input date for webbpsf_ext model
 
+nested: True
+mcmc: False
 nwalkers:  100   # For EMCEE photometry / astrometry fitting
 nburn: 100
 nsteps: 200
-numthreads: 6
+numthreads: 2
 
-
-
+x_range: 3. # pix
+y_range: 3. # pix
+flux_range: 10. # mag
+corr_len_range: 3.
+corr_len_guess: 3.
+fitboxsize: 31 # pix
+dr: 5
+exc_rad: 3

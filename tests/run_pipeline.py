@@ -14,7 +14,7 @@ if __name__ == '__main__':
 				 skip_comps=True)
 
 
-# imgdir = '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/20220628_NIRCam/IMGPROCESS/'
-# subdir = '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/20220628_NIRCam/2022_06_28_RDI_annu1_subs1_run1/SUBTRACTED/'
+# imgdir = '/Users/wbalmer/JWST-HCI/HIP65426/MIRI/F1140C/IMGPROCESS/'
+# subdir = '/Users/wbalmer/JWST-HCI/HIP65426/MIRI/F1140C/2022_06_28_RDI_annu1_subs1_run1/SUBTRACTED/'
 
-#sklip.plotting.plot_subimages([imgdir], [subdir], ['F250M', 'F444W'], ['RDI'])
+#sklip.plotting.plot_subimages([imgdir], [subdir], ['F250M', 'F444W'], ['RDI+ADI'])
