@@ -508,7 +508,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                             print('   CON = %.2e+/-%.2e (%.2e inj.)' % (res[key][temp]['f'], res[key][temp]['df'], cinj))
                         except:
                             print('   CON = %.2e+/-%.2e' % (res[key][temp]['f'], res[key][temp]['df']))
-                        print('   APPMAG = %.2e+/-%.2e' % (res[key][temp]['appmag'], res[key][temp]['dappmag']))
+                        print('   APPMAG = %.2f+/-%.2f' % (res[key][temp]['appmag'], res[key][temp]['dappmag']))
 
         # Save the results
         compfile = odir+key+'-comp_save.json'
