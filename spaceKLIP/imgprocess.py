@@ -54,6 +54,9 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
 					data_trim, trim = trim_miri_data([raw_data, raw_dq], filt)
 					data = data_trim[0] # Only one cube so just want first index
 					dq = data_trim[1]
+				else:
+					data = raw_data
+					dq = raw_dq
 
 				# Clean each image of outlier bad pixels
 				if 'median' in meta.outlier_corr:
@@ -83,7 +86,7 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
 							
 							blurred = median_filter(pix_time, size=5)
 							diff = np.subtract(pix_time, blurred)
-							threshold = 4*np.std(diff)
+							threshold = 2*np.std(diff)
 							outliers = np.nonzero(np.abs(diff)>threshold)
 
 							cleaned = np.copy(pix_time)
@@ -114,8 +117,8 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
 						cleaned = np.copy(arr)
 						for pix in badpix:	
 							if pix[0] > 2 and pix[1] > 2 and pix[0]<arr.shape[0]-2 and pix[1]<arr.shape[1]-2:
-								ylo, yhi = pix[0]-1, pix[0]+2
-								xlo, xhi = pix[1]-1, pix[1]+2
+								ylo, yhi = pix[1]-1, pix[1]+2
+								xlo, xhi = pix[0]-1, pix[0]+2
 								sub = arr[ylo:yhi, xlo:xhi]
 								if len(sub != 0):
 									sub[1,1] = np.nan

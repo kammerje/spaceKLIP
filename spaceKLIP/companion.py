@@ -83,7 +83,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True):
         # Define the input and output directories for each set of pyKLIP
         # parameters.
         idir = rdir+'SUBTRACTED/'
-        odir = rdir+'COMPANION/'
+        odir = rdir+'COMPANION_KL{}/'.format(meta.KL)
         if (not os.path.exists(odir)):
             os.makedirs(odir)
         

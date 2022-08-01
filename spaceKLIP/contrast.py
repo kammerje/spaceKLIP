@@ -76,7 +76,7 @@ def raw_contrast_curve(meta):
         # Define the input and output directories for each set of pyKLIP
         # parameters.
         idir = rdir+'SUBTRACTED/'
-        odir = rdir+'CONTRAST/'
+        odir = rdir + 'CONTRAST_RAW/'
         if (not os.path.exists(odir)):
             os.makedirs(odir)
         
@@ -233,7 +233,7 @@ def calibrated_contrast_curve(meta):
 
         # Define the input and output directories for each set of pyKLIP parameters.
         idir = rdir + 'SUBTRACTED/'
-        odir = rdir + 'CONTRAST/'
+        odir = rdir + 'CONTRAST_KL{}/'.format(meta.KL)
         if (not os.path.exists(odir)):
             os.makedirs(odir)
         
