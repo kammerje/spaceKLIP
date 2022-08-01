@@ -472,6 +472,9 @@ def get_stellar_magnitudes(meta):
             model_wave = data[0]
             model_flux = data[1]
 
+            print(len(model_wave))
+            print(len(model_flux))
+
             # Create a synphot spectrum
             SED = SourceSpectrum(Empirical1D, points=model_wave << u.Unit('micron'), lookup_table=model_flux << u.Unit('Jy'))
         except:
@@ -506,6 +509,13 @@ def get_stellar_magnitudes(meta):
 
         # Add magnitude to dictionary
         mstar[filt.upper()] = magnitude
+
+    # temporary feature until we figure out better file formatting with grant's models
+    i = 0
+    meta.dmstar = {}
+    for filt in filters:
+        meta.dmstar[filt] = meta.starmagerrs[i]
+        i += 1
 
     return mstar
 

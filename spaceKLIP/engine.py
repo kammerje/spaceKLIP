@@ -19,7 +19,6 @@ from . import imgprocess
 from . import subtraction
 from . import contrast
 from . import companion
-from . import analysis
 
 
 # =============================================================================
@@ -117,7 +116,6 @@ class JWST(Pipeline):
         self.meta.done_raw_contrast = False
         self.meta.done_cal_contrast = False
         self.meta.done_companion = False
-        self.meta.done_analysis = False
 
         # Get the JWST-specific metadata.
         self.get_jwst_meta()
@@ -211,8 +209,7 @@ class JWST(Pipeline):
         return sign*offset_arcsec
 
     def run_all(self, skip_ramp=False, skip_imgproc=False, skip_sub=False,
-                skip_rawcon=False, skip_calcon=False, skip_comps=False,
-                skip_analysis=False):
+                skip_rawcon=False, skip_calcon=False, skip_comps=False):
         """
         Single function to run all pipeline stages in sequence.
 
@@ -230,8 +227,6 @@ class JWST(Pipeline):
             Skip the calibrated contrast estimation stage?
         skip_comps : bool
             Skip the companion property extraction stage?
-        skip_analysis : bool
-            Skip the companion analysis stage?
 
         """
 
@@ -246,9 +241,7 @@ class JWST(Pipeline):
         if (not skip_calcon):
             self.cal_contrast()
         if (not skip_comps):
-            self.companions(skip_analysis=skip_analysis)
-        if (not skip_analysis):
-            self.analysis()
+            self.companions()
 
         return None
 
@@ -322,7 +315,7 @@ class JWST(Pipeline):
 
         return None
 
-    def companions(self, skip_analysis=True):
+    def companions(self):
         """
         Wrapper function for the companion property extraction stage.
 
@@ -333,23 +326,5 @@ class JWST(Pipeline):
 
         # Run companion property extraction stage.
         extract_comps = companion.extract_companions(self.meta)
-
-        # save extracted companion properties if analyzing data
-        if (not skip_analysis):
-            self.meta.extracted_comps = extract_comps
-
-        return None
-
-    def analysis(self):
-        """
-        Wrapper function for the companion analysis stage.
-
-        """
-
-        # Set the meta flag to True.
-        self.meta.done_analysis = True
-
-        # Run companion property extraction stage.
-        analyze_comps = analysis.analyze_companions(self.meta)
 
         return None
