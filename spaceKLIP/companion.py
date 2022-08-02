@@ -376,8 +376,8 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                     res[key][temp]['f'] = fma.raw_flux.bestfit*guess_flux
                     res[key][temp]['df'] = fma.raw_flux.error*guess_flux
 
-                    deltamag = -2.5*np.log10(fit.fit_flux.bestfit*guess_flux)
-                    ddeltamag = 2.5/np.log(10)*(fit.fit_flux.error*guess_flux)/(fit.fit_flux.bestfit*guess_flux)
+                    deltamag = -2.5*np.log10(fma.fit_flux.bestfit*guess_flux)
+                    ddeltamag = 2.5/np.log(10)*(fma.fit_flux.error*guess_flux)/(fma.fit_flux.bestfit*guess_flux)
                     starmag = meta.mstar[filt]
                     try:
                         dstarmag = meta.dmstar[filt]
@@ -386,7 +386,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                         dstarmag = 0.1
                     res[key][temp]['appmag'] = starmag+deltamag
                     res[key][temp]['dappmag'] = np.sqrt((dstarmag/starmag)**2+(ddeltamag/deltamag)**2)*res[key][temp]['appmag']
-
+ 
                     if (meta.verbose == True):
                         print('--> Companion %.0f' % (j+1))
                         print('   RA  = %.2f+/-%.2f mas (%.2f mas guess)' % (res[key][temp]['ra'], res[key][temp]['dra'], meta.ra_off[j]))

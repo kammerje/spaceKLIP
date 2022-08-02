@@ -139,7 +139,6 @@ def stsci_image_processing(meta):
 	"""
 	Use the JWST pipeline to process *rateints.fits files to *calints.fits files
 	"""
-
 	if meta.imgproc_idir:
 		run_image_processing(meta, 'RAMPFIT/SCI+REF', itype='default')
 	if meta.imgproc_bgdirs:
