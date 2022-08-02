@@ -12,7 +12,6 @@ from . import utils
 from . import io
 
 def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
-
 	files = io.get_working_files(meta, meta.done_rampfit, subdir=subdir_str, search=meta.imgproc_ext, itype=itype)
 
 	# Create save directory
@@ -58,6 +57,11 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
 					data = raw_data
 					dq = raw_dq
 
+					# print(file)
+					# from matplotlib.colors import LogNorm
+					# plt.imshow(dq[0], norm=LogNorm())
+					# plt.show()
+
 				# Clean each image of outlier bad pixels
 				if 'median' in meta.outlier_corr:
 					for i, arr in enumerate(data):
@@ -67,14 +71,15 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
 						outliers = np.nonzero((np.abs(diff[1:-1,1:-1])>threshold)) # Find outliers
 						outliers = np.array(outliers) + 1 #Because we trimmed in line above
 
+
 						cleaned = np.copy(arr)
 						for y,x in zip(outliers[0], outliers[1]):
 							cleaned[y,x] = blurred[y,x] #Swap pixels with blurred image
-						
+
 						arry, arrx = cleaned.shape
 						#Make the center normal
-						cleaned[int(3*arry/5):int(4*arry/5),int(3*arrx/5):int(4*arrx/5)] = \
-							arr[int(3*arry/5):int(4*arry/5),int(3*arrx/5):int(4*arrx/5)]
+						# cleaned[int(3*arry/5):int(4*arry/5),int(3*arrx/5):int(4*arrx/5)] = \
+						# 	arr[int(3*arry/5):int(4*arry/5),int(3*arrx/5):int(4*arrx/5)]
 
 						data[i] = cleaned
 				if 'timemed' in meta.outlier_corr:
@@ -82,7 +87,10 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
 					datacopy = np.copy(data)
 					for row in range(y):
 						for col in range(x):
-							pix_time = data[1:,row,col] #Don't use first image for this
+							if inst == 'MIRI':
+								pix_time = data[1:,row,col] #Don't use first image for this
+							else:
+								pix_time = data[0:,row,col]
 							
 							blurred = median_filter(pix_time, size=5)
 							diff = np.subtract(pix_time, blurred)
@@ -93,12 +101,32 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
 							mask = np.copy(pix_time)
 							for j in outliers:
 								cleaned[j] = blurred[j] #Swap pixels with blurred image
-								mask[j] = 999
+							if inst == 'MIRI':
+								data[1:,row,col] = cleaned
+							else:
+								data[0:,row,col] = cleaned
+				if 'timemed_alt' in meta.outlier_corr:
+					z, y, x = data.shape
+					datacopy = np.copy(data)
+					for row in range(y):
+						for col in range(x):
+							pix_time = data[0:,row,col] #Don't use first image for this
+							fracs = pix_time / np.max(pix_time)
 
-							data[1:,row,col] = cleaned
+							# Look for things that were bright, but change
+							if np.max(pix_time) > 1 and np.min(fracs) < meta.tmed_alt_frac:
+								good = np.where(fracs < meta.tmed_alt_frac)
+								bad = np.where(fracs > meta.tmed_alt_frac)
+								pix_time[bad] = np.median(pix_time[good])
+								cleaned = pix_time
+							else:
+								cleaned = pix_time
+	
+							data[0:,row,col] = cleaned
+
 				if 'dqmed' in meta.outlier_corr:
 					for i, arr in enumerate(data):
-						baddq = np.argwhere(dq[i]>0)
+						baddq = np.argwhere(dq[i]>meta.dq_threshold)
 						cleaned = np.copy(arr)
 						for pix in baddq:	
 							if pix[0] > 2 and pix[1] > 2 and pix[0]<arr.shape[0]-2 and pix[1]<arr.shape[1]-2:
@@ -111,12 +139,13 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
 						data[i] = cleaned
 				if 'custom' in meta.outlier_corr:
 					badpix = np.loadtxt(meta.custom_file, delimiter=',', dtype=int)
-					badpix -= trim # To account for trimming of MIRI array
+					if inst == 'MIRI':
+						badpix -= trim # To account for trimming of MIRI array
 					badpix -= [1,1] #To account for DS9 offset
 					for i, arr in enumerate(data):
 						cleaned = np.copy(arr)
 						for pix in badpix:	
-							if pix[0] > 2 and pix[1] > 2 and pix[0]<arr.shape[0]-2 and pix[1]<arr.shape[1]-2:
+							if pix[0] > 1 and pix[1] > 1 and pix[0]<arr.shape[0]-2 and pix[1]<arr.shape[1]-2:
 								ylo, yhi = pix[1]-1, pix[1]+2
 								xlo, xhi = pix[0]-1, pix[0]+2
 								sub = arr[ylo:yhi, xlo:xhi]

@@ -7,12 +7,12 @@ config_file = os.path.dirname(__file__)+'/nircam_config.yaml'
 #config_file = os.path.dirname(__file__)+'/miri_config.yaml'
 if __name__ == '__main__':
 	pipe = JWST(config_file)
-	pipe.run_all(skip_ramp=False, 
+	pipe.run_all(skip_ramp=True, 
 				 skip_imgproc=True, 
 				 skip_sub=True, 
-				 skip_rawcon=True, 
+				 skip_rawcon=False, 
 				 skip_calcon=True, 
-				 skip_comps=True)
+				 skip_comps=False)
 
 
 # imgdir = '/Users/wbalmer/JWST-HCI/HIP65426/MIRI/F1140C/IMGPROCESS/'

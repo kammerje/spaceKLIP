@@ -67,8 +67,10 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
     if (not meta.done_subtraction):
         if meta.comp_usefile == 'bgsub':
             subdir = 'IMGPROCESS/BGSUB'
+        elif meta.use_cleaned:
+            subdir = 'IMGPROCESS/SCI+REF_CLEAN'
         else:
-            subdir = 'IMGPROCESS'
+            subdir = 'IMGPROCESS/SCI+REF'
         basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir=subdir, search=meta.sub_ext)
 
         meta = utils.prepare_meta(meta, basefiles)

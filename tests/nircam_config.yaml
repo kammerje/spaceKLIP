@@ -15,7 +15,7 @@ odir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/20220801_NI
 sdir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/HIP65426A_sdf_phoenix_m+modbb_disk_r.txt' #VOT table or stellar model file.
 
 ##### OPTIONAL #####
-rundirs: []  #Specify directory(ies) within odir of existing runs to calculate contrast curve / companion
+rundirs: ['2022_08_02_ADI+RDI_annu1_subs1_run1', '2022_08_02_RDI_annu1_subs1_run1', '2022_08_02_ADI_annu1_subs1_run1']  #Specify directory(ies) within odir of existing runs to calculate contrast curve / companion
 ancildir: None      # Specify directory to save ancillary files, if None then saved under odir/ANCILLARY/. 
 bg_sci_dir: None #'/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1140C/BGSCI/' #None if not using
 bg_ref_dir: None #'/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1140C/BGREF/' #None if not using
@@ -34,7 +34,7 @@ badpix_threshold: 1
 ##### Star / Companion information #####
 ########################################
 spt: 'A2V' # Spectral type of target, only necessary for VOTable
-ra_off: [558]  # mas; RA offset of the known companions
+ra_off: [458]  # mas; RA offset of the known companions
 de_off:  [-651] # mas; DEC offset of the known companions
 starmagerrs: [0.054, 0] #Add 0 for NIRCam because of 335M
 
@@ -44,13 +44,13 @@ starmagerrs: [0.054, 0] #Add 0 for NIRCam because of 335M
 rampfit_idir:  True   #Toggle if you want to rampfit the sci/ref images
 rampfit_bgdirs: False #Toggle if you want to rampfit the backgrounds
 ramp_ext: 'uncal.fits'
-call_or_run: 'run'
+call_or_run: 'call'
 saturation_boundary: 0  #Number of pixels to flag around saturated pixels
 skip_dark_current: True
 skip_ipc: False
 skip_jump: False #Whether to skip the jump detection step of the pipeline
 jump_threshold: 4  #Adjust the jump detection threshold if not skipped
-ramp_fit_max_cores: 'all' #Options are 'none', 'quarter', 'half', 'all'
+ramp_fit_max_cores: 'quarter' #Options are 'none', 'quarter', 'half', 'all'
 force_ref_pixels: 4    #Set N pixels at 
 
 #####################################
@@ -59,23 +59,25 @@ force_ref_pixels: 4    #Set N pixels at
 imgproc_idir: True
 imgproc_ext: 'rateints.fits'
 imgproc_bgdirs: False
-outlier_only: False        #Must have already run image processing
-outlier_corr: ''
-outmed_blur: 3             #Size of median blurring window
-outmed_threshold: 20       #Threshold to detect outliers
-custom_file: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/pixmask_1140.txt'
+outlier_only: True        #Must have already run image processing
+outlier_corr: 'dqmed+timemed_alt+custom'
+outmed_blur: 5             #Size of median blurring window
+outmed_threshold: 1      #Threshold to detect outliers
+dq_threshold: 1000
+tmed_alt_frac: 0.2
+custom_file: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/pixmask_nircam.txt'
 
 ####################################
 ##### PSF Subtraction Settings #####
 ####################################
 sub_ext: 'calints.fits'
-use_cleaned: False   #Use files generated after (True) or before (False) outlier correction
+use_cleaned: True   #Use files generated after (True) or before (False) outlier correction
 bgtrim: 0  # Trim the first integration in the background, science, and reference (bgsub != 'saved' or 'None')
 bgsub: 'None'    #Perform background subtraction, 'default' for median, 'pyklip' for klip, 'leastsq' for loci
 bgmed_splits: [8,2]   #12,4  #Peform median background subtraction but split across [Nsci,Nref] ~equal different sections
 bgonly: False     # Only perform the background subtraction
 centering_alg: 'jwstpipe'    # Algorithm to use for centering "basic", "jwstpipe", "imageregis", or 'savefile'
-mode: ['ADI+RDI']       # list of modes for pyKLIP, will loop through all
+mode: ['ADI', 'RDI', 'ADI+RDI']       # list of modes for pyKLIP, will loop through all
 annuli: [1]         # list of number of annuli for pyKLIP, will loop through all
 subsections: [1]    # list of number of annuli for pyKLIP, will loop through all
 numbasis: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,30,40,50] # list of number of basis vectors for pyKLIP, will loop through all
@@ -84,9 +86,9 @@ numbasis: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,30,40,50] # list o
 ##### Contrast Curve Settings #####
 ###################################
 conc_usefile: False # Either "bgsub" for background subtracted or False for regular
-fwhm_scale: 1.5      #Scale to mask companions with
+fwhm_scale: 10      #Scale to mask companions with
 repeatcentering_contrast: False # False to not repeat, "basic" is not saved and must be repeated
-KL: 15 # Number of KL components for which the calibrated contrast curve and the companion properties shall be computed (must be in subtracted numbasis)
+KL: 5 # Number of KL components for which the calibrated contrast curve and the companion properties shall be computed (must be in subtracted numbasis)
 
 # TODO: MASK LOCATIONS
 
@@ -120,6 +122,7 @@ y_range: 2. # pix
 flux_range: 10. # mag
 corr_len_range: 1.
 corr_len_guess: 1.
-fitboxsize: 25 # pix
+fitboxsize: 30 # pix
+fitkernel: 'diag'
 dr: 5
 exc_rad: 3
