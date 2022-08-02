@@ -1,5 +1,7 @@
 import os, glob
 from jwst.pipeline.calwebb_image2 import Image2Pipeline
+from jwst.outlier_detection.outlier_detection_step import OutlierDetectionStep
+
 
 from astropy.io import fits
 import matplotlib.pyplot as plt
@@ -28,7 +30,7 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
 			pipeline.output_dir = save_dir
 			pipeline.logcfg = pipeline.output_dir + 'imageprocess-log.cfg'
 			pipeline.save_results = True
-			pipeline.run(file)
+			pipeline.run(file) 
 
 	# Perform additional cleaning
 	if meta.outlier_corr != 'None':
@@ -38,8 +40,18 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
 		if os.path.exists(clean_savedir) == False:
 			os.makedirs(clean_savedir)
 		
-		# Get the files from the image processing step 
-		files = glob.glob(save_dir+'/*')
+		# Get the files from the image processing step only if it is completed
+		if meta.outlier_only != True:
+			files = glob.glob(save_dir+'/*')
+
+		#Use the JWST outlier detections step to flag a few more bad pixels. 
+		if meta.jwst_outlier_detection:
+			step = OutlierDetectionStep()
+			for file in files: 
+				outDataModel = step.process(file)
+				outDataModel.save(clean_savedir+outDataModel.meta.filename)
+			files = glob.glob(clean_savedir+'/*')
+
 		for file in files:
 			with fits.open(file) as hdu:
 				# Grab the data
