@@ -44,12 +44,13 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
 			files = glob.glob(save_dir+'/*')
 
 		#Use the JWST outlier detections step to flag a few more bad pixels. 
-		if meta.jwst_outlier_detection:
-			step = OutlierDetectionStep()
-			for file in files: 
-				outDataModel = step.process(file)
-				outDataModel.save(clean_savedir+"/"+outDataModel.meta.filename)
-			files = glob.glob(clean_savedir+'/*')
+		if hasattr(meta,'jwst_outlier_detection'):
+			if meta.jwst_outlier_detection:
+				step = OutlierDetectionStep()
+				for file in files: 
+					outDataModel = step.process(file)
+					outDataModel.save(clean_savedir+"/"+outDataModel.meta.filename)
+				files = glob.glob(clean_savedir+'/*')
 
 		for file in files:
 			with fits.open(file) as hdu:
