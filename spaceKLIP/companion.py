@@ -171,7 +171,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                 offsetpsf_func = psf.JWST_PSF(inst, filt, immask, fov_pix=65,
                                               sp=None, use_coeff=True,
                                               date=meta.psfdate)
-                field_dep_corr = None
+                field_dep_corr = None #WebbPSF already corrects for transmissions. 
 
             # Loop through all companions.
             res[key] = {}
@@ -193,7 +193,6 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                     # Negative sign on ra as webbpsf_ext expects in x,y space
                     offsetpsf = offsetpsf_func.gen_psf([-meta.ra_off[j]/1e3,meta.de_off[j]/1e3], do_shift=False, quick=False)
                     offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
-                    field_dep_corr = None #Webbpsf_ext is already corrected for v
 
                 # Compute the forward-modeled dataset if it does not exist,
                 # yet, or if overwrite is True.
