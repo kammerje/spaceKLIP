@@ -37,8 +37,8 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
 		clean_savedir = save_dir + '_CLEAN'
 		if os.path.exists(clean_savedir) == False:
 			os.makedirs(clean_savedir)
-		
-		# Get the files from the image processing step 
+
+		# Get the files from the image processing step
 		files = glob.glob(save_dir+'/*')
 		for file in files:
 			with fits.open(file) as hdu:
@@ -54,6 +54,9 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
 					data_trim, trim = trim_miri_data([raw_data, raw_dq], filt)
 					data = data_trim[0] # Only one cube so just want first index
 					dq = data_trim[1]
+				else:
+					data = raw_data
+					dq = raw_dq
 
 				# Clean each image of outlier bad pixels
 				if 'median' in meta.outlier_corr:
@@ -67,7 +70,7 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
 						cleaned = np.copy(arr)
 						for y,x in zip(outliers[0], outliers[1]):
 							cleaned[y,x] = blurred[y,x] #Swap pixels with blurred image
-						
+
 						arry, arrx = cleaned.shape
 						#Make the center normal
 						cleaned[int(3*arry/5):int(4*arry/5),int(3*arrx/5):int(4*arrx/5)] = \
@@ -80,7 +83,7 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
 					for row in range(y):
 						for col in range(x):
 							pix_time = data[1:,row,col] #Don't use first image for this
-							
+
 							blurred = median_filter(pix_time, size=5)
 							diff = np.subtract(pix_time, blurred)
 							threshold = 4*np.std(diff)
@@ -97,7 +100,7 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
 					for i, arr in enumerate(data):
 						baddq = np.argwhere(dq[i]>0)
 						cleaned = np.copy(arr)
-						for pix in baddq:	
+						for pix in baddq:
 							if pix[0] > 2 and pix[1] > 2 and pix[0]<arr.shape[0]-2 and pix[1]<arr.shape[1]-2:
 								ylo, yhi = pix[0]-1, pix[0]+2
 								xlo, xhi = pix[1]-1, pix[1]+2
@@ -112,7 +115,7 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
 					badpix -= [1,1] #To account for DS9 offset
 					for i, arr in enumerate(data):
 						cleaned = np.copy(arr)
-						for pix in badpix:	
+						for pix in badpix:
 							if pix[0] > 2 and pix[1] > 2 and pix[0]<arr.shape[0]-2 and pix[1]<arr.shape[1]-2:
 								ylo, yhi = pix[0]-1, pix[0]+2
 								xlo, xhi = pix[1]-1, pix[1]+2

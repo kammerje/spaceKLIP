@@ -162,6 +162,16 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                     inst = 'MIRI'
                 else:
                     inst = 'NIRCAM'
+                    if '210R' in meta.coronmsk[key]:
+                        immask = 'MASK210R'
+                    elif '335R' in meta.coronmsk[key]:
+                        immask = 'MASK335R'
+                    elif '430R' in meta.coronmsk[key]:
+                        immask = 'MASK430R'
+                    elif 'LWB' in meta.coronmsk[key]:
+                        immask = 'MASKLWB'
+                    elif 'SWB' in meta.coronmsk[key]:
+                        immask = 'MASKSWB'
                 if inst == 'MIRI':
                     immask = 'FQPM{}'.format(filt[1:5])
                 offsetpsf_func = psf.JWST_PSF(inst, filt, immask, fov_pix=65,
