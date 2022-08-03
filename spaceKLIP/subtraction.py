@@ -435,7 +435,8 @@ def klip_subtraction(meta, files):
                     if hasattr(meta, 'OWA'): dataset.OWA = meta.OWA
 
                     #If algo is not set assume klip
-                    if hasattr(meta, 'algo'): algo = meta.algo else: algo='klip'
+                    algo = meta.algo if hasattr(meta, 'algo') else 'klip'
+
                     parallelized.klip_dataset(dataset=dataset,
                                               mode=mode,
                                               outputdir=odir,
