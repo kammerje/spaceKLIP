@@ -48,7 +48,7 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
 			step = OutlierDetectionStep()
 			for file in files: 
 				outDataModel = step.process(file)
-				outDataModel.save(clean_savedir+outDataModel.meta.filename)
+				outDataModel.save(clean_savedir+"/"+outDataModel.meta.filename)
 			files = glob.glob(clean_savedir+'/*')
 
 		for file in files:
