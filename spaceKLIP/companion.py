@@ -282,7 +282,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                         raise UserWarning('Offset PSF needs to be of odd shape')
                     shx = (fm_centx-int(fm_centx))-(guess_dx-int(guess_dx))
                     shy = (fm_centy-int(fm_centy))+(guess_dy-int(guess_dy))
-                    stamp = shift(offsetpsf, (shy, shx), mode='constant', cval=0.)
+                    stamp = ndimage.shift(offsetpsf, (shy, shx), mode='constant', cval=0.)
 
                     if meta.offpsf == 'webbpsf':
                         # Need to multiply offaxis by coronagraph transmission
