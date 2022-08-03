@@ -10,6 +10,8 @@ from webbpsf_ext import NIRCam_ext, MIRI_ext
 
 webbpsf_ext.setup_logging('WARN')
 
+# Progress bar
+from tqdm.auto import trange, tqdm
 
 class JWST_PSF():
     
@@ -94,8 +96,8 @@ class JWST_PSF():
             func_off = inst_off.calc_psf_from_coeff
             inst_on.gen_wfemask_coeff(large_grid=True)
         else:
-            func_on = psf_on.calc_psf
-            func_off = psf_off.calc_psf
+            func_on = inst_on.calc_psf
+            func_off = inst_off.calc_psf
             inst_on.options['jitter'] = 'gaussian'
             inst_on.options['jitter_sigma'] = 0.003
             inst_off.options['jitter'] = 'gaussian'
@@ -281,6 +283,8 @@ class JWST_PSF():
             If True, will offset PSF by appropriate amount from center. Otherwise,
             returns PSF in center of image.
         """
+
+        from scipy.interpolate import interp1d
 
         # Work with oversampled pixels and downsample at end
         siaf_ap = self.inst_on.siaf_ap
