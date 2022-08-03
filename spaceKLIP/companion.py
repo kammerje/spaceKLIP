@@ -167,9 +167,15 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                 else:
                     inst = 'NIRCAM'
                     immask = key.split('_')[-1]
-                    
+                if hasattr(meta, "psf_spec_file"):
+                    if meta.psf_spec_file != False:
+                        SED = io.read_spec_file(meta.psf_spec_file)
+                    else:
+                        SED = None
+                else:
+                    SED = None
                 offsetpsf_func = psf.JWST_PSF(inst, filt, immask, fov_pix=65,
-                                              sp=None, use_coeff=True,
+                                              sp=SED, use_coeff=True,
                                               date=meta.psfdate)
                 field_dep_corr = None #WebbPSF already corrects for transmissions. 
 

@@ -8,6 +8,8 @@ from webbpsf_ext.image_manip import pad_or_cut_to_size
 from webbpsf_ext.coords import rtheta_to_xy
 from webbpsf_ext import NIRCam_ext, MIRI_ext
 
+import pysynphot as S
+
 webbpsf_ext.setup_logging('WARN')
 
 # Progress bar
@@ -105,8 +107,15 @@ class JWST_PSF():
 
         # Renormalize spectrum to have 1 e-/sec within bandpass to obtain normalized PSFs
         if sp is not None:
-            sp = sp.renorm(1, 'counts', inst_on.bandpass)
-                        
+            try:
+                sp = sp.renorm(1, 'counts', inst_on.bandpass)
+            except:
+                # Our spectrum was probably made in synphot not pysynphot, 
+                wunit = sp.waveset.unit.to_string()
+                funit = sp(sp.waveset).unit.to_string()
+                sp = S.ArraySpectrum(sp.waveset.value, sp(sp.waveset).value, wunit, funit, name=sp.meta['name'])
+                sp = sp.renorm(1, 'counts', inst_on.bandpass)
+
         # On axis PSF
         if image_mask[-1] == 'B':
             # Need an array of PSFs along bar center
