@@ -29,7 +29,7 @@ class Coron1Pipeline(Detector1Pipeline):
 
     spec = """
         nrow_ref           = integer(default=20)    # Number of rows for pseudo-ref amp correction
-        nrow_col           = integer(default=10)    # Number of cols for pseudo-ref 1/f correction
+        ncol_ref           = integer(default=10)    # Number of cols for pseudo-ref 1/f correction
         grow_diagonal      = boolean(default=False) # Grow saturation along diagonal pixels?
         save_intermediates = boolean(default=False) # Save all intermediate step results
     """
@@ -206,10 +206,10 @@ class Coron1Pipeline(Detector1Pipeline):
         # Is this a full frame observation?
         is_full_frame = 'FULL' in input.meta.subarray.name.upper()
         # Get number of reference pixels explicitly specified
-        nlower = kwargs.get(nlower, self.nrow_ref)
-        nupper = kwargs.get(nupper, self.nrow_ref)
-        nleft  = kwargs.get(nleft,  self.ncol_ref) 
-        nright = kwargs.get(nright, self.ncol_ref)
+        nlower = kwargs.get('nlower', self.nrow_ref)
+        nupper = kwargs.get('nupper', self.nrow_ref)
+        nleft  = kwargs.get('nleft',  self.ncol_ref) 
+        nright = kwargs.get('nright', self.ncol_ref)
         nref_set = nlower + nupper + nleft + nright
         
         # Perform normal operations if full frame or nrow_ref and ncol_ref are 0
