@@ -102,7 +102,7 @@ def bg_subtraction(meta):
 
             for file in basefiles:
                 with fits.open(file) as hdul:
-                    data = hdul['SCI'].data[data_start:]
+                    data = hdul['SCI'].data[data_start:] 
 
                     # Split up the array the same way as numpy split the medians
                     data_split = np.array_split(data, bgmed_split, axis=0)
@@ -129,7 +129,6 @@ def bg_subtraction(meta):
             leastsq_bg(meta, basefiles, files, data_start=data_start, overwrite=meta.overwrite)
 
     return
-
 
 def median_bg(files, data_start=0, med_split=1):
     '''
@@ -431,7 +430,12 @@ def klip_subtraction(meta, files):
                                             psflib_filepaths=psflib_filepaths, centering=meta.centering_alg, badpix_threshold=meta.badpix_threshold,
                                             scishiftfile=meta.ancildir+'shifts/scishifts', refshiftfile=meta.ancildir+'shifts/refshifts',
                                             fiducial_point_override=meta.fiducial_point_override)
+                    
+                    #Set an OWA if it exists. 
+                    if hasattr(meta, 'OWA'): dataset.OWA = meta.OWA
 
+                    #If algo is not set assume klip
+                    if hasattr(meta, 'algo'): algo = meta.algo else: algo='klip'
                     parallelized.klip_dataset(dataset=dataset,
                                               mode=mode,
                                               outputdir=odir,
@@ -444,7 +448,8 @@ def klip_subtraction(meta, files):
                                               maxnumbasis=meta.maxnumbasis[key],
                                               psf_library=dataset.psflib,
                                               highpass=False,
-                                              verbose=meta.verbose)
+                                              verbose=meta.verbose,
+                                              algo=meta.algorithm)
 
                 # Save a meta file under each directory
                 smeta = copy.deepcopy(meta)

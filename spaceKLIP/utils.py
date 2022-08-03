@@ -532,11 +532,12 @@ def get_stellar_magnitudes(meta):
         mstar[filt.upper()] = magnitude
 
     # temporary feature until we figure out better file formatting with grant's models
-    i = 0
-    meta.dmstar = {}
-    for filt in filters:
-        meta.dmstar[filt] = meta.starmagerrs[i]
-        i += 1
+    if hasattr(meta,'starmagerrs'):
+        i = 0
+        meta.dmstar = {}
+        for filt in filters:
+            meta.dmstar[filt] = meta.starmagerrs[i]
+            i += 1
 
     return mstar
 
