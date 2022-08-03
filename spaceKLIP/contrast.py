@@ -68,6 +68,8 @@ def raw_contrast_curve(meta, fourier=True):
     if (not meta.done_subtraction):
         if meta.conc_usefile:
             subdir = 'IMGPROCESS/BGSUB'
+        elif meta.use_cleaned:
+            subdir = 'IMGPROCESS/SCI+REF_CLEAN'
         else:
             subdir = 'IMGPROCESS/SCI+REF'
         basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir=subdir, search=meta.sub_ext)
@@ -84,7 +86,7 @@ def raw_contrast_curve(meta, fourier=True):
         # Define the input and output directories for each set of pyKLIP
         # parameters.
         idir = rdir+'SUBTRACTED/'
-        odir = rdir+'CONTRAST/'
+        odir = rdir + 'CONTRAST_RAW/'
         if (not os.path.exists(odir)):
             os.makedirs(odir)
 
@@ -233,9 +235,11 @@ def calibrated_contrast_curve(meta, fourier=False):
     # If necessary, extract the metadata of the observations.
     if (not meta.done_subtraction):
         if meta.conc_usefile == 'bgsub':
-            subdir = 'IMGPROCESS+BGSUB'
+            subdir = 'IMGPROCESS/BGSUB'
+        elif meta.use_cleaned:
+            subdir = 'IMGPROCESS/SCI+REF_CLEAN'
         else:
-            subdir = 'IMGPROCESS'
+            subdir = 'IMGPROCESS/SCI+REF'
         basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir=subdir, search=meta.sub_ext)
         meta = utils.prepare_meta(meta, basefiles)
         meta.done_subtraction = True # set the subtraction flag for the subsequent pipeline stages
@@ -272,7 +276,7 @@ def calibrated_contrast_curve(meta, fourier=False):
 
         # Define the input and output directories for each set of pyKLIP parameters.
         idir = rdir + 'SUBTRACTED/'
-        odir = rdir + 'CONTRAST/'
+        odir = rdir + 'CONTRAST_KL{}/'.format(meta.KL)
         if (not os.path.exists(odir)):
             os.makedirs(odir)
 

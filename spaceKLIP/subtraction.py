@@ -102,7 +102,8 @@ def bg_subtraction(meta):
 
             for file in basefiles:
                 with fits.open(file) as hdul:
-                    data = hdul['SCI'].data[data_start:] 
+                    data = hdul['SCI'].data[data_start:]
+
                     # Split up the array the same way as numpy split the medians
                     data_split = np.array_split(data, bgmed_split, axis=0)
                     # Loop over splits and subtract corresponding median

@@ -449,7 +449,7 @@ def field_dependent_correction(stamp,
     # peak_index = np.unravel_index(stamp.argmax(), stamp.shape)
     # transmission_at_center =  transmission[peak_index[1],peak_index[0]]
 
-    return transmission_at_center*stamp
+    return transmission*stamp
 
 def get_stellar_magnitudes(meta):
     # First find out if a file was provided correctly
@@ -495,9 +495,6 @@ def get_stellar_magnitudes(meta):
             data = np.genfromtxt(meta.sdir).transpose()
             model_wave = data[0]
             model_flux = data[1]
-
-            print(len(model_wave))
-            print(len(model_flux))
 
             # Create a synphot spectrum
             SED = SourceSpectrum(Empirical1D, points=model_wave << u.Unit('micron'), lookup_table=model_flux << u.Unit('Jy'))
