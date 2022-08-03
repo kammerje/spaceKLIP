@@ -351,6 +351,7 @@ def get_transmission(meta, key, odir, derotate=False):
     if (mask in ['MASKALWB', 'MASKASWB']):
         tp = shift(tp, (0., -meta.bar_offset[key]*1000./pxsc), mode='constant', cval=0.)
 
+
     # Derotate the PSF mask and coadd it weighted by the integration time of
     # the different rolls.
     if (derotate == True):
@@ -532,11 +533,12 @@ def get_stellar_magnitudes(meta):
         mstar[filt.upper()] = magnitude
 
     # temporary feature until we figure out better file formatting with grant's models
-    i = 0
-    meta.dmstar = {}
-    for filt in filters:
-        meta.dmstar[filt] = meta.starmagerrs[i]
-        i += 1
+    if hasattr(meta,'starmagerrs'):
+        i = 0
+        meta.dmstar = {}
+        for filt in filters:
+            meta.dmstar[filt] = meta.starmagerrs[i]
+            i += 1
 
     return mstar
 
