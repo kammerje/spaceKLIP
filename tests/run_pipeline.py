@@ -10,7 +10,7 @@ if __name__ == '__main__':
 	pipe.run_all(skip_ramp=True, 
 				 skip_imgproc=True, 
 				 skip_sub=True, 
-				 skip_rawcon=False, 
+				 skip_rawcon=True, 
 				 skip_calcon=True, 
 				 skip_comps=False)
 

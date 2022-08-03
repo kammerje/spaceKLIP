@@ -162,10 +162,12 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                 # Define some quantities
                 if pxsc > 100:
                     inst = 'MIRI'
+                    immask = 'FQPM{}'.format(filt[1:5])
                 else:
                     inst = 'NIRCAM'
-                if inst == 'MIRI':
-                    immask = 'FQPM{}'.format(filt[1:5])
+                    immask = key.split('_')[-1]
+                    print(immask)
+                    
                 offsetpsf_func = psf.JWST_PSF(inst, filt, immask, fov_pix=65,
                                               sp=None, use_coeff=True,
                                               date=meta.psfdate)
