@@ -131,7 +131,7 @@ class JWST(Pipeline):
         # Define the telescope and instrument properties.
         self.meta.diam = 6.5 # m; primary mirror diameter
         self.meta.iwa = 1. # pix; inner working angle
-        self.meta.owa = 150. # pix; outer working angle
+        self.meta.owa = 250. # pix; outer working angle
 
         # Define the ancillary directories.
         if (not os.path.isdir(self.meta.ancildir)):
