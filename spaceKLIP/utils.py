@@ -36,7 +36,7 @@ rad2mas = 180./np.pi*3600.*1000.
 # MAIN
 # =============================================================================
 
-def fourier_imshift(image, shift):
+def fourier_imshift(image, shift, pad=False, cval=0.0):
     """
     Fourier image shift. Adapted from JWST stage 3 pipeline.
 
@@ -46,6 +46,14 @@ def fourier_imshift(image, shift):
         A 2D/3D image to be shifted.
     shift : array
         xshift, yshift.
+    pad : bool
+        Should we pad the array before shifting, then truncate?
+        Otherwise, the image is wrapped.
+    cval : sequence or float, optional
+        The values to set the padded values for each axis. Default is 0.
+        ((before_1, after_1), ... (before_N, after_N)) unique pad constants for each axis.
+        ((before, after),) yields same before and after constants for each axis.
+        (constant,) or int is a shortcut for before = after = constant for all axes.
 
     Returns
     -------
@@ -55,10 +63,26 @@ def fourier_imshift(image, shift):
     """
 
     if (image.ndim == 2):
+
+        ny, nx = image.shape
+
+        # Pad border with zeros
+        if pad:
+            xshift, yshift = shift
+            padx = np.abs(np.int(xshift)) + 5
+            pady = np.abs(np.int(yshift)) + 5
+            pad_vals = ([pady]*2,[padx]*2)
+            image = np.pad(image, pad_vals, 'constant', constant_values=cval)
+        else:
+            padx = pady = 0
+
         shift = np.asanyarray(shift)[:2]
         offset_image = fourier_shift(np.fft.fftn(image), shift[::-1])
         offset = np.fft.ifftn(offset_image).real
 
+        # Remove padded border to return to original size
+        offset = offset[pady:pady+ny, padx:padx+nx]
+    
     elif (image.ndim == 3):
         nslices = image.shape[0]
         shift = np.asanyarray(shift)[:, :2]
@@ -67,11 +91,11 @@ def fourier_imshift(image, shift):
 
         offset = np.empty_like(image, dtype=float)
         for k in range(nslices):
-            offset[k] = fourier_imshift(image[k], shift[k])
-
+            offset[k] = fourier_imshift(image[k], shift[k], pad=pad, cval=cval)
+    
     else:
-        raise ValueError('Input image must be either a 2D or a 3D array')
-
+        raise ValueError(f'Input image must be either a 2D or a 3D array. Found {image.ndim} dimensions.')
+    
     return offset
 
 def shift_invpeak(shift, image):
