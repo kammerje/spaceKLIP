@@ -34,7 +34,7 @@ badpix_threshold: 1
 ##### Star / Companion information #####
 ########################################
 spt: 'A2V' # Spectral type of target, only necessary for VOTable
-ra_off: [358]  # mas; RA offset of the known companions
+ra_off: [410]  # mas; RA offset of the known companions
 de_off:  [-651] # mas; DEC offset of the known companions
 starmagerrs: [0.054, 0] #Add 0 for NIRCam because of 335M
 
@@ -123,6 +123,6 @@ flux_range: 10. # mag
 corr_len_range: 1.
 corr_len_guess: 1.
 fitboxsize: 30 # pix
-fitkernel: 'diag'
+fitkernel: 'matern32'
 dr: 5
 exc_rad: 3
