@@ -199,3 +199,9 @@ flycheck_*.el
 
 # directory configuration
 .dir-locals.el
+
+# Local stuff
+crds_cache
+tests/data/*
+tests/ultranest
+tests/species_*
