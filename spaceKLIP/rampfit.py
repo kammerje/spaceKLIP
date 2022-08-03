@@ -6,10 +6,13 @@ from datetime import datetime
 from jwst.pipeline.calwebb_detector1 import Detector1Pipeline
 from jwst.datamodels import dqflags, RampModel
 
+from webbpsf_ext import robust
+
 # Define logging
 import logging
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
+
 
 class Coron1Pipeline(Detector1Pipeline):
     """ Coron1Pipeline
@@ -35,7 +38,7 @@ class Coron1Pipeline(Detector1Pipeline):
     # start the actual processing
     def process(self, input):
         
-       
+    
         log.info(f'Starting {self.class_alias} ...')
 
         # open the input as a RampModel
@@ -120,10 +123,10 @@ class Coron1Pipeline(Detector1Pipeline):
 
     def run_step(self, step_obj, input, save_results=None, **kwargs):
         """Run a Step with option to save results. 
-		
-		Saving results tends to increase memory usage due to a memory leak
-		in the datamodels.
-		"""
+        
+        Saving results tends to increase memory usage due to a memory leak
+        in the datamodels.
+        """
 
         # Determine if we're saving results for real
         if step_obj.skip:
@@ -184,14 +187,13 @@ class Coron1Pipeline(Detector1Pipeline):
         """
         
         # Slight modifications if NIRCam subarray
-        instrument = input.meta.instrument.name.lower()
-        subsize = input.meta.subarray.ysize
+        instrument = input.meta.instrument.name
+        subsize = input.meta.subarray.xsize
         
         # Perform normal operations if not set
-        if not (instrument=='NIRCAM' and subsize<2048):
-            return self.run_step(self.refpix, input, **kwargs)
-        
         nrow_ref = self.nrow_ref
+        if not (instrument.lower()=='nircam' and subsize<2048 and nrow_ref>0):
+            return self.run_step(self.refpix, input, **kwargs)
         
         # Update pixel DQ mask to manually set reference pixels
         log.info(f'Flagging {nrow_ref} references rows at top and bottom of array')
@@ -248,88 +250,89 @@ class Coron1Pipeline(Detector1Pipeline):
         return res
 
 def run_ramp_fitting(meta, idir, osubdir):
-	
+    
 
-	search = '*' + meta.ramp_ext
-	# Get all of the files in the input directory
-	files = glob.glob(idir+search)
-	if len(files) == 0:
-		raise ValueError('Unable to locate any {} files in directory {}'.format(search, idir))
-	# Run the pipeline on every file in a directory
-	for file in files:
-		# Set up pipeline
-		pipeline = Coron1Pipeline()
+    search = '*' + meta.ramp_ext
+    # Get all of the files in the input directory
+    files = glob.glob(idir+search)
+    if len(files) == 0:
+        raise ValueError('Unable to locate any {} files in directory {}'.format(search, idir))
+    # Run the pipeline on every file in a directory
+    for file in files:
+        # Set up pipeline
+        pipeline = Coron1Pipeline()
 
-		# Skip certain steps?
-		if hasattr(meta, 'skip_jump'):
-			pipeline.jump.skip = meta.skip_jump
-		if hasattr(meta, 'skip_dark_current'):
-			pipeline.dark_current.skip = meta.skip_dark_current
-		if hasattr(meta, 'skip_ipc'):
-			pipeline.ipc.skip = meta.skip_ipc
-		# Skip persistence step for now since it doesn't do anything
-		pipeline.persistence.skip = True
+        # Skip certain steps?
+        if hasattr(meta, 'skip_jump'):
+            pipeline.jump.skip = meta.skip_jump
+        if hasattr(meta, 'skip_dark_current'):
+            pipeline.dark_current.skip = meta.skip_dark_current
+        if hasattr(meta, 'skip_ipc'):
+            pipeline.ipc.skip = meta.skip_ipc
+        # Skip persistence step for now since it doesn't do anything
+        pipeline.persistence.skip = True
 
-		# Set some Step parameters
-		if hasattr(meta, 'jump_threshold'):
-			pipeline.jump.rejection_threshold = meta.jump_threshold
-		if hasattr(meta, 'ramp_fit_max_cores'):
-			pipeline.ramp_fit.maximum_cores = meta.ramp_fit_max_cores
-		if hasattr(meta, 'nrow_ref'):
-			pipeline.nrow_ref = meta.nrow_ref
-		if hasattr(meta, 'grow_diagonal'):
-			pipeline.nrow_ref = meta.grow_diagonal
+        # Set some Step parameters
+        if hasattr(meta, 'jump_threshold'):
+            pipeline.jump.rejection_threshold = meta.jump_threshold
+        if hasattr(meta, 'ramp_fit_max_cores'):
+            pipeline.ramp_fit.maximum_cores = meta.ramp_fit_max_cores
+        if hasattr(meta, 'nrow_ref'):
+            pipeline.nrow_ref = meta.nrow_ref
+        if hasattr(meta, 'grow_diagonal'):
+            pipeline.nrow_ref = meta.grow_diagonal
 
-		# Options for saving intermediate results
-		if hasattr(meta, 'save_intermediates'):
-			pipeline.save_intermediates = meta.save_intermediates
-		pipeline.save_results = True
+        # Options for saving intermediate results
+        if hasattr(meta, 'save_intermediates'):
+            pipeline.save_intermediates = meta.save_intermediates
+        pipeline.save_results = True
 
-		# Set up directory to save into
-		pipeline.output_dir = meta.odir + osubdir
-		if os.path.exists(pipeline.output_dir) == False:
-			os.makedirs(pipeline.output_dir)
+        # Set up directory to save into
+        pipeline.output_dir = meta.odir + osubdir
+        if os.path.exists(pipeline.output_dir) == False:
+            os.makedirs(pipeline.output_dir)
 
-		# Create log file output
-		file_base = os.path.basename(file).replace('uncal.fits', '')
-		date_str = datetime.now().isoformat()
-		fname = f'{file_base}_detector1_{date_str}.log'
-		log_file = os.path.join(pipeline.output_dir, fname)
-		# Create empty file
-		with open(log_file, 'w') as f:
-			pass
+        # Create log file output
+        file_base = os.path.basename(file).replace('uncal.fits', '')
+        date_str = datetime.now().isoformat()
+        fname = f'{file_base}_detector1_{date_str}.log'
+        log_file = os.path.join(pipeline.output_dir, fname)
+        # Create empty file
+        with open(log_file, 'w') as f:
+            pass
 
-		# Add file stream handler to also append log messages to file
-		logger = logging.getLogger()
-		fh = logging.FileHandler(log_file, 'a')
-		fmt = logging.Formatter('%(asctime)s [%(name)s:%(levelname)s] %(message)s')
-		fh.setFormatter(fmt)
-		logger.addHandler(fh)
+        # Add file stream handler to also append log messages to file
+        logger = logging.getLogger()
+        fh = logging.FileHandler(log_file, 'a')
+        fmt = logging.Formatter('%(asctime)s [%(name)s:%(levelname)s] %(message)s')
+        fh.setFormatter(fmt)
+        logger.addHandler(fh)
 
-		# Run pipeline, raise exception on error, and close log file handler
-		try:
-			pipeline.run(file)
-		except Exception as e:
-			raise RuntimeError(
-				'Caugh exception during pipeline processing.'
-				'\nException: {}'.format(e)
-			)
-		finally:
-			logger.removeHandler(fh)
-			fh.close()
+        # Run pipeline, raise exception on error, and close log file handler
+        try:
+            pipeline.run(file)
+        except Exception as e:
+            raise RuntimeError(
+                'Caugh exception during pipeline processing.'
+                '\nException: {}'.format(e)
+            )
+        finally:
+            logger.removeHandler(fh)
+            fh.close()
 
-	return
+    return
 
 def stsci_ramp_fitting(meta):
-	"""
-	Use the JWST pipeline to process *uncal.fits files to *rateints.fits files
-	"""
-	if meta.rampfit_idir:
-		run_ramp_fitting(meta, meta.idir, 'RAMPFIT/SCI+REF/')
-	if meta.rampfit_bgdirs:
-		if meta.bg_sci_dir != 'None':
-			run_ramp_fitting(meta, meta.bg_sci_dir, 'RAMPFIT/BGSCI/')
-		if meta.bg_ref_dir != 'None':
-			run_ramp_fitting(meta, meta.bg_ref_dir, 'RAMPFIT/BGREF/')
+    """
+    Use the JWST pipeline to process *uncal.fits files to *rateints.fits files
+    """
+    if meta.rampfit_idir:
+        run_ramp_fitting(meta, meta.idir, 'RAMPFIT/SCI+REF/')
+    if meta.rampfit_bgdirs:
+        if meta.bg_sci_dir != 'None':
+            run_ramp_fitting(meta, meta.bg_sci_dir, 'RAMPFIT/BGSCI/')
+        if meta.bg_ref_dir != 'None':
+            run_ramp_fitting(meta, meta.bg_ref_dir, 'RAMPFIT/BGREF/')
 
-	return
+    return
+
