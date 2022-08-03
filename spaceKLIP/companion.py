@@ -158,6 +158,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                                                 recenter_offsetpsf=recenter_offsetpsf,
                                                 derotate=False, fourier=fourier)
                 offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
+                field_dep_corr = partial(utils.field_dependent_correction, meta=meta)
             elif meta.offpsf == 'webbpsf_ext':
                 # Define some quantities
                 if pxsc > 100:
@@ -166,11 +167,11 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                 else:
                     inst = 'NIRCAM'
                     immask = key.split('_')[-1]
-                    print(immask)
                     
                 offsetpsf_func = psf.JWST_PSF(inst, filt, immask, fov_pix=65,
                                               sp=None, use_coeff=True,
                                               date=meta.psfdate)
+                field_dep_corr = None
 
             # Loop through all companions.
             res[key] = {}
@@ -192,6 +193,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                     # Negative sign on ra as webbpsf_ext expects in x,y space
                     offsetpsf = offsetpsf_func.gen_psf([-meta.ra_off[j]/1e3,meta.de_off[j]/1e3], do_shift=False, quick=False)
                     offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
+                    field_dep_corr = None #Webbpsf_ext is already corrected for v
 
                 # Compute the forward-modeled dataset if it does not exist,
                 # yet, or if overwrite is True.
@@ -212,7 +214,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                                                  input_wvs=input_wvs,
                                                  spectrallib=[guess_spec],
                                                  spectrallib_units='contrast',
-                                                 field_dependent_correction=partial(utils.field_dependent_correction, meta=meta))
+                                                 field_dependent_correction=field_dep_corr)
 
                     # Compute the forward-modeled dataset.
                     annulus = meta.annuli#[[guess_sep-20., guess_sep+20.]] # pix
