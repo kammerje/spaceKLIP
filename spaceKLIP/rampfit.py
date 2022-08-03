@@ -6,8 +6,6 @@ from datetime import datetime
 from jwst.pipeline.calwebb_detector1 import Detector1Pipeline
 from jwst.datamodels import dqflags, RampModel
 
-from webbpsf_ext import robust
-
 # Define logging
 import logging
 log = logging.getLogger(__name__)
@@ -30,7 +28,8 @@ class Coron1Pipeline(Detector1Pipeline):
     class_alias = "calwebb_coron1"
 
     spec = """
-        nrow_ref           = integer(default=20)    # Number of rows for pseudo-ref correction
+        nrow_ref           = integer(default=20)    # Number of rows for pseudo-ref amp correction
+        nrow_col           = integer(default=10)    # Number of cols for pseudo-ref 1/f correction
         grow_diagonal      = boolean(default=False) # Grow saturation along diagonal pixels?
         save_intermediates = boolean(default=False) # Save all intermediate step results
     """
@@ -61,7 +60,7 @@ class Coron1Pipeline(Detector1Pipeline):
             input = self.run_step(self.linearity, input)
             input = self.run_step(self.rscd, input)
             input = self.run_step(self.dark_current, input)
-            input = self.run_step(self.refpix, input)
+            input = self.do_refpix(input)
 
             # skip until MIRI team has figured out an algorithm
             # input = self.persistence(input)
@@ -76,7 +75,7 @@ class Coron1Pipeline(Detector1Pipeline):
             input = self.do_saturation(input)
             input = self.run_step(self.ipc, input)
             input = self.run_step(self.superbias, input)
-            input = self.do_nircam_refpix(input)
+            input = self.do_refpix(input)
             input = self.run_step(self.linearity, input)
             input = self.run_step(self.persistence, input)
             input = self.run_step(self.dark_current, input)
@@ -170,10 +169,16 @@ class Coron1Pipeline(Detector1Pipeline):
 
         return res
     
-    def do_nircam_refpix(self, input, **kwargs):
-        """ Pseudo-Refpix for NIRCam subarrays
+    def do_refpix(self, input, **kwargs):
+        """ Choose reference pixel correction path
         
-        If full frame or MIRI, will still run RefPix Step by default.
+        If full frame, perform RefPix as normal.
+        If no ref rows or columns specified, then perform RefPix as normal.
+
+        Otherwise, temporary set reference rows and columns in the DQ flags
+        and force the reference correction. Can set number of reference
+        rows and column via the `nrow_ref` and `ncol_ref` attributes, or
+        pass directly as `nlower`, `nupper`, `nleft`, `nright` keywords.
         
         Parameters
         ==========
@@ -184,31 +189,66 @@ class Coron1Pipeline(Detector1Pipeline):
         ============
         save_results : bool
             Explictly specify whether or not to save results.
+        nlower : int or None
+            Number of lower pixels to set as ref pixels. If not set,
+            then defaults to `self.nrow_ref`.
+        nupper : int or None
+            Number of upper pixels to set as ref pixels. If not set,
+            then defaults to `self.nrow_ref`.
+        nleft : int or None
+            Number of left pixels to set as ref pixels. If not set,
+            then defaults to `self.ncol_ref`.
+        nright : int or None
+            Number of right pixels to set as ref pixels. If not set,
+            then defaults to `self.ncol_ref`.
         """
         
-        # Slight modifications if NIRCam subarray
-        instrument = input.meta.instrument.name
-        subsize = input.meta.subarray.xsize
+        # Is this a full frame observation?
+        is_full_frame = 'FULL' in input.meta.subarray.name.upper()
+        # Get number of reference pixels explicitly specified
+        nlower = kwargs.get(nlower, self.nrow_ref)
+        nupper = kwargs.get(nupper, self.nrow_ref)
+        nleft  = kwargs.get(nleft,  self.ncol_ref) 
+        nright = kwargs.get(nright, self.ncol_ref)
+        nref_set = nlower + nupper + nleft + nright
         
-        # Perform normal operations if not set
-        nrow_ref = self.nrow_ref
-        if not (instrument.lower()=='nircam' and subsize<2048 and nrow_ref>0):
+        # Perform normal operations if full frame or nrow_ref and ncol_ref are 0
+        if is_full_frame or nref_set==0:
             return self.run_step(self.refpix, input, **kwargs)
+        else:
+            return self.do_pseudo_refpix(input, **kwargs)
+
+    def do_pseudo_refpix(self, input, nlower=None, nupper=None, nleft=None, nright=None, **kwargs):
+        """Force reference pixel correction on data even if no ref pixel exist
         
+        Includes options to specify individual row and column widths.
+        If not set, defaults to `self.nrow_ref` and `self.ncol_ref`.
+        """
+        nlower = self.nrow_ref if nlower is None else nlower
+        nupper = self.nrow_ref if nupper is None else nupper
+        nleft  = self.ncol_ref if nleft  is None else nleft
+        nright = self.ncol_ref if nright is None else nright
+
         # Update pixel DQ mask to manually set reference pixels
-        log.info(f'Flagging {nrow_ref} references rows at top and bottom of array')
-        input.pixeldq[0:nrow_ref,:] = input.pixeldq[0:nrow_ref,:] | dqflags.pixel['REFERENCE_PIXEL']
-        input.pixeldq[-nrow_ref:,:] = input.pixeldq[-nrow_ref:,:] | dqflags.pixel['REFERENCE_PIXEL']
+        log.info(f'Flagging [{nlower}, {nupper}] references rows at [bottom, top] of array')
+        log.info(f'Flagging [{nleft}, {nright}] references rows at [left, right] of array')
+        input.pixeldq[0:nlower,:] = input.pixeldq[0:nlower,:] | dqflags.pixel['REFERENCE_PIXEL']
+        input.pixeldq[-nupper:,:] = input.pixeldq[-nupper:,:] | dqflags.pixel['REFERENCE_PIXEL']
+        input.pixeldq[:,0:nleft]  = input.pixeldq[:,0:nleft]  | dqflags.pixel['REFERENCE_PIXEL']
+        input.pixeldq[:,-nright:] = input.pixeldq[:,-nright:] | dqflags.pixel['REFERENCE_PIXEL']
 
         res = self.run_step(self.refpix, input, **kwargs)
 
         # Return pixel DQ back to original using bitwise AND of inverted flag
         log.info(f'Removing reference pixel flags')
-        res.pixeldq[0:nrow_ref,:] = res.pixeldq[0:nrow_ref,:] & ~dqflags.pixel['REFERENCE_PIXEL']
-        res.pixeldq[-nrow_ref:,:] = res.pixeldq[-nrow_ref:,:] & ~dqflags.pixel['REFERENCE_PIXEL']
+        res.pixeldq[0:nlower,:] = res.pixeldq[0:nlower,:] & ~dqflags.pixel['REFERENCE_PIXEL']
+        res.pixeldq[-nupper:,:] = res.pixeldq[-nupper:,:] & ~dqflags.pixel['REFERENCE_PIXEL']
+        res.pixeldq[:,0:nleft]  = res.pixeldq[:,0:nleft]  & ~dqflags.pixel['REFERENCE_PIXEL']
+        res.pixeldq[:,-nright:] = res.pixeldq[:,-nright:] & ~dqflags.pixel['REFERENCE_PIXEL']
         
         return res
-    
+
+   
     def do_saturation(self, input, **kwargs):
         """Peform custom saturation flagging"""
         
@@ -279,6 +319,8 @@ def run_ramp_fitting(meta, idir, osubdir):
             pipeline.ramp_fit.maximum_cores = meta.ramp_fit_max_cores
         if hasattr(meta, 'nrow_ref'):
             pipeline.nrow_ref = meta.nrow_ref
+        if hasattr(meta, 'ncol_ref'):
+            pipeline.ncol_ref = meta.ncol_ref
         if hasattr(meta, 'grow_diagonal'):
             pipeline.nrow_ref = meta.grow_diagonal
         if hasattr(meta, 'sat_boundary'):
