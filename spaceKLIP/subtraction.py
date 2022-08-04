@@ -435,7 +435,7 @@ def klip_subtraction(meta, files):
                     if hasattr(meta, 'OWA'): dataset.OWA = meta.OWA
 
                     #If algo is not set assume klip
-                    algo = meta.algo if hasattr(meta, 'algo') else 'klip'
+                    algo = meta.algorithm if hasattr(meta, 'algorithm') else 'klip'
                     parallelized.klip_dataset(dataset=dataset,
                                               mode=mode,
                                               outputdir=odir,
@@ -449,7 +449,7 @@ def klip_subtraction(meta, files):
                                               psf_library=dataset.psflib,
                                               highpass=False,
                                               verbose=meta.verbose,
-                                              algo=meta.algorithm)
+                                              algo=algo)
 
                 # Save a meta file under each directory
                 smeta = copy.deepcopy(meta)
