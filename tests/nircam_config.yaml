@@ -51,7 +51,7 @@ skip_jump: False #Whether to skip the jump detection step of the pipeline
 jump_threshold: 4  #Adjust the jump detection threshold if not skipped
 ramp_fit_max_cores: 'none' #Options are 'none', 'quarter', 'half', 'all'
 nrow_ref: 4    #Set number of top/bottom reference rows 
-ncol_ref: 4    #Set number of left/right reference columns
+ncol_ref: 0    #Set number of left/right reference columns
 
 #####################################
 ##### Image Processing Settings #####

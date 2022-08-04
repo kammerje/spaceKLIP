@@ -29,7 +29,7 @@ class Coron1Pipeline(Detector1Pipeline):
 
     spec = """
         nrow_ref           = integer(default=20)    # Number of rows for pseudo-ref amp correction
-        ncol_ref           = integer(default=10)    # Number of cols for pseudo-ref 1/f correction
+        ncol_ref           = integer(default=0)     # Number of cols for pseudo-ref 1/f correction
         grow_diagonal      = boolean(default=False) # Grow saturation along diagonal pixels?
         save_intermediates = boolean(default=False) # Save all intermediate step results
     """
@@ -237,7 +237,15 @@ class Coron1Pipeline(Detector1Pipeline):
         input.pixeldq[:,0:nleft]  = input.pixeldq[:,0:nleft]  | dqflags.pixel['REFERENCE_PIXEL']
         input.pixeldq[:,-nright:] = input.pixeldq[:,-nright:] | dqflags.pixel['REFERENCE_PIXEL']
 
+        # Turn off side reference pixels
+        use_side_orig = self.refpix.use_side_ref_pixels 
+        if nleft + nright == 0:
+            self.refpix.use_side_ref_pixels = False
+
         res = self.run_step(self.refpix, input, **kwargs)
+
+        # Return to original setting
+        self.refpix.use_side_ref_pixels = use_side_orig
 
         # Return pixel DQ back to original using bitwise AND of inverted flag
         log.info(f'Removing reference pixel flags')
