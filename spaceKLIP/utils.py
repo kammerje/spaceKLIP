@@ -82,7 +82,7 @@ def fourier_imshift(image, shift, pad=False, cval=0.0):
 
         # Remove padded border to return to original size
         offset = offset[pady:pady+ny, padx:padx+nx]
-    
+
     elif (image.ndim == 3):
         nslices = image.shape[0]
         shift = np.asanyarray(shift)[:, :2]
@@ -92,10 +92,10 @@ def fourier_imshift(image, shift, pad=False, cval=0.0):
         offset = np.empty_like(image, dtype=float)
         for k in range(nslices):
             offset[k] = fourier_imshift(image[k], shift[k], pad=pad, cval=cval)
-    
+
     else:
         raise ValueError(f'Input image must be either a 2D or a 3D array. Found {image.ndim} dimensions.')
-    
+
     return offset
 
 def shift_invpeak(shift, image):
@@ -188,11 +188,12 @@ def get_offsetpsf(meta, key, recenter_offsetpsf=False, derotate=True,
     inst = meta.instrume[key]
     filt = meta.filter[key]
     mask = meta.coronmsk[key]
+
     try:
         with pyfits.open(offsetpsfdir+filt+'_'+mask+'.fits') as op_hdu:
             offsetpsf = op_hdu[0].data
     except:
-        offsetpsf = gen_offsetpsf(offsetpsfdir, inst, filt, mask)
+        offsetpsf = gen_offsetpsf(meta, offsetpsfdir, inst, filt, mask)
 
     # Recenter the offset PSF.
     if (recenter_offsetpsf == True):
@@ -220,7 +221,7 @@ def get_offsetpsf(meta, key, recenter_offsetpsf=False, derotate=True,
 
     return totpsf
 
-def gen_offsetpsf(offsetpsfdir, inst, filt, mask):
+def gen_offsetpsf(meta, offsetpsfdir, inst, filt, mask, source=None):
     """
     Generate an offset PSF using WebbPSF and save it in the offsetpsfdir. The
     offset PSF will be normalized to a total intensity of 1.
@@ -235,6 +236,8 @@ def gen_offsetpsf(offsetpsfdir, inst, filt, mask):
         JWST filter.
     mask : str
         JWST coronagraphic mask.
+    source: synphot.spectrum.SourceSpectrum
+        Default to 5700K blackbody if source=None
 
     """
 
@@ -265,9 +268,17 @@ def gen_offsetpsf(offsetpsfdir, inst, filt, mask):
     else:
         raise UserWarning('Unknown instrument')
 
+    if hasattr(meta, "psf_spec_file"):
+        if meta.psf_spec_file != False:
+            SED = io.read_spec_file(meta.psf_spec_file)
+        else:
+            SED = None
+    else:
+        SED = None
+
     # Assign the correct filter and compute the offset PSF.
     webbpsf_inst.filter = filt
-    hdul = webbpsf_inst.calc_psf(oversample=1, normalize='last')
+    hdul = webbpsf_inst.calc_psf(oversample=1, normalize='last', source=SED)
 
     # Save the offset PSF.
     if (not os.path.exists(offsetpsfdir)):
@@ -350,6 +361,7 @@ def get_transmission(meta, key, odir, derotate=False):
     # transmission).
     if (mask in ['MASKALWB', 'MASKASWB']):
         tp = shift(tp, (0., -meta.bar_offset[key]*1000./pxsc), mode='constant', cval=0.)
+
 
     # Derotate the PSF mask and coadd it weighted by the integration time of
     # the different rolls.
@@ -490,16 +502,7 @@ def get_stellar_magnitudes(meta):
         SED = SourceSpectrum(Empirical1D, points=spec.sp_model.wave << u.Unit(str(spec.sp_model.waveunits)), lookup_table=photlam_flux << u.Unit('photlam'))
     # If not a VOTable, try to read it in.
     else:
-        try:
-            # Open file and grab wavelength and flux arrays
-            data = np.genfromtxt(meta.sdir).transpose()
-            model_wave = data[0]
-            model_flux = data[1]
-
-            # Create a synphot spectrum
-            SED = SourceSpectrum(Empirical1D, points=model_wave << u.Unit('micron'), lookup_table=model_flux << u.Unit('Jy'))
-        except:
-            raise ValueError("Unable to read in provided file. Ensure format is in two columns with wavelength (microns), flux (Jy)")
+        SED = io.read_spec_file(meta.sdir)
 
     ### Now, perform synthetic observations on the SED to get stellar magnitudes
     # Get the filters used from the input datasets
@@ -532,11 +535,12 @@ def get_stellar_magnitudes(meta):
         mstar[filt.upper()] = magnitude
 
     # temporary feature until we figure out better file formatting with grant's models
-    i = 0
-    meta.dmstar = {}
-    for filt in filters:
-        meta.dmstar[filt] = meta.starmagerrs[i]
-        i += 1
+    if hasattr(meta,'starmagerrs'):
+        i = 0
+        meta.dmstar = {}
+        for filt in filters:
+            meta.dmstar[filt] = meta.starmagerrs[i]
+            i += 1
 
     return mstar
 

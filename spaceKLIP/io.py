@@ -14,6 +14,10 @@ import copy
 from astropy.table import Table
 import astropy.io.fits as pyfits
 
+import astropy.units as u
+from synphot import SourceSpectrum
+from synphot.models import Empirical1D
+
 import webbpsf
 webbpsf.setup_logging(level='ERROR')
 
@@ -317,12 +321,6 @@ def extract_obs(meta, fitsfiles_all):
         meta.obs[HASH_unique[i]] = tab.copy()
         del tab
 
-    temp = meta.obs.copy()
-    meta.obs = {}
-    for i, key in enumerate(temp.keys()):
-        if (i in [0]):
-            meta.obs[key] = temp[key].copy()
-
     if (meta.verbose == True):
         print('--> Identified %.0f concatenation(s)' % len(meta.obs))
         for i, key in enumerate(meta.obs.keys()):
@@ -332,6 +330,31 @@ def extract_obs(meta, fitsfiles_all):
             print_tab.pprint(max_lines=100, max_width=1000)
 
     return meta
+
+def read_spec_file(file):
+    """
+    Read a spectrum file in format wavelength / Jansky and return
+    a synphot SourceSpectrum object
+
+    Parameters
+    ----------
+    file: str
+        file location
+    """
+    try: 
+        # Open file and grab wavelength and flux arrays
+        data = np.genfromtxt(file).transpose()
+        model_wave = data[0]
+        model_flux = data[1]
+
+        # Create a synphot spectrum
+        SED = SourceSpectrum(Empirical1D, points=model_wave << u.Unit('micron'), lookup_table=model_flux << u.Unit('Jy'))
+        SED.meta['name'] = file.split('/')[-1]
+    except:
+        raise ValueError("Unable to read in provided file. Ensure format is in two columns with wavelength (microns), flux (Jy)")
+
+    return SED
+
 
 def get_working_files(meta, runcheck, subdir='RAMPFIT', search='uncal.fits', itype='default'):
 
@@ -350,8 +373,6 @@ def get_working_files(meta, runcheck, subdir='RAMPFIT', search='uncal.fits', ity
             rdir = meta.bg_sci_dir
         elif itype == 'bgref':
             rdir = meta.bg_ref_dir
-
-    print(subdir)
 
     # Grab the files
     files = glob.glob(rdir + search)

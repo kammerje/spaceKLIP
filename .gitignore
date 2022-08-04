@@ -202,6 +202,8 @@ flycheck_*.el
 
 # Local stuff
 crds_cache
+.ipynb_checkpoints/
+
 tests/data/*
 tests/ultranest
 tests/species_*

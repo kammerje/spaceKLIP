@@ -281,6 +281,8 @@ def run_ramp_fitting(meta, idir, osubdir):
             pipeline.nrow_ref = meta.nrow_ref
         if hasattr(meta, 'grow_diagonal'):
             pipeline.nrow_ref = meta.grow_diagonal
+        if hasattr(meta, 'sat_boundary'):
+            pipeline.saturation.n_pix_grow_sat
 
         # Options for saving intermediate results
         if hasattr(meta, 'save_intermediates'):
@@ -335,4 +337,3 @@ def stsci_ramp_fitting(meta):
             run_ramp_fitting(meta, meta.bg_ref_dir, 'RAMPFIT/BGREF/')
 
     return
-
