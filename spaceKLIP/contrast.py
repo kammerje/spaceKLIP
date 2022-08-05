@@ -680,6 +680,9 @@ def inject_recover(meta,
                     done += [i*Npa+j]
                     break
 
+    if not hasattr(meta, 'blur_images'):
+        meta.blur_images = False
+
     # If not finished yet, create a new pyKLIP dataset into which fake
     # companions will be injected.
     finished = False
@@ -688,7 +691,7 @@ def inject_recover(meta,
         dataset = JWST.JWSTData(filepaths=filepaths,
                                 psflib_filepaths=psflib_filepaths, centering=meta.centering_alg, badpix_threshold=meta.badpix_threshold,
                                 scishiftfile=meta.ancildir+'shifts/scishifts', refshiftfile=meta.ancildir+'shifts/refshifts',
-                                fiducial_point_override=meta.fiducial_point_override)
+                                fiducial_point_override=meta.fiducial_point_override, blur=meta.blur_images)
 
         # Inject fake companions. Make sure that no other fake companion
         # closer than mrad will be injected into the same dataset.
