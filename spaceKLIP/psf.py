@@ -101,9 +101,9 @@ class JWST_PSF():
             func_on = inst_on.calc_psf
             func_off = inst_off.calc_psf
             inst_on.options['jitter'] = 'gaussian'
-            inst_on.options['jitter_sigma'] = 0.003
+            inst_on.options['jitter_sigma'] = 0.00#3
             inst_off.options['jitter'] = 'gaussian'
-            inst_off.options['jitter_sigma'] = 0.003
+            inst_off.options['jitter_sigma'] = 0.00#3
 
         # Renormalize spectrum to have 1 e-/sec within bandpass to obtain normalized PSFs
         if sp is not None:

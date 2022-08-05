@@ -10,12 +10,12 @@
 
 ##### REQUIRED #####
 # Input Directory
-idir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/NIRCAM/F300M/'
-odir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/20220801_NIRCAM/F300M/' # Output Directory
+idir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/NIRCAM/F250M/'
+odir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/20220805_NIRCAM/F250M/' # Output Directory
 sdir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/HIP65426A_sdf_phoenix_m+modbb_disk_r.txt' #VOT table or stellar model file.
 
 ##### OPTIONAL #####
-rundirs: ['2022_08_02_RDI_annu1_subs1_run1'] #'2022_08_02_ADI+RDI_annu1_subs1_run1', '2022_08_02_RDI_annu1_subs1_run1', '2022_08_02_ADI_annu1_subs1_run1']  #Specify directory(ies) within odir of existing runs to calculate contrast curve / companion
+rundirs: [] #'2022_08_02_ADI+RDI_annu1_subs1_run1', '2022_08_02_RDI_annu1_subs1_run1', '2022_08_02_ADI_annu1_subs1_run1']  #Specify directory(ies) within odir of existing runs to calculate contrast curve / companion
 ancildir: None      # Specify directory to save ancillary files, if None then saved under odir/ANCILLARY/. 
 bg_sci_dir: None #'/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1140C/BGSCI/' #None if not using
 bg_ref_dir: None #'/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1140C/BGREF/' #None if not using
@@ -34,9 +34,9 @@ badpix_threshold: 1
 ##### Star / Companion information #####
 ########################################
 spt: 'A2V' # Spectral type of target, only necessary for VOTable
-ra_off: [418]  # mas; RA offset of the known companions #-5300
-de_off:  [-697] # mas; DEC offset of the known companions #-6950
-starmagerrs: [0.054, 0] #Add 0 for NIRCam because of 335M
+ra_off: [418] # [-5300] #mas; RA offset of the known companions
+de_off:  [-696] #[-6950] #mas; DEC offset of the known companions 
+starmagerrs: [0.054, 0] #Add 0 for NIRCam because of 335M [F210M: 0.054, F300M: 0.046, F356M: 0.048, F410M: 0.051, F444M: 0.054, F1140C: 0.038, F1550C:: 0.072]
 
 #################################
 ##### Ramp Fitting Settings #####
@@ -76,8 +76,9 @@ bgtrim: 0  # Trim the first integration in the background, science, and referenc
 bgsub: 'None'    #Perform background subtraction, 'default' for median, 'pyklip' for klip, 'leastsq' for loci
 bgmed_splits: [8,2]   #12,4  #Peform median background subtraction but split across [Nsci,Nref] ~equal different sections
 bgonly: False     # Only perform the background subtraction
+blur_images: 1
 centering_alg: 'jwstpipe'    # Algorithm to use for centering "basic", "jwstpipe", "imageregis", or 'savefile'
-mode: ['ADI', 'RDI', 'ADI+RDI']       # list of modes for pyKLIP, will loop through all
+mode: ['ADI+RDI']       # list of modes for pyKLIP, will loop through all
 annuli: [1]         # list of number of annuli for pyKLIP, will loop through all
 subsections: [1]    # list of number of annuli for pyKLIP, will loop through all
 numbasis: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,30,40,50] # list of number of basis vectors for pyKLIP, will loop through all
@@ -88,7 +89,7 @@ numbasis: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,30,40,50] # list o
 conc_usefile: False # Either "bgsub" for background subtracted or False for regular
 fwhm_scale: 10      #Scale to mask companions with
 repeatcentering_contrast: False # False to not repeat, "basic" is not saved and must be repeated
-KL: 5 # Number of KL components for which the calibrated contrast curve and the companion properties shall be computed (must be in subtracted numbasis)
+KL: 10 # Number of KL components for which the calibrated contrast curve and the companion properties shall be computed (must be in subtracted numbasis)
 
 # TODO: MASK LOCATIONS
 
@@ -113,17 +114,17 @@ psfdate: '2022-07-30T00:00:00'  #Input date for webbpsf_ext model
 
 nested: False
 mcmc: True
-nwalkers:  50   # For EMCEE photometry / astrometry fitting
+nwalkers: 50   # For EMCEE photometry / astrometry fitting
 nburn: 100
-nsteps: 50
-numthreads: 6
+nsteps: 200
+numthreads: 4
 
-x_range: 2. # pix
-y_range: 2. # pix
+x_range: 1. # pix
+y_range: 1. # pix
 flux_range: 10. # mag
 corr_len_range: 1.
-corr_len_guess: 1.8
-fitboxsize: 35 # pix
-fitkernel: 'matern32'
+corr_len_guess: 1.
+fitboxsize: 30 # pix
+fitkernel: 'diag'
 dr: 5
 exc_rad: 3
