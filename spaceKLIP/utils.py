@@ -461,7 +461,7 @@ def field_dependent_correction(stamp,
     # peak_index = np.unravel_index(stamp.argmax(), stamp.shape)
     # transmission_at_center =  transmission[peak_index[1],peak_index[0]]
 
-    return transmission_at_center*stamp
+    return transmission*stamp
 
 def get_stellar_magnitudes(meta):
     # First find out if a file was provided correctly

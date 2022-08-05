@@ -415,6 +415,9 @@ def klip_subtraction(meta, files):
                 if not os.path.exists(meta.ancildir+'shifts'):
                     os.makedirs(meta.ancildir+'shifts')
 
+                if not hasattr(meta, 'blur_images'):
+                    meta.blur_images = False
+
                 # Loop through all sets of observing parameters. Only run
                 # pyKLIP if the corresponding KLmodes-all fits file does
                 # not exist yet.
@@ -429,7 +432,7 @@ def klip_subtraction(meta, files):
                     dataset = JWST.JWSTData(filepaths=filepaths,
                                             psflib_filepaths=psflib_filepaths, centering=meta.centering_alg, badpix_threshold=meta.badpix_threshold,
                                             scishiftfile=meta.ancildir+'shifts/scishifts', refshiftfile=meta.ancildir+'shifts/refshifts',
-                                            fiducial_point_override=meta.fiducial_point_override)
+                                            fiducial_point_override=meta.fiducial_point_override, blur=meta.blur_images)
                     
                     #Set an OWA if it exists. 
                     if hasattr(meta, 'OWA'): dataset.OWA = meta.OWA

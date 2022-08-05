@@ -15,10 +15,10 @@ odir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/20220801_F1
 sdir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/HIP65426A_sdf_phoenix_m+modbb_disk_r.txt' #VOT table or stellar model file.
 
 ##### OPTIONAL #####
-rundirs: ['2022_08_01_ADI_annu1_subs1_run1', '2022_08_01_RDI_annu1_subs1_run1', 2022_08_01_ADI+RDI_annu1_subs1_run1]  #Specify directory(ies) within odir of existing runs to calculate contrast curve / companion
+rundirs: ['2022_08_01_ADI+RDI_annu1_subs1_run1']  #Specify directory(ies) within odir of existing runs to calculate contrast curve / companion
 ancildir: None      # Specify directory to save ancillary files, if None then saved under odir/ANCILLARY/. 
 bg_sci_dir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1550C/BGSCI/' #None if not using
-bg_ref_dir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1550C/BGREF/' #None if not using
+bg_ref_dir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1150C/BGREF/' #None if not using
 
 ############################
 ##### General Settings #####
@@ -34,9 +34,9 @@ badpix_threshold: 1
 ##### Star / Companion information #####
 ########################################
 spt: 'A2V' # Spectral type of target, only necessary for VOTable
-starmagerrs: [0.072] #[0.038]
-ra_off: [558]  # mas; RA offset of the known companions
-de_off:  [-651] # mas; DEC offset of the known companions
+starmagerrs: [0.038] #[0.072]
+ra_off: [418]  # mas; RA offset of the known companions
+de_off:  [-696] # mas; DEC offset of the known companions
 
 #################################
 ##### Ramp Fitting Settings #####
@@ -69,7 +69,7 @@ use_cleaned: True   #Use files generated after (True) or before (False) outlier 
 bgtrim: 'first'  # Trim the first integration in the background, science, and reference (bgsub != 'saved' or 'None')
 bgsub: 'default'    #Perform background subtraction, 'default' for median, 'pyklip' for klip, 'leastsq' for loci
 bgmed_splits: [12,4]   #12,4  #Peform median background subtraction but split across [Nsci,Nref] ~equal different sections
-bgonly: False     # Only perform the background subtraction
+bgonly: False    # Only perform the background subtraction
 centering_alg: 'basic'    # Algorithm to use for centering "basic", "jwstpipe", "imageregis", or 'savefile'
 mode: ['ADI+RDI', 'ADI', 'RDI']       # list of modes for pyKLIP, will loop through all
 annuli: [1]         # list of number of annuli for pyKLIP, will loop through all
@@ -82,7 +82,7 @@ numbasis: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,30,40,50] # list o
 conc_usefile: 'bgsub' # Either "bgsub" for background subtracted or False for regular
 fwhm_scale: 1.5      #Scale to mask companions with
 repeatcentering_contrast: 'basic' # False to not repeat, "basic" is not saved and must be repeated
-KL: 15 # Number of KL components for which the calibrated contrast curve and the companion properties shall be computed (must be in subtracted numbasis)
+KL: 10 # Number of KL components for which the calibrated contrast curve and the companion properties shall be computed (must be in subtracted numbasis)
 
 # TODO: MASK LOCATIONS
 
@@ -102,21 +102,22 @@ pas_inject_bar: [45., 135., 225., 315.] # deg; list of position angles at which 
 comp_usefile: 'bgsub'  # Either "bgsub" for background subtracted or False for regular
 repeatcentering_companion: 'basic' # False to not repeat, "basic" is not saved and must be repeated
 offpsf: 'webbpsf_ext'   #'webbpsf' for shifted offaxis, 'webbpsf_ext' for ~at location and time
+psf_spec_file: '/Users/acarter/Documents/DIRECT_IMAGING/JWST/ERS/HIP65426/hip65426b_bestfit_jansky.txt'
 psfdate: '2022-07-18T00:00:00'  #Input date for webbpsf_ext model
 
 nested: False
 mcmc: True
-nwalkers:  100   # For EMCEE photometry / astrometry fitting
+nwalkers: 50   # For EMCEE photometry / astrometry fitting
 nburn: 100
 nsteps: 200
-numthreads: 6
+numthreads: 4
 
 x_range: 3. # pix
 y_range: 3. # pix
 flux_range: 10. # mag
 corr_len_range: 1.
 corr_len_guess: 3.
-fitboxsize: 25 # pix
+fitboxsize: 30 # pix
 fitkernel: 'diag'
 dr: 5
 exc_rad: 3

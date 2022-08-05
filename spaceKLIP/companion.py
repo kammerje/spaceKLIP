@@ -12,7 +12,7 @@ import numpy as np
 from functools import partial
 from scipy.integrate import simpson
 from scipy.interpolate import interp1d
-# from scipy.ndimage import shift
+from scipy.ndimage import gaussian_filter
 from scipy import ndimage
 
 import pyklip.instruments.JWST as JWST
@@ -120,6 +120,10 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
             weff = meta.weff[filt] # m
             fwhm = wave/meta.diam*utils.rad2mas/pxsc # pix
 
+            if filt in ['F250M', 'F300M']:
+                #Can't use a fourier shift for these. 
+                fourier=False
+
             all_numbasis = []
             # Loop over up to 100 different KL mode inputs
             for i in range(100):
@@ -143,10 +147,14 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                 centering_alg = 'savefile'
             else:
                 centering_alg = meta.repeatcentering_companion
+            
+            if not hasattr(meta, 'blur_images'):
+                meta.blur_images = False
+
             dataset = JWST.JWSTData(filepaths=filepaths,
                                     psflib_filepaths=psflib_filepaths, centering=centering_alg, badpix_threshold=meta.badpix_threshold,
                                     scishiftfile=meta.ancildir+'shifts/scishifts', refshiftfile=meta.ancildir+'shifts/refshifts',
-                                    fiducial_point_override=meta.fiducial_point_override)
+                                    fiducial_point_override=meta.fiducial_point_override, blur=meta.blur_images)
 
             # Get the coronagraphic mask transmission map.
             utils.get_transmission(meta, key, odir, derotate=False)
@@ -157,7 +165,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                 offsetpsf = utils.get_offsetpsf(meta, key,
                                                 recenter_offsetpsf=recenter_offsetpsf,
                                                 derotate=False, fourier=fourier)
-                offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
+
                 field_dep_corr = partial(utils.field_dependent_correction, meta=meta)
             elif meta.offpsf == 'webbpsf_ext':
                 # Define some quantities
@@ -191,14 +199,18 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                 try:
                     guess_flux = meta.contrast_guess
                 except:
-                    guess_flux = 1e-4
+                    guess_flux = 2.452e-4
                 guess_spec = np.array([1.])
 
                 if meta.offpsf == 'webbpsf_ext':
                     # Generate PSF for initial guess, if very different this could be garbage
                     # Negative sign on ra as webbpsf_ext expects in x,y space
                     offsetpsf = offsetpsf_func.gen_psf([-meta.ra_off[j]/1e3,meta.de_off[j]/1e3], do_shift=False, quick=False)
-                    offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
+
+                offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
+
+                if meta.blur_images != False:
+                    offsetpsf = gaussian_filter(offsetpsf, meta.blur_images)
 
                 # Compute the forward-modeled dataset if it does not exist,
                 # yet, or if overwrite is True.
