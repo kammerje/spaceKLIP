@@ -321,12 +321,6 @@ def extract_obs(meta, fitsfiles_all):
         meta.obs[HASH_unique[i]] = tab.copy()
         del tab
 
-    temp = meta.obs.copy()
-    meta.obs = {}
-    for i, key in enumerate(temp.keys()):
-        if (i in [0]):
-            meta.obs[key] = temp[key].copy()
-
     if (meta.verbose == True):
         print('--> Identified %.0f concatenation(s)' % len(meta.obs))
         for i, key in enumerate(meta.obs.keys()):
