@@ -222,9 +222,15 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                                                  field_dependent_correction=field_dep_corr)
 
                     # Compute the forward-modeled dataset.
-                    annulus = meta.annuli#[[guess_sep-20., guess_sep+20.]] # pix
+                    annulus = meta.annuli #[[guess_sep-20., guess_sep+20.]] # pix
                     if len(annulus) == 1:
                         annulus = annulus[0]
+                    try:
+                        if annulus == 1:
+                            annulus = [(0, dataset.input.shape[1]//2)]
+                    except:
+                        continue
+                    print(annulus)
                     subsection = 1
                     fm.klip_dataset(dataset=dataset,
                                     fm_class=fm_class,
