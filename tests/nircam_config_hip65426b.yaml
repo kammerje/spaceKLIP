@@ -1,0 +1,129 @@
+#############################################################
+##### Configuration File for JWST Coronagraphy Pipeline #####
+#############################################################
+
+# TODO: Create readthedocs page that describe each setting in detail.
+
+#######################
+##### Directories #####
+#######################
+
+##### REQUIRED #####
+# Input Directory
+idir: '/Users/wbalmer/JWST-HCI/HIP65426/NIRCAM/F356W/'
+odir: '/Users/wbalmer/JWST-HCI/HIP65426/NIRCAM/F356W/' # Output Directory
+sdir: '/Users/wbalmer/JWST-HCI/HIP65426/HIP65426A_sdf_phoenix_m+modbb_disk_r.txt' #VOT table or stellar model file.
+
+##### OPTIONAL #####
+rundirs: [] #'2022_08_02_ADI+RDI_annu1_subs1_run1', '2022_08_02_RDI_annu1_subs1_run1', '2022_08_02_ADI_annu1_subs1_run1']  #Specify directory(ies) within odir of existing runs to calculate contrast curve / companion
+ancildir: None      # Specify directory to save ancillary files, if None then saved under odir/ANCILLARY/.
+bg_sci_dir: None #'/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1140C/BGSCI/' #None if not using
+bg_ref_dir: None #'/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1140C/BGREF/' #None if not using
+
+############################
+##### General Settings #####
+############################
+verbose: True
+plotting: True    # Produce matplotlib plots
+use_psfmask: True # if true use PSF masks from CRDS, if false use transmission functions
+fiducial_point_override: False # if true uses narrow end of the bar masks, if false use filter dependent position
+overwrite: True   # Will overwrite existing files in a given directory
+badpix_threshold: 1
+
+########################################
+##### Star / Companion information #####
+########################################
+spt: 'A2V' # Spectral type of target, only necessary for VOTable
+ra_off: [418]  # mas; RA offset of the known companions #-5300
+de_off:  [-697] # mas; DEC offset of the known companions #-6950
+starmagerrs: [0.054, 0] #Add 0 for NIRCam because of 335M
+
+#################################
+##### Ramp Fitting Settings #####
+#################################
+rampfit_idir:  True   #Toggle if you want to rampfit the sci/ref images
+rampfit_bgdirs: False #Toggle if you want to rampfit the backgrounds
+ramp_ext: 'uncal.fits'
+sat_boundary: 0  #Number of pixels to flag around saturated pixels
+skip_dark_current: True
+skip_ipc: False
+skip_jump: False #Whether to skip the jump detection step of the pipeline
+jump_threshold: 4  #Adjust the jump detection threshold if not skipped
+ramp_fit_max_cores: 'none' #Options are 'none', 'quarter', 'half', 'all'
+nrow_ref: 4    #Set N pixels at
+
+#####################################
+##### Image Processing Settings #####
+#####################################
+imgproc_idir: True
+imgproc_ext: 'rateints.fits'
+imgproc_bgdirs: False
+jwst_outlier_detection: False
+outlier_only: False     #Must have already run image processing
+outlier_corr: 'dqmed+timemed_alt+custom'
+outmed_blur: 5             #Size of median blurring window
+outmed_threshold: 1      #Threshold to detect outliers
+dq_threshold: 1000
+tmed_alt_frac: 0.2
+custom_file: '/Users/wbalmer/JWST-HCI/JWST-PIXMASKS/CORON/pixmask_nircam.txt'
+
+####################################
+##### PSF Subtraction Settings #####
+####################################
+sub_ext: 'calints.fits'
+use_cleaned: True   #Use files generated after (True) or before (False) outlier correction
+bgtrim: 0  # Trim the first integration in the background, science, and reference (bgsub != 'saved' or 'None')
+bgsub: 'None'    #Perform background subtraction, 'default' for median, 'pyklip' for klip, 'leastsq' for loci
+bgmed_splits: [8,2]   #12,4  #Peform median background subtraction but split across [Nsci,Nref] ~equal different sections
+bgonly: False     # Only perform the background subtraction
+centering_alg: 'jwstpipe'    # Algorithm to use for centering "basic", "jwstpipe", "imageregis", or 'savefile'
+mode: ['ADI+RDI']       # list of modes for pyKLIP, will loop through all
+annuli: [1]         # list of number of annuli for pyKLIP, will loop through all
+subsections: [1]    # list of number of annuli for pyKLIP, will loop through all
+numbasis: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,30,40,50] # list of number of basis vectors for pyKLIP, will loop through all
+
+###################################
+##### Contrast Curve Settings #####
+###################################
+conc_usefile: False # Either "bgsub" for background subtracted or False for regular
+fwhm_scale: 10      #Scale to mask companions with
+repeatcentering_contrast: False # False to not repeat, "basic" is not saved and must be repeated
+KL: 10 # Number of KL components for which the calibrated contrast curve and the companion properties shall be computed (must be in subtracted numbasis)
+
+# TODO: MASK LOCATIONS
+
+seps_inject_rnd: [5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 25., 30.0, 35.0, 40.0] # pix; list of separations at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
+#seps_inject_rnd: [5.0, 25.0, 40.0] # pix; list
+pas_inject_rnd: [0., 45., 90., 135., 180., 225., 270., 315.] # deg; list of position angles at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
+pas_inject_fqpm: [40.0, 130.0, 220.0, 310.0]
+
+
+pa_ranges_bar: [(105, 105), (285, 285)] # deg; list of tuples defining the pizza slices that shall be considered when computing the contrast curves for the bar masks
+seps_inject_bar: [2.0, 4.0, 6.0, 8.0, 10.0, 12.5, 15.0, 17.5, 20.0, 25.0, 30.0] # pix; list of separations at which fake planets shall be injected to compute the calibrated contrast curve for the bar masks
+pas_inject_bar: [45., 135., 225., 315.] # deg; list of position angles at which fake planets shall be injected to compute the calibrated contrast curve for the bar masks
+
+#######################################################
+##### Companion Photometry / Astrometry Settings ######
+#######################################################
+comp_usefile: False # Either "bgsub" for background subtracted or False for regular
+repeatcentering_companion: False # False to not repeat, "basic" is not saved and must be repeated
+offpsf: 'webbpsf_ext'   #'webbpsf' for shifted offaxis, 'webbpsf_ext' for ~at location and time
+psf_spec_file: '/Users/wbalmer/JWST-HCI/HIP65426/hip65426b_bestfit_jansky.txt'
+psfdate: '2022-07-30T00:00:00'  #Input date for webbpsf_ext model
+
+nested: True
+mcmc: False
+nwalkers:  50   # For EMCEE photometry / astrometry fitting
+nburn: 100
+nsteps: 50
+numthreads: 6
+
+x_range: 2. # pix
+y_range: 2. # pix
+flux_range: 10. # mag
+corr_len_range: 1.
+corr_len_guess: 1.8
+fitboxsize: 37 # pix
+fitkernel: 'matern32'
+dr: 5
+exc_rad: 3
