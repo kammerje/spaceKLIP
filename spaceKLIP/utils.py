@@ -21,10 +21,13 @@ from synphot.models import Empirical1D
 from synphot.units import convert_flux
 
 import pyklip.instruments.JWST as JWST
-import webbpsf
-import webbpsf_ext
+import webbpsf, webbpsf_ext
+
+from webbpsf_ext.image_manip import fshift
+from webbpsf_ext import robust
 
 from jwst import datamodels
+from jwst.datamodels import dqflags
 from jwst.coron import AlignRefsStep
 
 from . import io
@@ -69,8 +72,8 @@ def fourier_imshift(image, shift, pad=False, cval=0.0):
         # Pad border with zeros
         if pad:
             xshift, yshift = shift
-            padx = np.abs(np.int(xshift)) + 5
-            pady = np.abs(np.int(yshift)) + 5
+            padx = np.abs(int(xshift)) + 5
+            pady = np.abs(int(yshift)) + 5
             pad_vals = ([pady]*2,[padx]*2)
             image = np.pad(image, pad_vals, 'constant', constant_values=cval)
         else:
@@ -690,3 +693,134 @@ def prepare_meta(meta, fitsfiles):
     meta.mstar = get_stellar_magnitudes(meta)
 
     return meta
+
+
+def bp_fix(im, sigclip=5, niter=1, pix_shift=1, rows=True, cols=True, 
+           bpmask=None, return_mask=False, verbose=False, in_place=True):
+    """ Find and fix bad pixels in image with median of surrounding values
+
+    Slight modification of routine from pynrc.
+    
+    Paramters
+    ---------
+    im : ndarray
+        Single image
+    sigclip : int
+        How many sigma from mean doe we fix?
+    niter : int
+        How many iterations for sigma clipping? 
+        Ignored if bpmask is set.
+    pix_shift : int
+        We find bad pixels by comparing to neighbors and replacing.
+        E.g., if set to 1, use immediate adjacents neighbors.
+        Replaces with a median of surrounding pixels.
+    rows : bool
+        Compare to row pixels? Setting to False will ignore pixels
+        along rows during comparison. Recommended to increase
+        ``pix_shift`` parameter if using only rows or cols.
+    cols : bool
+        Compare to column pixels? Setting to False will ignore pixels
+        along columns during comparison. Recommended to increase
+        ``pix_shift`` parameter if using only rows or cols.
+    bpmask : boolean array
+        Use a pre-determined bad pixel mask for fixing.
+    return_mask : bool
+        If True, then also return a masked array of bad
+        pixels where a value of 1 is "bad".
+    verbose : bool
+        Print number of fixed pixels per iteration
+    in_place : bool
+        Do in-place corrections of input array.
+        Otherwise, return a copy.
+    """
+
+    def shift_array(im, pix_shift, rows=True, cols=True):
+        '''Create an array of shifted values'''
+
+        ny, nx = im.shape
+
+        # Pad image
+        padx = pady = pix_shift
+        pad_vals = ([pady]*2,[padx]*2)
+        im_pad = np.pad(im, pad_vals, mode='edge')
+
+        shift_arr = []
+        sh_vals = np.arange(pix_shift*2+1) - pix_shift
+        # Set shifting of columns and rows
+        xsh_vals = sh_vals if rows else [0]
+        ysh_vals = sh_vals if cols else [0]
+        for i in xsh_vals:
+            for j in ysh_vals:
+                if (i != 0) or (j != 0):
+                    shift_arr.append(fshift(im_pad, delx=i, dely=j))
+        shift_arr = np.asarray(shift_arr)
+        return shift_arr[:,pady:pady+ny,padx:padx+nx]
+    
+    # Only single iteration if bpmask is set
+    if bpmask is not None:
+        niter = 1
+    
+    if in_place:
+        arr_out = im
+    else:
+        arr_out = im.copy()
+    maskout = np.zeros(im.shape, dtype='bool')
+    
+    for ii in range(niter):
+        # Create an array of shifted values
+        shift_arr = shift_array(arr_out, pix_shift, rows=rows, cols=cols)
+    
+        # Take median of shifted values
+        shift_med = np.nanmedian(shift_arr, axis=0)
+        if bpmask is None:
+            # Difference of median and reject outliers
+            diff = arr_out - shift_med
+            shift_std = robust.medabsdev(shift_arr, axis=0)
+
+            indbad = diff > (sigclip*shift_std)
+        else:
+            indbad = bpmask
+
+        # Mark anything that is a NaN
+        indbad[np.isnan(arr_out)] = True
+        
+        # Set output array and mask values 
+        arr_out[indbad] = shift_med[indbad]
+        maskout[indbad] = True
+        
+        if verbose:
+            print(f'Bad Pixels fixed: {indbad.sum()}')
+
+        # No need to iterate if all pixels fixed
+        if indbad.sum()==0:
+            break
+            
+    if return_mask:
+        return arr_out, maskout
+    else:
+        return arr_out
+
+def clean_data(data, dq_masks, sigclip=5, niter=5, in_place=True, **kwargs):
+    """Clean a data cube using bp_fix routine"""
+
+    if not in_place:
+        data = data.copy()
+   
+    for i in range(data.shape[0]):#, leave=False, desc='slopes'):
+
+        im = data[i]
+        bg_med = np.nanmedian(im)
+        bg_std = robust.medabsdev(im)
+        bp_mask = (im==0) | np.isnan(im) | (im<bg_med-sigclip*bg_std)
+        for k in ['DO_NOT_USE']:#, 'SATURATED', 'JUMP_DET']:
+            mask = (dq_masks[i] & dqflags.pixel[k]) > 0
+            bp_mask = bp_mask | mask
+
+        _, bp_mask2 = bp_fix(im, sigclip=sigclip, in_place=False, niter=niter, return_mask=True)
+        bp_mask = bp_mask | bp_mask2
+
+        data[i] = bp_fix(im, bpmask=bp_mask, in_place=True, niter=10)
+        # Additional clipping after fixing bad pixels
+        data[i] = bp_fix(data[i], sigclip=sigclip, in_place=True, niter=niter)
+        
+    return data
