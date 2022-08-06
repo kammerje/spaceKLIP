@@ -76,6 +76,9 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
                     # plt.show()
 
                 # Clean each image of outlier bad pixels
+                if 'bpclean' in meta.outlier_corr:
+                    data = utils.clean_data(data, dq, sigclip=meta.outmed_threshold, niter=meta.outlier_niter)
+
                 if 'median' in meta.outlier_corr:
                     for i, arr in enumerate(data):
                         blurred = median_filter(arr, size=meta.outmed_blur) # Blur image
@@ -150,22 +153,28 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
                                     sub[1,1] = np.nan
                                     cleaned[pix[0],pix[1]] = np.nanmedian(sub)
                         data[i] = cleaned
+
                 if 'custom' in meta.outlier_corr:
-                    badpix = np.loadtxt(meta.custom_file, delimiter=',', dtype=int)
-                    if inst == 'MIRI':
-                        badpix -= trim # To account for trimming of MIRI array
-                    badpix -= [1,1] #To account for DS9 offset
-                    for i, arr in enumerate(data):
-                        cleaned = np.copy(arr)
-                        for pix in badpix:  
-                            if pix[0] > 1 and pix[1] > 1 and pix[0]<arr.shape[0]-2 and pix[1]<arr.shape[1]-2:
-                                ylo, yhi = pix[1]-1, pix[1]+2
-                                xlo, xhi = pix[0]-1, pix[0]+2
-                                sub = arr[ylo:yhi, xlo:xhi]
-                                if len(sub != 0):
-                                    sub[1,1] = np.nan
-                                    cleaned[pix[1],pix[0]] = np.nanmedian(sub)
-                        data[i] = cleaned
+                    if not hasattr(meta, 'custom_file'):
+                        print('meta.custom_file attribute not set. Skipping custom outlier fixing.')
+                    elif meta.custom_file is None:
+                        print('meta.custom_file set to None. Skipping custom outlier fixing.')
+                    else:
+                        badpix = np.loadtxt(meta.custom_file, delimiter=',', dtype=int)
+                        if inst == 'MIRI':
+                            badpix -= trim # To account for trimming of MIRI array
+                        badpix -= [1,1] #To account for DS9 offset
+                        for i, arr in enumerate(data):
+                            cleaned = np.copy(arr)
+                            for pix in badpix:  
+                                if pix[0] > 1 and pix[1] > 1 and pix[0]<arr.shape[0]-2 and pix[1]<arr.shape[1]-2:
+                                    ylo, yhi = pix[1]-1, pix[1]+2
+                                    xlo, xhi = pix[0]-1, pix[0]+2
+                                    sub = arr[ylo:yhi, xlo:xhi]
+                                    if len(sub != 0):
+                                        sub[1,1] = np.nan
+                                        cleaned[pix[1],pix[0]] = np.nanmedian(sub)
+                            data[i] = cleaned
 
                 #Assign to original array
                 if inst == 'MIRI':

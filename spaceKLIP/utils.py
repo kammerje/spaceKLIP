@@ -805,8 +805,17 @@ def clean_data(data, dq_masks, sigclip=5, niter=5, in_place=True, **kwargs):
 
     if not in_place:
         data = data.copy()
+
+    sh = data.shape
+    ndim_orig = len(sh)
+    if ndim_orig==2:
+        ny, nx = sh
+        nz = 1
+        data = data.reshape([nz,ny,nx])
+    else:
+        nz, ny, nx = sh
    
-    for i in range(data.shape[0]):#, leave=False, desc='slopes'):
+    for i in range(nz):
 
         im = data[i]
         bg_med = np.nanmedian(im)
@@ -823,4 +832,18 @@ def clean_data(data, dq_masks, sigclip=5, niter=5, in_place=True, **kwargs):
         # Additional clipping after fixing bad pixels
         data[i] = bp_fix(data[i], sigclip=sigclip, in_place=True, niter=niter)
         
+    # Return back to 2-dimensional image if that was the input
+    if ndim_orig==2:
+        data = data.reshape([ny,nx])
+
     return data
+
+def clean_file(file, sigclip=5, niter=5, **kwargs):
+    """Clean the data in a file using bp_fix routine"""
+
+    from astropy.io import fits
+    hdul = fits.open(file)
+    data = clean_data(hdul['SCI'].data, hdul['DQ'].data, sigclip=sigclip, niter=niter, **kwargs)
+    hdul['SCI'].data = data
+    hdul.writeto(file, overwrite=True)
+    hdul.close()
