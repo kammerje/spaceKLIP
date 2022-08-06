@@ -11,6 +11,8 @@ import logging
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
 
+from .io import open_new_log_file, close_log_file
+
 
 class Coron1Pipeline(Detector1Pipeline):
     """ Coron1Pipeline
@@ -307,8 +309,23 @@ def run_ramp_fitting(meta, idir, osubdir):
         raise ValueError('Unable to locate any {} files in directory {}'.format(search, idir))
     # Run the pipeline on every file in a directory
     for file in files:
+
+        # Save director
+        output_dir = meta.odir + osubdir
+        # Create a new log file and file stream handler for logging
+        logger, fh = open_new_log_file(file, output_dir, stage_str='detector1')
+
         # Set up pipeline
-        pipeline = Coron1Pipeline()
+        pipeline = Coron1Pipeline(output_dir=output_dir)
+
+        # Set up directory to save into
+        if os.path.exists(output_dir) == False:
+            os.makedirs(output_dir)
+
+        # Options for saving intermediate results
+        if hasattr(meta, 'save_intermediates'):
+            pipeline.save_intermediates = meta.save_intermediates
+        pipeline.save_results = True
 
         # Skip certain steps?
         if hasattr(meta, 'skip_jump'):
@@ -317,7 +334,7 @@ def run_ramp_fitting(meta, idir, osubdir):
             pipeline.dark_current.skip = meta.skip_dark_current
         if hasattr(meta, 'skip_ipc'):
             pipeline.ipc.skip = meta.skip_ipc
-        # Skip persistence step for now since it doesn't do anything
+        # NOTE: Skip persistence step for now since it doesn't do anything
         pipeline.persistence.skip = True
 
         # Set some Step parameters
@@ -334,31 +351,6 @@ def run_ramp_fitting(meta, idir, osubdir):
         if hasattr(meta, 'sat_boundary'):
             pipeline.saturation.n_pix_grow_sat
 
-        # Options for saving intermediate results
-        if hasattr(meta, 'save_intermediates'):
-            pipeline.save_intermediates = meta.save_intermediates
-        pipeline.save_results = True
-
-        # Set up directory to save into
-        pipeline.output_dir = meta.odir + osubdir
-        if os.path.exists(pipeline.output_dir) == False:
-            os.makedirs(pipeline.output_dir)
-
-        # Create log file output
-        file_base = os.path.basename(file).replace('uncal.fits', '')
-        date_str = datetime.now().isoformat()
-        fname = f'{file_base}_detector1_{date_str}.log'
-        log_file = os.path.join(pipeline.output_dir, fname)
-        # Create empty file
-        with open(log_file, 'w') as f:
-            pass
-
-        # Add file stream handler to also append log messages to file
-        logger = logging.getLogger()
-        fh = logging.FileHandler(log_file, 'a')
-        fmt = logging.Formatter('%(asctime)s [%(name)s:%(levelname)s] %(message)s')
-        fh.setFormatter(fmt)
-        logger.addHandler(fh)
 
         # Run pipeline, raise exception on error, and close log file handler
         try:
@@ -369,8 +361,7 @@ def run_ramp_fitting(meta, idir, osubdir):
                 '\nException: {}'.format(e)
             )
         finally:
-            logger.removeHandler(fh)
-            fh.close()
+            close_log_file(logger, fh)
 
     return
 
