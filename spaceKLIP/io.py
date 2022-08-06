@@ -396,3 +396,50 @@ def get_working_files(meta, runcheck, subdir='RAMPFIT', search='uncal.fits', ity
         print('--> Found {} file(s) under: {}'.format(len(files), rdir))
 
     return files
+
+def open_new_log_file(fits_file, output_dir, stage_str=None):
+    """Create and open a new log file
+    
+    Parameters
+    ==========
+    fits_file : str
+        Name of input FITS file that will be parsed to create
+        name of log file.
+    output_dir : str
+        Location to save log file.
+    stage_str : str or None
+        Pipeline stage of interest, such as 'detector1', 'image2', 
+        'coron3', etc.
+    """
+
+    import logging
+    from datetime import datetime
+
+    # Create log file output name
+
+    # Remove directory and drop file exension
+    file_base = os.path.basename(fits_file)
+    file_base = '_'.join(file_base.split('_')[:-1])
+
+    date_str = datetime.now().isoformat()
+    stage_str = '' if stage_str is None else f'_{stage_str}'
+    fname = f'{file_base}{stage_str}_{date_str}.log'
+    log_file = os.path.join(output_dir, fname)
+    # Create empty file
+    with open(log_file, 'w') as f:
+        pass
+
+    # Add file stream handler append log messages to file
+    logger = logging.getLogger()
+    fh = logging.FileHandler(log_file, 'a')
+    fmt = logging.Formatter('%(asctime)s [%(name)s:%(levelname)s] %(message)s')
+    fh.setFormatter(fmt)
+    logger.addHandler(fh)
+
+    return logger, fh
+
+def close_log_file(logger, file_handler):
+    """Remove handler from logger and close log file."""
+
+    logger.removeHandler(file_handler)
+    file_handler.close()
