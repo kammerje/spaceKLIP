@@ -801,7 +801,14 @@ def bp_fix(im, sigclip=5, niter=1, pix_shift=1, rows=True, cols=True,
         return arr_out
 
 def clean_data(data, dq_masks, sigclip=5, niter=5, in_place=True, **kwargs):
-    """Clean a data cube using bp_fix routine"""
+    """Clean a data cube using bp_fix routine
+    
+    Iterative pixel fixing routine to clean bad pixels flagged in the DQ mask
+    as well as spatial outliers. Replaces bad pixels with median of surrounding
+    unflagged (good) pixels. Assumes anything with values of 0 were previously
+    cleaned by the jwst pipeline and will be replaced with more representative 
+    values.
+    """
 
     if not in_place:
         data = data.copy()
@@ -818,18 +825,27 @@ def clean_data(data, dq_masks, sigclip=5, niter=5, in_place=True, **kwargs):
     for i in range(nz):
 
         im = data[i]
+        # Get average background rate and standard deviation
         bg_med = np.nanmedian(im)
         bg_std = robust.medabsdev(im)
+        # Clip bright PSFs for final bg calc
+        bg_ind = im<(bg_med+10*bg_std)
+        bg_med = np.nanmedian(im[bg_ind])
+        bg_std = robust.medabsdev(im[bg_ind])
+
+        # Create initial mask of 0s, NaNs, and large negative values
         bp_mask = (im==0) | np.isnan(im) | (im<bg_med-sigclip*bg_std)
         for k in ['DO_NOT_USE']:#, 'SATURATED', 'JUMP_DET']:
             mask = (dq_masks[i] & dqflags.pixel[k]) > 0
             bp_mask = bp_mask | mask
 
+        # Flag out-of-family spatial outliers
         _, bp_mask2 = bp_fix(im, sigclip=sigclip, in_place=False, niter=niter, return_mask=True)
         bp_mask = bp_mask | bp_mask2
 
+        # Fix only those pixels flagged in the input mask
         data[i] = bp_fix(im, bpmask=bp_mask, in_place=True, niter=10)
-        # Additional clipping after fixing bad pixels
+        # Final pass of additional median clipping
         data[i] = bp_fix(data[i], sigclip=sigclip, in_place=True, niter=niter)
         
     # Return back to 2-dimensional image if that was the input
