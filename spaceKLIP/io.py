@@ -234,6 +234,7 @@ def extract_obs(meta, fitsfiles_all):
             PIXAR_SR[i] = PIXSCALE[i]**2/rad2mas**2 # sr
         RA_REF[i] = head['RA_REF'] # deg
         DEC_REF[i] = head['DEC_REF'] # deg
+        # Roll Ref: V3 roll angle at the ref point (N over E)
         if ('SGD' in file): # MIRI test data
             ROLL_REF[i] = 0. # deg
         elif ('HD141569' in file): # MIRI test data
@@ -317,11 +318,19 @@ def extract_obs(meta, fitsfiles_all):
         # TODO: PIXSCALE and PA_V3 will be removed in a future version because
         #       they are duplicates. They are kept for now to ensure backward
         #       compatibility.
-        tab = Table(names=('TYP', 'TARGPROP', 'TARG_RA', 'TARG_DEC', 'READPATT', 'NINTS', 'NGROUPS', 'NFRAMES', 'EFFINTTM', 'RA_REF', 'DEC_REF', 'ROLL_REF', 'FITSFILE', 'PIXSCALE', 'PA_V3'), dtype=('S', 'S', 'f', 'f', 'S', 'i', 'i', 'i', 'f', 'f', 'f', 'f', 'S', 'f', 'f'))
+        tab = Table(names=('TYP', 'TARGPROP', 'TARG_RA', 'TARG_DEC', 'READPATT', 'NINTS', 'NGROUPS', 'NFRAMES', 
+                    'EFFINTTM', 'RA_REF', 'DEC_REF','ROLL_REF', 'FITSFILE', 'PIXSCALE', 'PA_V3'),  # PA_V3 is replaced by ROLL_REF
+                    dtype=('S', 'S', 'f', 'f', 'S', 'i', 'i', 'i', 'f', 'f', 'f', 'f', 'S', 'f', 'f'))
         for j in range(len(ww_sci)):
-            tab.add_row(('SCI', TARGPROP[ww][ww_sci][j], TARG_RA[ww][ww_sci][j], TARG_DEC[ww][ww_sci][j], READPATT[ww][ww_sci][j], NINTS[ww][ww_sci][j], NGROUPS[ww][ww_sci][j], NFRAMES[ww][ww_sci][j], EFFINTTM[ww][ww_sci][j], RA_REF[ww][ww_sci][j], DEC_REF[ww][ww_sci][j], ROLL_REF[ww][ww_sci][j], fitsfiles[ww][ww_sci][j], PIXSCALE[ww][ww_sci][j], ROLL_REF[ww][ww_sci][j]))
+            tab.add_row(('SCI', TARGPROP[ww][ww_sci][j], TARG_RA[ww][ww_sci][j], TARG_DEC[ww][ww_sci][j], READPATT[ww][ww_sci][j], 
+                         NINTS[ww][ww_sci][j], NGROUPS[ww][ww_sci][j], NFRAMES[ww][ww_sci][j], EFFINTTM[ww][ww_sci][j], 
+                         RA_REF[ww][ww_sci][j], DEC_REF[ww][ww_sci][j], ROLL_REF[ww][ww_sci][j], 
+                         fitsfiles[ww][ww_sci][j], PIXSCALE[ww][ww_sci][j], ROLL_REF[ww][ww_sci][j])) # Final ROLL_REF is PA_V3 column
         for j in range(len(ww_cal)):
-            tab.add_row(('CAL', TARGPROP[ww][ww_cal][j], TARG_RA[ww][ww_cal][j], TARG_DEC[ww][ww_cal][j], READPATT[ww][ww_cal][j], NINTS[ww][ww_cal][j], NGROUPS[ww][ww_cal][j], NFRAMES[ww][ww_cal][j], EFFINTTM[ww][ww_cal][j], RA_REF[ww][ww_cal][j], DEC_REF[ww][ww_cal][j], ROLL_REF[ww][ww_cal][j], fitsfiles[ww][ww_cal][j], PIXSCALE[ww][ww_cal][j], ROLL_REF[ww][ww_cal][j]))
+            tab.add_row(('CAL', TARGPROP[ww][ww_cal][j], TARG_RA[ww][ww_cal][j], TARG_DEC[ww][ww_cal][j], READPATT[ww][ww_cal][j], 
+                         NINTS[ww][ww_cal][j], NGROUPS[ww][ww_cal][j], NFRAMES[ww][ww_cal][j], EFFINTTM[ww][ww_cal][j], 
+                         RA_REF[ww][ww_cal][j], DEC_REF[ww][ww_cal][j], ROLL_REF[ww][ww_cal][j], 
+                         fitsfiles[ww][ww_cal][j], PIXSCALE[ww][ww_cal][j], ROLL_REF[ww][ww_cal][j])) # Final ROLL_REF is PA_V3 column
         meta.obs[HASH_unique[i]] = tab.copy()
         del tab
 
