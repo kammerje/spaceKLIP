@@ -276,7 +276,11 @@ def extract_obs(meta, fitsfiles_all):
             ww_sci = np.where(dpts == dpts_unique[0])[0]
             ww_cal = np.where(dpts == dpts_unique[1])[0]
         else:
-            raise UserWarning('Science and reference PSFs are identified based on their number of dither positions, assuming that there is no dithering for the science PSFs and dithering for the reference PSFs')
+            raise UserWarning(
+                'Science and reference PSFs are identified based on their'
+                '\nnumber of dither positions, with the assumption of no dithering'
+                '\nfor the science PSFs and small grid dithers for the reference PSFs.'
+            )
 
         # try:
         #     ww_sci = []
@@ -396,6 +400,114 @@ def get_working_files(meta, runcheck, subdir='RAMPFIT', search='uncal.fits', ity
         print('--> Found {} file(s) under: {}'.format(len(files), rdir))
 
     return files
+
+
+def sort_data_files(pid, sci_obs, ref_obs, outdir, expid_sci='03106', 
+    file_ext='uncal.fits', indir=None):
+    """Create symbolic links to data in MAST data directory
+    
+    Given a sequence of science and reference observation IDs, sort
+    exposures with different filters into their own directory in some
+    output directory location. Assumes data is in MAST download directory
+    as defined by `$JWSTDOWNLOAD_OUTDIR` environment variable, unless
+    otherwise specified. Creates symbolic links to data so as to not
+    unnecessarily use up disk space.
+
+    Parameters
+    ==========
+    pid : int
+        Program ID.
+    sci_obs : array-like
+        List of observation numbers corresponding to Roll1 and Roll2
+    ref_obs : array_like
+        List of observations observed as reference stars.
+    outdir : str
+        Base path to create filter directories.
+    
+    Keyword Args
+    ============
+    expid : str
+        Exposure ID associated with first science observation, as opposed
+        to target acquisition and astrometric confirmation images.
+    file_ext : str
+        File extension (default: 'uncal.fits')
+    indir : str or None
+        Location of original files. If not set, then searches for MAST
+        directory location at  $JWSTDOWNLOAD_OUTDIR env variable.
+    """
+
+    from astropy.io import fits
+
+    # MAST and data directory
+    if indir is None:
+        mast_dir = os.getenv('JWSTDOWNLOAD_OUTDIR')
+        if mast_dir is None:
+            raise RuntimeError('Cannot file environment variable: $JWSTDOWNLOAD_OUTDIR')
+        indir = os.path.join(mast_dir, f'{pid:05d}/')
+
+    # Find all uncal files
+    allfiles = np.sort([f for f in os.listdir(indir) if f.endswith(file_ext)])
+
+    # Select relevant data
+    for obsid in sci_obs:
+        file_start = f'jw{pid:05d}{obsid:03d}'
+
+        # Get all files in given observation
+        files_obs = np.sort([f for f in allfiles if (file_start in f)])
+        expids_all = np.array([f.split('_')[1] for f in files_obs])
+        # Index of where science data starts
+        istart = np.where(expids_all==expid_sci)[0][0]
+        for ii in np.arange(istart, len(expids_all)):
+            file_path = os.path.join(indir, files_obs[ii])
+            hdr = fits.getheader(file_path)
+
+            # Get filter and 
+            exp_type = hdr.get('EXP_TYPE')
+            filt = hdr.get('FILTER')
+            apname = hdr.get('APERNAME')
+            if 'MASK' in apname:
+                mask_arr = ['MASK335R', 'MASK430R', 'MASKLWB', 'MASK210R', 'MASKSWB']
+                for mask in mask_arr:
+                    if mask in apname:
+                        image_mask = mask
+                image_mask = '_' + image_mask
+            else:
+                image_mask = ''
+
+            # Get filter directory location
+            sub_str = filt + image_mask
+            subdir = os.path.join(outdir, sub_str)
+            # Create if it doesn't currently exist
+            if not os.path.isdir(subdir):
+                print(f'Creating directory: {subdir}')
+                os.mkdir(subdir)
+
+            # Generate symbolic link to new location
+            file_link_path = os.path.join(subdir, files_obs[ii])
+            if not os.path.isfile(file_link_path):
+                os.symlink(file_path, file_link_path)
+
+            # Cycle through reference files and find everything
+            # with the same filter, exp_type, and apname
+            for obsid_ref in ref_obs:
+                file_start_ref = f'jw{pid:05d}{obsid_ref:03d}'
+                # Get all files in given observation
+                files_ref = np.sort([f for f in allfiles if (file_start_ref in f)])
+                for fref in files_ref:
+                    file_path_ref = os.path.join(indir, fref)
+                    hdr_ref = fits.getheader(file_path_ref)
+                    # Get filter and 
+                    exp_type_ref = hdr_ref.get('EXP_TYPE')
+                    filt_ref = hdr_ref.get('FILTER')
+                    apname_ref = hdr_ref.get('APERNAME')
+
+                    if (exp_type_ref==exp_type) and (filt==filt_ref) and (apname_ref==apname):
+                        # Generate symbolic link to new location
+                        file_link_path = os.path.join(subdir, fref)
+                        if not os.path.isfile(file_link_path):
+                            os.symlink(file_path_ref, file_link_path)                        
+
+
 
 def open_new_log_file(fits_file, output_dir, stage_str=None):
     """Create and open a new log file
