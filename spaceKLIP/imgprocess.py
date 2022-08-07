@@ -77,7 +77,10 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
 
                 # Clean each image of outlier bad pixels
                 if 'bpclean' in meta.outlier_corr:
-                    data = utils.clean_data(data, dq, sigclip=meta.outmed_threshold, niter=meta.outlier_niter)
+                    # Default to sigclip=5 and niter=5 if attributes not found
+                    sigclip = meta.clean_sigclip if hasattr(meta, 'clean_sigclip') else 5
+                    niter   = meta.outlier_niter if hasattr(meta, 'outlier_niter') else 5
+                    data = utils.clean_data(data, dq, sigclip=sigclip, niter=niter)
 
                 if 'median' in meta.outlier_corr:
                     for i, arr in enumerate(data):
