@@ -312,15 +312,16 @@ def run_ramp_fitting(meta, idir, osubdir):
 
         # Save director
         output_dir = meta.odir + osubdir
+
+        # Set up directory to save into
+        if os.path.exists(output_dir) == False:
+            os.makedirs(output_dir)
+
         # Create a new log file and file stream handler for logging
         logger, fh = open_new_log_file(file, output_dir, stage_str='detector1')
 
         # Set up pipeline
         pipeline = Coron1Pipeline(output_dir=output_dir)
-
-        # Set up directory to save into
-        if os.path.exists(output_dir) == False:
-            os.makedirs(output_dir)
 
         # Options for saving intermediate results
         if hasattr(meta, 'save_intermediates'):
