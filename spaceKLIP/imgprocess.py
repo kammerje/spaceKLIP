@@ -13,7 +13,7 @@ from pyklip.instruments.JWST import trim_miri_data
 from . import utils
 from . import io
 
-def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
+def run_image_processing(meta, subdir_str, itype):
     files = io.get_working_files(meta, meta.done_rampfit, subdir=subdir_str, search=meta.imgproc_ext, itype=itype)
 
     # Create save directory
@@ -95,7 +95,7 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
                         for y,x in zip(outliers[0], outliers[1]):
                             cleaned[y,x] = blurred[y,x] #Swap pixels with blurred image
 
-                        arry, arrx = cleaned.shape
+                        # arry, arrx = cleaned.shape
                         #Make the center normal
                         # cleaned[int(3*arry/5):int(4*arry/5),int(3*arrx/5):int(4*arrx/5)] = \
                         #   arr[int(3*arry/5):int(4*arry/5),int(3*arrx/5):int(4*arrx/5)]
@@ -103,7 +103,7 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
                         data[i] = cleaned
                 if 'timemed' in meta.outlier_corr:
                     z, y, x = data.shape
-                    datacopy = np.copy(data)
+                    # datacopy = np.copy(data)
                     for row in range(y):
                         for col in range(x):
                             if inst == 'MIRI':
@@ -117,7 +117,7 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
                             outliers = np.nonzero(np.abs(diff)>threshold)
 
                             cleaned = np.copy(pix_time)
-                            mask = np.copy(pix_time)
+                            # mask = np.copy(pix_time)
                             for j in outliers:
                                 cleaned[j] = blurred[j] #Swap pixels with blurred image
                             if inst == 'MIRI':
@@ -126,7 +126,7 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
                                 data[0:,row,col] = cleaned
                 if 'timemed_alt' in meta.outlier_corr:
                     z, y, x = data.shape
-                    datacopy = np.copy(data)
+                    # datacopy = np.copy(data)
                     for row in range(y):
                         for col in range(x):
                             pix_time = data[0:,row,col] #Don't use first image for this
