@@ -121,7 +121,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
             fwhm = wave/meta.diam*utils.rad2mas/pxsc # pix
 
             if filt in ['F250M', 'F300M']:
-                #Can't use a fourier shift for these. 
+                #Can't use a fourier shift for these.
                 fourier=False
 
             all_numbasis = []
@@ -147,7 +147,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                 centering_alg = 'savefile'
             else:
                 centering_alg = meta.repeatcentering_companion
-            
+
             if not hasattr(meta, 'blur_images'):
                 meta.blur_images = False
 
@@ -521,7 +521,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                         print('No stellar magnitude errors supplied yet so assuming +/- 0.1 mag (FIX TBD!)')
                         dstarmag = 0.1
                     res[key][temp]['appmag'] = starmag+deltamag
-                    res[key][temp]['dappmag'] = np.sqrt((dstarmag/starmag)**2+(ddeltamag/deltamag)**2)*res[key][temp]['appmag']
+                    res[key][temp]['dappmag'] = np.sqrt((dstarmag/starmag)**2+(ddeltamag/deltamag)**2)
 
                     if (meta.verbose == True):
                         print('--> Companion %.0f' % (j+1))

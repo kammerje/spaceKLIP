@@ -10,12 +10,12 @@
 
 ##### REQUIRED #####
 # Input Directory
-idir: '/Users/wbalmer/JWST-HCI/HIP65426/NIRCAM/F356W/'
-odir: '/Users/wbalmer/JWST-HCI/HIP65426/NIRCAM/F356W/' # Output Directory
+idir: '/Users/wbalmer/JWST-HCI/HIP65426/NIRCAM/F250M/'
+odir: '/Users/wbalmer/JWST-HCI/HIP65426/NIRCAM/F250M/' # Output Directory
 sdir: '/Users/wbalmer/JWST-HCI/HIP65426/HIP65426A_sdf_phoenix_m+modbb_disk_r.txt' #VOT table or stellar model file.
 
 ##### OPTIONAL #####
-rundirs: [] #'2022_08_02_ADI+RDI_annu1_subs1_run1', '2022_08_02_RDI_annu1_subs1_run1', '2022_08_02_ADI_annu1_subs1_run1']  #Specify directory(ies) within odir of existing runs to calculate contrast curve / companion
+rundirs: ['2022_08_08_ADI+RDI_annu1_subs1_run1'] #'2022_08_02_ADI+RDI_annu1_subs1_run1', '2022_08_02_RDI_annu1_subs1_run1', '2022_08_02_ADI_annu1_subs1_run1']  #Specify directory(ies) within odir of existing runs to calculate contrast curve / companion
 ancildir: None      # Specify directory to save ancillary files, if None then saved under odir/ANCILLARY/.
 bg_sci_dir: None #'/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1140C/BGSCI/' #None if not using
 bg_ref_dir: None #'/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1140C/BGREF/' #None if not using
@@ -37,6 +37,15 @@ spt: 'A2V' # Spectral type of target, only necessary for VOTable
 ra_off: [418]  # mas; RA offset of the known companions #-5300
 de_off:  [-697] # mas; DEC offset of the known companions #-6950
 starmagerrs: [0.054, 0] #Add 0 for NIRCam because of 335M
+
+# star mag errors from Grant's model fits
+# F210M: 0.054,
+# F300M: 0.046,
+# F356M: 0.048,
+# F410M: 0.051,
+# F444M: 0.054,
+# F1140C: 0.038,
+# F1550C:: 0.072
 
 #################################
 ##### Ramp Fitting Settings #####
@@ -86,7 +95,7 @@ numbasis: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,30,40,50] # list o
 ##### Contrast Curve Settings #####
 ###################################
 conc_usefile: False # Either "bgsub" for background subtracted or False for regular
-fwhm_scale: 10      #Scale to mask companions with
+fwhm_scale: 15      #Scale to mask companions with
 repeatcentering_contrast: False # False to not repeat, "basic" is not saved and must be repeated
 KL: 10 # Number of KL components for which the calibrated contrast curve and the companion properties shall be computed (must be in subtracted numbasis)
 
@@ -95,8 +104,9 @@ KL: 10 # Number of KL components for which the calibrated contrast curve and the
 seps_inject_rnd: [5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 25., 30.0, 35.0, 40.0] # pix; list of separations at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
 #seps_inject_rnd: [5.0, 25.0, 40.0] # pix; list
 pas_inject_rnd: [0., 45., 90., 135., 180., 225., 270., 315.] # deg; list of position angles at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
-pas_inject_fqpm: [40.0, 130.0, 220.0, 310.0]
 
+seps_inject_fqpm: [5, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 25., 30.0, 35.0, 40.0]
+pas_inject_fqpm: [40.0, 130.0, 220.0, 310.0]
 
 pa_ranges_bar: [(105, 105), (285, 285)] # deg; list of tuples defining the pizza slices that shall be considered when computing the contrast curves for the bar masks
 seps_inject_bar: [2.0, 4.0, 6.0, 8.0, 10.0, 12.5, 15.0, 17.5, 20.0, 25.0, 30.0] # pix; list of separations at which fake planets shall be injected to compute the calibrated contrast curve for the bar masks
@@ -110,6 +120,7 @@ repeatcentering_companion: False # False to not repeat, "basic" is not saved and
 offpsf: 'webbpsf_ext'   #'webbpsf' for shifted offaxis, 'webbpsf_ext' for ~at location and time
 psf_spec_file: '/Users/wbalmer/JWST-HCI/HIP65426/hip65426b_bestfit_jansky.txt'
 psfdate: '2022-07-30T00:00:00'  #Input date for webbpsf_ext model
+blur_images: True
 
 nested: True
 mcmc: False
@@ -123,7 +134,7 @@ y_range: 2. # pix
 flux_range: 10. # mag
 corr_len_range: 1.
 corr_len_guess: 1.8
-fitboxsize: 37 # pix
-fitkernel: 'matern32'
+fitboxsize: 17 # pix
+fitkernel: 'diag'
 dr: 5
-exc_rad: 3
+exc_rad: 1
