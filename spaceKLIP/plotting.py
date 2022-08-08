@@ -83,7 +83,7 @@ def plot_contrast_raw(meta, seps, cons, labels='default', savefile='./rawcontras
     ax.set_xlabel('Separation [arcsec]')
     ax.set_ylabel('Contrast [5$\sigma$]')
     ax.set_title('Raw contrast curve')
-    ax.legend(loc='upper right')
+    ax.legend(loc='upper right', prop=dict(size=8))
     plt.tight_layout()
 
     # Save and close plot
@@ -203,7 +203,7 @@ def plot_fm_psf(meta, fm_frame, data_frame, guess_flux, pxsc=None, j=0, savefile
     c0.set_label('DN', rotation=270, labelpad=20)
     cc = plt.Circle((meta.ra_off[j]/1000., meta.de_off[j]/1000.), 10.*pxsc/1000., fill=False, edgecolor='green', linewidth=3)
     ax[0].add_artist(cc)
-    ax[0].set_xlim([5., -5.])
+    ax[0].set_xlim([5., -5])
     ax[0].set_ylim([-5., 5.])
     ax[0].set_xlabel(xlabel)
     ax[0].set_ylabel(ylabel)

@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>spaceKLIP.plotting &mdash; spaceKLIP</title>
+      <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../../_static/doctools.js"></script>
+        <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../../index.html">
+            <img src="../../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+              <div class="version">
+                0.0.1
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../TLDR.html">TL;DR setup guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../Installation-and-dependencies.html">Installation and dependencies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../Config_file.html">Configuration file parameters</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Tutorials</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../tutos.html">Running the tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/01_quickstart.html">Quick-start tutorial</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">About</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../Contact.html">Contact</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../Attribution.html">Attribution</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Package content</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../spaceKLIP.html">spaceKLIP package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../gen_index.html">Index</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">spaceKLIP</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home"></a> &raquo;</li>
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+      <li>spaceKLIP.plotting</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for spaceKLIP.plotting</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">glob</span><span class="o">,</span> <span class="nn">os</span>
+
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+<span class="kn">import</span> <span class="nn">matplotlib.gridspec</span> <span class="k">as</span> <span class="nn">gs</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">astropy.io</span> <span class="kn">import</span> <span class="n">fits</span>
+
+<span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">chain</span>
+
+<div class="viewcode-block" id="plot_contrast_images"><a class="viewcode-back" href="../../spaceKLIP.html#spaceKLIP.plotting.plot_contrast_images">[docs]</a><span class="k">def</span> <span class="nf">plot_contrast_images</span><span class="p">(</span><span class="n">meta</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">data_masked</span><span class="p">,</span> <span class="n">pxsc</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">savefile</span><span class="o">=</span><span class="s1">&#39;./maskimage.pdf&#39;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Plot subtracted images to be used for contrast estimation, one with</span>
+<span class="sd">    companions marked, one with the masking adopted.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="c1"># Set some quick information depending on whether a pixel scale was passed</span>
+    <span class="k">if</span> <span class="n">pxsc</span> <span class="o">==</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">extent</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.5</span><span class="p">)</span>
+        <span class="n">pxsc</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="n">xlabel</span><span class="p">,</span> <span class="n">ylabel</span> <span class="o">=</span> <span class="s1">&#39;Pixels&#39;</span><span class="p">,</span> <span class="s1">&#39;Pixels&#39;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">extl</span> <span class="o">=</span> <span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="mf">1.</span><span class="p">)</span><span class="o">/</span><span class="mf">2.</span><span class="o">*</span><span class="n">pxsc</span><span class="o">/</span><span class="mf">1000.</span> <span class="c1"># arcsec</span>
+        <span class="n">extr</span> <span class="o">=</span> <span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-</span><span class="mf">1.</span><span class="p">)</span><span class="o">/</span><span class="mf">2.</span><span class="o">*</span><span class="n">pxsc</span><span class="o">/</span><span class="mf">1000.</span> <span class="c1"># arcsec</span>
+        <span class="n">extent</span> <span class="o">=</span> <span class="p">(</span><span class="n">extl</span><span class="p">,</span> <span class="o">-</span><span class="n">extr</span><span class="p">,</span> <span class="o">-</span><span class="n">extl</span><span class="p">,</span> <span class="n">extr</span><span class="p">)</span>
+        <span class="n">xlabel</span><span class="p">,</span> <span class="n">ylabel</span> <span class="o">=</span> <span class="s1">&#39;$\Delta$RA [arcsec]&#39;</span><span class="p">,</span> <span class="s1">&#39;$\Delta$Dec [arcsec]&#39;</span>
+
+    <span class="c1"># Initialize plots</span>
+    <span class="n">f</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="mf">6.4</span><span class="p">,</span> <span class="mi">1</span><span class="o">*</span><span class="mf">4.8</span><span class="p">))</span>
+
+    <span class="c1"># Plot subtracted image, circle input companion locations</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">log10</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])),</span> <span class="n">origin</span><span class="o">=</span><span class="s1">&#39;lower&#39;</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;inferno&#39;</span><span class="p">,</span> <span class="n">extent</span><span class="o">=</span><span class="n">extent</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">meta</span><span class="o">.</span><span class="n">ra_off</span><span class="p">)):</span>
+        <span class="n">cc</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">Circle</span><span class="p">((</span><span class="n">meta</span><span class="o">.</span><span class="n">ra_off</span><span class="p">[</span><span class="n">j</span><span class="p">]</span><span class="o">/</span><span class="mf">1000.</span><span class="p">,</span> <span class="n">meta</span><span class="o">.</span><span class="n">de_off</span><span class="p">[</span><span class="n">j</span><span class="p">]</span><span class="o">/</span><span class="mf">1000.</span><span class="p">),</span> <span class="mf">10.</span><span class="o">*</span><span class="n">pxsc</span><span class="o">/</span><span class="mf">1000.</span><span class="p">,</span> <span class="n">fill</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;green&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+        <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">add_artist</span><span class="p">(</span><span class="n">cc</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="n">xlabel</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="n">ylabel</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;KLIP-subtracted&#39;</span><span class="p">)</span>
+
+    <span class="c1"># Plot subtracted image, with adopted masking</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">log10</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">data_masked</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])),</span> <span class="n">origin</span><span class="o">=</span><span class="s1">&#39;lower&#39;</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;inferno&#39;</span><span class="p">,</span> <span class="n">extent</span><span class="o">=</span><span class="n">extent</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="n">xlabel</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="n">ylabel</span><span class="p">)</span>
+    <span class="k">if</span> <span class="s1">&#39;SWB&#39;</span> <span class="ow">in</span> <span class="n">savefile</span> <span class="ow">or</span> <span class="s1">&#39;LWB&#39;</span> <span class="ow">in</span> <span class="n">savefile</span><span class="p">:</span>
+        <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Companions &amp; bar masked&#39;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Companions masked&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+
+    <span class="c1"># Save and close plot</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">savefile</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+    <span class="k">return</span></div>
+
+<div class="viewcode-block" id="plot_contrast_raw"><a class="viewcode-back" href="../../spaceKLIP.html#spaceKLIP.plotting.plot_contrast_raw">[docs]</a><span class="k">def</span> <span class="nf">plot_contrast_raw</span><span class="p">(</span><span class="n">meta</span><span class="p">,</span> <span class="n">seps</span><span class="p">,</span> <span class="n">cons</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="s1">&#39;default&#39;</span><span class="p">,</span> <span class="n">savefile</span><span class="o">=</span><span class="s1">&#39;./rawcontrast.pdf&#39;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Plot raw contrast curves for different KL modes.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="c1"># Initialize figure</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mf">6.4</span><span class="p">,</span> <span class="mf">4.8</span><span class="p">))</span>
+    <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">gca</span><span class="p">()</span>
+
+    <span class="c1"># Figure out if we&#39;re plotting one contrast curve, or multiple</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">cons</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">labels</span> <span class="o">==</span> <span class="s1">&#39;default&#39;</span><span class="p">:</span>
+            <span class="n">labels</span> <span class="o">==</span> <span class="s1">&#39;contrast&#39;</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">seps</span><span class="p">,</span> <span class="n">cons</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="n">labels</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">cons</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">labels</span> <span class="o">==</span> <span class="s1">&#39;default&#39;</span><span class="p">:</span>
+            <span class="n">labels</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;contrast_</span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">seps</span><span class="p">))]</span>
+
+        <span class="c1"># Loop over contrast curves to plot</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">cons</span><span class="p">)):</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">seps</span><span class="p">,</span> <span class="n">cons</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">label</span><span class="o">=</span><span class="n">labels</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+
+    <span class="c1"># Plot settings</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_yscale</span><span class="p">(</span><span class="s1">&#39;log&#39;</span><span class="p">)</span>
+    <span class="c1">#ax.set_xlim([0., 5.]) # arcsec</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="s1">&#39;y&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Separation [arcsec]&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Contrast [5$\sigma$]&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Raw contrast curve&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="s1">&#39;upper right&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+
+    <span class="c1"># Save and close plot</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">savefile</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+    <span class="k">return</span></div>
+
+<div class="viewcode-block" id="plot_injected_locs"><a class="viewcode-back" href="../../spaceKLIP.html#spaceKLIP.plotting.plot_injected_locs">[docs]</a><span class="k">def</span> <span class="nf">plot_injected_locs</span><span class="p">(</span><span class="n">meta</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">transmission</span><span class="p">,</span> <span class="n">seps</span><span class="p">,</span> <span class="n">pas</span><span class="p">,</span> <span class="n">pxsc</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">savefile</span><span class="o">=</span><span class="s1">&#39;./injected.pdf&#39;</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    Plot subtracted image and 2D transmission alongside locations of injected planets. </span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="c1">#Set some quick information depending on whether a pixel scale was passed</span>
+    <span class="k">if</span> <span class="n">pxsc</span> <span class="o">==</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">extent</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.5</span><span class="p">)</span>
+        <span class="n">extent_tr</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">transmission</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">transmission</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.5</span><span class="p">)</span>
+        <span class="n">pxsc</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="n">xlabel</span><span class="p">,</span> <span class="n">ylabel</span> <span class="o">=</span> <span class="s1">&#39;Pixels&#39;</span><span class="p">,</span> <span class="s1">&#39;Pixels&#39;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">extl</span> <span class="o">=</span> <span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="mf">1.</span><span class="p">)</span><span class="o">/</span><span class="mf">2.</span><span class="o">*</span><span class="n">pxsc</span><span class="o">/</span><span class="mf">1000.</span> <span class="c1"># arcsec</span>
+        <span class="n">extr</span> <span class="o">=</span> <span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-</span><span class="mf">1.</span><span class="p">)</span><span class="o">/</span><span class="mf">2.</span><span class="o">*</span><span class="n">pxsc</span><span class="o">/</span><span class="mf">1000.</span> <span class="c1"># arcsec</span>
+        <span class="n">extent</span> <span class="o">=</span> <span class="p">(</span><span class="n">extl</span><span class="p">,</span> <span class="o">-</span><span class="n">extr</span><span class="p">,</span> <span class="o">-</span><span class="n">extl</span><span class="p">,</span> <span class="n">extr</span><span class="p">)</span>
+
+        <span class="n">extl</span> <span class="o">=</span> <span class="p">(</span><span class="n">transmission</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">/</span><span class="mf">2.</span><span class="p">)</span><span class="o">*</span><span class="n">pxsc</span><span class="o">/</span><span class="mi">1000</span> <span class="c1"># arcsec</span>
+        <span class="n">extr</span> <span class="o">=</span> <span class="p">(</span><span class="n">transmission</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">/</span><span class="mf">2.</span><span class="p">)</span><span class="o">*</span><span class="n">pxsc</span><span class="o">/</span><span class="mi">1000</span> <span class="c1"># arcsec</span>
+        <span class="n">extent_tr</span> <span class="o">=</span> <span class="p">(</span><span class="n">extl</span><span class="p">,</span> <span class="o">-</span><span class="n">extr</span><span class="p">,</span> <span class="o">-</span><span class="n">extl</span><span class="p">,</span> <span class="n">extr</span><span class="p">)</span>
+
+        <span class="n">xlabel</span><span class="p">,</span> <span class="n">ylabel</span> <span class="o">=</span> <span class="s1">&#39;$\Delta$RA [arcsec]&#39;</span><span class="p">,</span> <span class="s1">&#39;$\Delta$DEC [arcsec]&#39;</span>
+
+    <span class="n">f</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="mf">6.4</span><span class="p">,</span> <span class="mi">1</span><span class="o">*</span><span class="mf">4.8</span><span class="p">))</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">log10</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">data</span><span class="p">)),</span> <span class="n">origin</span><span class="o">=</span><span class="s1">&#39;lower&#39;</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;inferno&#39;</span><span class="p">,</span> <span class="n">extent</span><span class="o">=</span><span class="n">extent</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">meta</span><span class="o">.</span><span class="n">ra_off</span><span class="p">)):</span>
+        <span class="n">cc</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">Circle</span><span class="p">((</span><span class="n">meta</span><span class="o">.</span><span class="n">ra_off</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">/</span><span class="mf">1000.</span><span class="p">,</span> <span class="n">meta</span><span class="o">.</span><span class="n">de_off</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">/</span><span class="mf">1000.</span><span class="p">),</span> <span class="mf">10.</span><span class="o">*</span><span class="n">pxsc</span><span class="o">/</span><span class="mf">1000.</span><span class="p">,</span> <span class="n">fill</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;green&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+        <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">add_artist</span><span class="p">(</span><span class="n">cc</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">seps</span><span class="p">)):</span>
+        <span class="n">ra</span> <span class="o">=</span> <span class="n">seps</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">*</span><span class="n">pxsc</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">deg2rad</span><span class="p">(</span><span class="n">pas</span><span class="p">[</span><span class="n">i</span><span class="p">]))</span> <span class="c1"># mas</span>
+        <span class="n">de</span> <span class="o">=</span> <span class="n">seps</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">*</span><span class="n">pxsc</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">deg2rad</span><span class="p">(</span><span class="n">pas</span><span class="p">[</span><span class="n">i</span><span class="p">]))</span> <span class="c1"># mas</span>
+        <span class="n">cc</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">Circle</span><span class="p">((</span><span class="n">ra</span><span class="o">/</span><span class="mf">1000.</span><span class="p">,</span> <span class="n">de</span><span class="o">/</span><span class="mf">1000.</span><span class="p">),</span> <span class="mf">10.</span><span class="o">*</span><span class="n">pxsc</span><span class="o">/</span><span class="mf">1000.</span><span class="p">,</span> <span class="n">fill</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;red&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+        <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">add_artist</span><span class="p">(</span><span class="n">cc</span><span class="p">)</span>
+    <span class="c1"># ax[0].set_xlim([5., -5.])</span>
+    <span class="c1"># ax[0].set_ylim([-5., 5.])</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="n">xlabel</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="n">ylabel</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;KLIP-subtracted&#39;</span><span class="p">)</span>
+
+    <span class="n">p1</span> <span class="o">=</span> <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">transmission</span><span class="p">,</span> <span class="n">origin</span><span class="o">=</span><span class="s1">&#39;lower&#39;</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;viridis&#39;</span><span class="p">,</span> <span class="n">vmin</span><span class="o">=</span><span class="mf">0.</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="mf">1.</span><span class="p">,</span> <span class="n">extent</span><span class="o">=</span><span class="n">extent_tr</span><span class="p">)</span>
+    <span class="n">c1</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">p1</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+    <span class="n">c1</span><span class="o">.</span><span class="n">set_label</span><span class="p">(</span><span class="s1">&#39;Transmission&#39;</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="mi">270</span><span class="p">,</span> <span class="n">labelpad</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">meta</span><span class="o">.</span><span class="n">ra_off</span><span class="p">)):</span>
+        <span class="n">cc</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">Circle</span><span class="p">((</span><span class="n">meta</span><span class="o">.</span><span class="n">ra_off</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">/</span><span class="mf">1000.</span><span class="p">,</span> <span class="n">meta</span><span class="o">.</span><span class="n">de_off</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">/</span><span class="mf">1000.</span><span class="p">),</span> <span class="mf">10.</span><span class="o">*</span><span class="n">pxsc</span><span class="o">/</span><span class="mf">1000.</span><span class="p">,</span> <span class="n">fill</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;green&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+        <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">add_artist</span><span class="p">(</span><span class="n">cc</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">seps</span><span class="p">)):</span>
+        <span class="n">ra</span> <span class="o">=</span> <span class="n">seps</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">*</span><span class="n">pxsc</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">deg2rad</span><span class="p">(</span><span class="n">pas</span><span class="p">[</span><span class="n">i</span><span class="p">]))</span> <span class="c1"># mas</span>
+        <span class="n">de</span> <span class="o">=</span> <span class="n">seps</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">*</span><span class="n">pxsc</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">deg2rad</span><span class="p">(</span><span class="n">pas</span><span class="p">[</span><span class="n">i</span><span class="p">]))</span> <span class="c1"># mas</span>
+        <span class="n">cc</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">Circle</span><span class="p">((</span><span class="n">ra</span><span class="o">/</span><span class="mf">1000.</span><span class="p">,</span> <span class="n">de</span><span class="o">/</span><span class="mf">1000.</span><span class="p">),</span> <span class="mf">10.</span><span class="o">*</span><span class="n">pxsc</span><span class="o">/</span><span class="mf">1000.</span><span class="p">,</span> <span class="n">fill</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;red&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+        <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">add_artist</span><span class="p">(</span><span class="n">cc</span><span class="p">)</span>
+    <span class="c1"># ax[1].set_xlim([5., -5.])</span>
+    <span class="c1"># ax[1].set_ylim([-5., 5.])</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="n">xlabel</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="n">ylabel</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Transmission&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">savefile</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+    <span class="k">return</span></div>
+            
+<div class="viewcode-block" id="plot_contrast_calibrated"><a class="viewcode-back" href="../../spaceKLIP.html#spaceKLIP.plotting.plot_contrast_calibrated">[docs]</a><span class="k">def</span> <span class="nf">plot_contrast_calibrated</span><span class="p">(</span><span class="n">thrput</span><span class="p">,</span> <span class="n">med_thrput</span><span class="p">,</span> <span class="n">fit_thrput</span><span class="p">,</span> <span class="n">con_seps</span><span class="p">,</span> <span class="n">cons</span><span class="p">,</span> <span class="n">corr_cons</span><span class="p">,</span> <span class="n">savefile</span><span class="o">=</span><span class="s1">&#39;./calcontrast.pdf&#39;</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    Plot calibrated throughput alongside calibrated contrast curves. </span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">f</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="mf">6.4</span><span class="p">,</span> <span class="mi">1</span><span class="o">*</span><span class="mf">4.8</span><span class="p">))</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">med_thrput</span><span class="p">[</span><span class="s1">&#39;seps&#39;</span><span class="p">],</span> <span class="n">med_thrput</span><span class="p">[</span><span class="s1">&#39;tps&#39;</span><span class="p">],</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;mediumaquamarine&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Median throughput&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">thrput</span><span class="p">[</span><span class="s1">&#39;seps&#39;</span><span class="p">],</span> <span class="n">thrput</span><span class="p">[</span><span class="s1">&#39;tps&#39;</span><span class="p">],</span> <span class="n">s</span><span class="o">=</span><span class="mi">75</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;mediumaquamarine&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">fit_thrput</span><span class="p">[</span><span class="s1">&#39;seps&#39;</span><span class="p">],</span> <span class="n">fit_thrput</span><span class="p">[</span><span class="s1">&#39;tps&#39;</span><span class="p">],</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;teal&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Best fit model&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">([</span><span class="n">fit_thrput</span><span class="p">[</span><span class="s1">&#39;seps&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">],</span> <span class="n">fit_thrput</span><span class="p">[</span><span class="s1">&#39;seps&#39;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]])</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.2</span><span class="p">])</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="s1">&#39;y&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Separation [pix]&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Throughput&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Algo &amp; coronmsk throughput&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="s1">&#39;lower right&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">con_seps</span><span class="p">,</span> <span class="n">cons</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;mediumaquamarine&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Raw contrast&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">con_seps</span><span class="p">,</span> <span class="n">corr_cons</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;teal&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Calibrated contrast&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_yscale</span><span class="p">(</span><span class="s1">&#39;log&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">([</span><span class="mf">0.</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">con_seps</span><span class="p">)])</span> <span class="c1"># arcsec</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="s1">&#39;y&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Separation [arcsec]&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Contrast [5$\sigma$]&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Calibrated contrast curve&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="s1">&#39;upper right&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">savefile</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+    <span class="k">return</span></div>
+
+<div class="viewcode-block" id="plot_fm_psf"><a class="viewcode-back" href="../../spaceKLIP.html#spaceKLIP.plotting.plot_fm_psf">[docs]</a><span class="k">def</span> <span class="nf">plot_fm_psf</span><span class="p">(</span><span class="n">meta</span><span class="p">,</span> <span class="n">fm_frame</span><span class="p">,</span> <span class="n">data_frame</span><span class="p">,</span> <span class="n">guess_flux</span><span class="p">,</span> <span class="n">pxsc</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">j</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">savefile</span><span class="o">=</span><span class="s1">&#39;./fmpsf.pdf&#39;</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    Plot forward model psf</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    
+    <span class="c1">#Set some quick information depending on whether a pixel scale was passed</span>
+    <span class="k">if</span> <span class="n">pxsc</span> <span class="o">==</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">extent</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">fm_frame</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">fm_frame</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.5</span><span class="p">)</span>
+        <span class="n">pxsc</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="n">xlabel</span><span class="p">,</span> <span class="n">ylabel</span> <span class="o">=</span> <span class="s1">&#39;Pixels&#39;</span><span class="p">,</span> <span class="s1">&#39;Pixels&#39;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">extl</span> <span class="o">=</span> <span class="p">(</span><span class="n">fm_frame</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="mf">1.</span><span class="p">)</span><span class="o">/</span><span class="mf">2.</span><span class="o">*</span><span class="n">pxsc</span><span class="o">/</span><span class="mf">1000.</span> <span class="c1"># arcsec</span>
+        <span class="n">extr</span> <span class="o">=</span> <span class="p">(</span><span class="n">fm_frame</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-</span><span class="mf">1.</span><span class="p">)</span><span class="o">/</span><span class="mf">2.</span><span class="o">*</span><span class="n">pxsc</span><span class="o">/</span><span class="mf">1000.</span> <span class="c1"># arcsec</span>
+        <span class="n">extent</span> <span class="o">=</span> <span class="p">(</span><span class="n">extl</span><span class="p">,</span> <span class="o">-</span><span class="n">extr</span><span class="p">,</span> <span class="o">-</span><span class="n">extl</span><span class="p">,</span> <span class="n">extr</span><span class="p">)</span>
+        <span class="n">xlabel</span><span class="p">,</span> <span class="n">ylabel</span> <span class="o">=</span> <span class="s1">&#39;$\Delta$RA [arcsec]&#39;</span><span class="p">,</span> <span class="s1">&#39;$\Delta$DEC [arcsec]&#39;</span>
+
+    <span class="n">f</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="mf">6.4</span><span class="p">,</span> <span class="mi">1</span><span class="o">*</span><span class="mf">4.8</span><span class="p">))</span>
+    <span class="n">p0</span> <span class="o">=</span> <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">fm_frame</span><span class="o">*</span><span class="n">guess_flux</span><span class="p">,</span> <span class="n">origin</span><span class="o">=</span><span class="s1">&#39;lower&#39;</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;inferno&#39;</span><span class="p">,</span> <span class="n">extent</span><span class="o">=</span><span class="n">extent</span><span class="p">)</span>
+    <span class="n">c0</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">p0</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">c0</span><span class="o">.</span><span class="n">set_label</span><span class="p">(</span><span class="s1">&#39;DN&#39;</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="mi">270</span><span class="p">,</span> <span class="n">labelpad</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
+    <span class="n">cc</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">Circle</span><span class="p">((</span><span class="n">meta</span><span class="o">.</span><span class="n">ra_off</span><span class="p">[</span><span class="n">j</span><span class="p">]</span><span class="o">/</span><span class="mf">1000.</span><span class="p">,</span> <span class="n">meta</span><span class="o">.</span><span class="n">de_off</span><span class="p">[</span><span class="n">j</span><span class="p">]</span><span class="o">/</span><span class="mf">1000.</span><span class="p">),</span> <span class="mf">10.</span><span class="o">*</span><span class="n">pxsc</span><span class="o">/</span><span class="mf">1000.</span><span class="p">,</span> <span class="n">fill</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;green&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">add_artist</span><span class="p">(</span><span class="n">cc</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">([</span><span class="mf">5.</span><span class="p">,</span> <span class="o">-</span><span class="mf">5.</span><span class="p">])</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">([</span><span class="o">-</span><span class="mf">5.</span><span class="p">,</span> <span class="mf">5.</span><span class="p">])</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="n">xlabel</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="n">ylabel</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="sa">r</span><span class="s1">&#39;FM PSF ($\alpha$ = </span><span class="si">%.0e</span><span class="s1">)&#39;</span> <span class="o">%</span> <span class="n">guess_flux</span><span class="p">)</span>
+    <span class="n">p1</span> <span class="o">=</span> <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">data_frame</span><span class="p">,</span> <span class="n">origin</span><span class="o">=</span><span class="s1">&#39;lower&#39;</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;inferno&#39;</span><span class="p">,</span> <span class="n">extent</span><span class="o">=</span><span class="n">extent</span><span class="p">)</span>
+    <span class="n">c1</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">colorbar</span><span class="p">(</span><span class="n">p1</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+    <span class="n">c1</span><span class="o">.</span><span class="n">set_label</span><span class="p">(</span><span class="s1">&#39;DN&#39;</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="mi">270</span><span class="p">,</span> <span class="n">labelpad</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
+    <span class="n">cc</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">Circle</span><span class="p">((</span><span class="n">meta</span><span class="o">.</span><span class="n">ra_off</span><span class="p">[</span><span class="n">j</span><span class="p">]</span><span class="o">/</span><span class="mf">1000.</span><span class="p">,</span> <span class="n">meta</span><span class="o">.</span><span class="n">de_off</span><span class="p">[</span><span class="n">j</span><span class="p">]</span><span class="o">/</span><span class="mf">1000.</span><span class="p">),</span> <span class="mf">10.</span><span class="o">*</span><span class="n">pxsc</span><span class="o">/</span><span class="mf">1000.</span><span class="p">,</span> <span class="n">fill</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;green&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">add_artist</span><span class="p">(</span><span class="n">cc</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">([</span><span class="mf">5.</span><span class="p">,</span> <span class="o">-</span><span class="mf">5.</span><span class="p">])</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">([</span><span class="o">-</span><span class="mf">5.</span><span class="p">,</span> <span class="mf">5.</span><span class="p">])</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="n">xlabel</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="n">ylabel</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;KLIP-subtracted&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">savefile</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+    <span class="k">return</span></div>
+
+<div class="viewcode-block" id="plot_chains"><a class="viewcode-back" href="../../spaceKLIP.html#spaceKLIP.plotting.plot_chains">[docs]</a><span class="k">def</span> <span class="nf">plot_chains</span><span class="p">(</span><span class="n">chain</span><span class="p">,</span> <span class="n">savefile</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    Plot MCMC chains from companion fitting</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">f</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="o">*</span><span class="mf">6.4</span><span class="p">,</span> <span class="mi">2</span><span class="o">*</span><span class="mf">4.8</span><span class="p">))</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">chain</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;black&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">1.</span><span class="o">/</span><span class="mf">3.</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Steps&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="sa">r</span><span class="s1">&#39;$\Delta$RA [mas]&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">chain</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;black&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">1.</span><span class="o">/</span><span class="mf">3.</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Steps&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="sa">r</span><span class="s1">&#39;$\Delta$Dec [mas]&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">chain</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;black&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">1.</span><span class="o">/</span><span class="mf">3.</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Steps&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="sa">r</span><span class="s1">&#39;$\alpha$ [sec/pri]&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">chain</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">3</span><span class="p">]</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;black&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">1.</span><span class="o">/</span><span class="mf">3.</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Steps&#39;</span><span class="p">)</span>
+    <span class="n">ax</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="sa">r</span><span class="s1">&#39;$l$ [pix]&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">suptitle</span><span class="p">(</span><span class="s1">&#39;MCMC chains&#39;</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">savefile</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="plot_subimages"><a class="viewcode-back" href="../../spaceKLIP.html#spaceKLIP.plotting.plot_subimages">[docs]</a><span class="k">def</span> <span class="nf">plot_subimages</span><span class="p">(</span><span class="n">imgdirs</span><span class="p">,</span> <span class="n">subdirs</span><span class="p">,</span> <span class="n">filts</span><span class="p">,</span> <span class="n">submodes</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    Create a &quot;publication ready&quot; plot of the coronagraphic images, alongside</span>
+<span class="sd">    the PSF subtracted images. </span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+
+<span class="sd">    imgdirs : list of strings</span>
+<span class="sd">        Parent directories of the unsubtracted images, filters won&#39;t be repeated </span>
+<span class="sd">    subdirs : list of strings</span>
+<span class="sd">        Parent directories of the subtracted images</span>
+<span class="sd">    filts : list of strings</span>
+<span class="sd">        List of filter strings to include in the plot</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+
+    <span class="c1"># Get the files we care about</span>
+    <span class="n">imgfiles</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">chain</span><span class="o">.</span><span class="n">from_iterable</span><span class="p">([</span><span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="n">imgdir</span><span class="o">+</span><span class="s1">&#39;*&#39;</span><span class="p">)</span> <span class="k">for</span> <span class="n">imgdir</span> <span class="ow">in</span> <span class="n">imgdirs</span><span class="p">]))</span>
+    <span class="n">subfiles</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">chain</span><span class="o">.</span><span class="n">from_iterable</span><span class="p">([</span><span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="n">subdir</span><span class="o">+</span><span class="s1">&#39;*&#39;</span><span class="p">)</span> <span class="k">for</span> <span class="n">subdir</span> <span class="ow">in</span> <span class="n">subdirs</span><span class="p">]))</span>
+    <span class="n">filts</span> <span class="o">=</span> <span class="p">[</span><span class="n">filt</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span> <span class="k">for</span> <span class="n">filt</span> <span class="ow">in</span> <span class="n">filts</span><span class="p">]</span>
+
+    <span class="c1"># Filter the imgfiles</span>
+    <span class="n">used_filts</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">true_imgfiles</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">imgfile</span> <span class="ow">in</span> <span class="n">imgfiles</span><span class="p">:</span>
+        <span class="n">hdr</span> <span class="o">=</span> <span class="n">fits</span><span class="o">.</span><span class="n">getheader</span><span class="p">(</span><span class="n">imgfile</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">hdr</span><span class="p">[</span><span class="s1">&#39;SUBPXPTS&#39;</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="c1"># This is a dithered reference observation, which we don&#39;t want.</span>
+            <span class="k">continue</span>
+        <span class="k">elif</span> <span class="s1">&#39;TACQ&#39;</span> <span class="ow">in</span> <span class="n">hdr</span><span class="p">[</span><span class="s1">&#39;EXP_TYPE&#39;</span><span class="p">]:</span>
+            <span class="c1"># This is a target acquisition image</span>
+            <span class="k">continue</span>
+        <span class="k">elif</span> <span class="n">hdr</span><span class="p">[</span><span class="s1">&#39;FILTER&#39;</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">filts</span><span class="p">:</span>
+            <span class="c1"># We don&#39;t want this filter</span>
+            <span class="k">continue</span>
+        <span class="k">elif</span> <span class="n">hdr</span><span class="p">[</span><span class="s1">&#39;FILTER&#39;</span><span class="p">]</span> <span class="ow">in</span> <span class="n">used_filts</span><span class="p">:</span>
+            <span class="c1"># We&#39;ve already got a file for this filter</span>
+            <span class="k">continue</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># We want this file</span>
+            <span class="n">true_imgfiles</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">imgfile</span><span class="p">)</span>
+            <span class="n">used_filts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">hdr</span><span class="p">[</span><span class="s1">&#39;FILTER&#39;</span><span class="p">])</span>
+
+    <span class="c1"># Filter the subfiles</span>
+    <span class="c1"># Note that we allow repeat filters for different reductions.</span>
+    <span class="n">true_subfiles</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">subfile</span> <span class="ow">in</span> <span class="n">subfiles</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">filt</span> <span class="ow">in</span> <span class="n">subfile</span> <span class="k">for</span> <span class="n">filt</span> <span class="ow">in</span> <span class="n">filts</span><span class="p">):</span>
+            <span class="n">true_subfiles</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">subfile</span><span class="p">)</span>
+
+    <span class="n">ydim</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">true_imgfiles</span><span class="p">)</span>
+    <span class="n">xdim</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">true_subfiles</span><span class="p">)</span> <span class="o">/</span> <span class="n">ydim</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+
+    <span class="c1"># Start making the figure</span>
+    <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">[</span><span class="n">xdim</span><span class="o">*</span><span class="mi">5</span><span class="p">,</span> <span class="n">ydim</span><span class="o">*</span><span class="mi">5</span><span class="p">])</span>
+    <span class="n">grid</span> <span class="o">=</span> <span class="n">gs</span><span class="o">.</span><span class="n">GridSpec</span><span class="p">(</span><span class="n">ydim</span><span class="p">,</span> <span class="n">xdim</span><span class="p">,</span> <span class="n">figure</span><span class="o">=</span><span class="n">fig</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">imgfile</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">true_imgfiles</span><span class="p">):</span>
+        <span class="n">hdr</span> <span class="o">=</span> <span class="n">fits</span><span class="o">.</span><span class="n">getheader</span><span class="p">(</span><span class="n">imgfile</span><span class="p">)</span>
+        <span class="n">row</span> <span class="o">=</span> <span class="n">filts</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">hdr</span><span class="p">[</span><span class="s1">&#39;FILTER&#39;</span><span class="p">])</span>
+
+        <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="n">grid</span><span class="p">[</span><span class="n">row</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+        <span class="k">with</span> <span class="n">fits</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">imgfile</span><span class="p">)</span> <span class="k">as</span> <span class="n">hdul</span><span class="p">:</span>
+            <span class="n">img</span> <span class="o">=</span> <span class="n">hdul</span><span class="p">[</span><span class="s1">&#39;SCI&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">img</span><span class="p">)</span>
+
+    <span class="c1"># for i, subfile in enumerate(true_subfiles):</span>
+
+    <span class="c1"># plt.show()</span>
+
+    <span class="k">return</span></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright ERS-1386 Collaboration.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

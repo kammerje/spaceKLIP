@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>spaceKLIP.engine &mdash; spaceKLIP</title>
+      <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../../_static/doctools.js"></script>
+        <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../../index.html">
+            <img src="../../_static/logo.png" class="logo" alt="Logo"/>
+          </a>
+              <div class="version">
+                0.0.1
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../TLDR.html">TL;DR setup guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../Installation-and-dependencies.html">Installation and dependencies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../Config_file.html">Configuration file parameters</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Tutorials</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../tutos.html">Running the tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/01_quickstart.html">Quick-start tutorial</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">About</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../Contact.html">Contact</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../Attribution.html">Attribution</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Package content</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../spaceKLIP.html">spaceKLIP package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../gen_index.html">Index</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">spaceKLIP</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home"></a> &raquo;</li>
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+      <li>spaceKLIP.engine</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for spaceKLIP.engine</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">division</span>
+<span class="c1"># =============================================================================</span>
+<span class="c1"># IMPORTS</span>
+<span class="c1"># =============================================================================</span>
+
+<span class="kn">import</span> <span class="nn">glob</span><span class="o">,</span> <span class="nn">os</span><span class="o">,</span> <span class="nn">re</span>
+
+<span class="kn">import</span> <span class="nn">astropy.io.fits</span> <span class="k">as</span> <span class="nn">pyfits</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+
+<span class="kn">from</span> <span class="nn">astroquery.svo_fps</span> <span class="kn">import</span> <span class="n">SvoFps</span>
+
+<span class="kn">import</span> <span class="nn">pysiaf</span>
+
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">io</span>
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">rampfit</span>
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">imgprocess</span>
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">subtraction</span>
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">contrast</span>
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">companion</span>
+
+
+<span class="c1"># =============================================================================</span>
+<span class="c1"># MAIN</span>
+<span class="c1"># =============================================================================</span>
+
+<div class="viewcode-block" id="Meta"><a class="viewcode-back" href="../../spaceKLIP.html#spaceKLIP.engine.Meta">[docs]</a><span class="k">class</span> <span class="nc">Meta</span><span class="p">():</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    A meta class to hold information throughout the pipeline process,</span>
+<span class="sd">    including user inputs.</span>
+<span class="sd">    </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        
+        <span class="k">return</span> <span class="kc">None</span>
+    
+<div class="viewcode-block" id="Meta.save"><a class="viewcode-back" href="../../spaceKLIP.html#spaceKLIP.engine.Meta.save">[docs]</a>    <span class="k">def</span> <span class="nf">save</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        TODO: write function that could save all of the used parameters for</span>
+<span class="sd">        debugging purposes.</span>
+<span class="sd">        </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        
+        <span class="k">return</span> <span class="kc">None</span></div></div>
+
+<div class="viewcode-block" id="Pipeline"><a class="viewcode-back" href="../../spaceKLIP.html#spaceKLIP.engine.Pipeline">[docs]</a><span class="k">class</span> <span class="nc">Pipeline</span><span class="p">():</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Generic pipeline class.</span>
+<span class="sd">    </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config_file</span><span class="o">=</span><span class="s1">&#39;template&#39;</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize a generic pipeline class by reading a config file and</span>
+<span class="sd">        saving the inputs to a Meta object.</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        config_file : str</span>
+<span class="sd">            File path of the YAML configuration file containing the pipeline</span>
+<span class="sd">            setup parameters.</span>
+<span class="sd">        </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        
+        <span class="c1"># Initialize the meta object.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span> <span class="o">=</span> <span class="n">Meta</span><span class="p">()</span>
+        
+        <span class="c1"># Read the configuration parameters.</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">config_file</span> <span class="o">==</span> <span class="s1">&#39;template&#39;</span><span class="p">):</span>
+            <span class="n">tempstring</span> <span class="o">=</span> <span class="s1">&#39;/../tests/example_config.yaml&#39;</span>
+            <span class="n">config_file</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">+</span><span class="n">tempstring</span><span class="p">)</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">read_config</span><span class="p">(</span><span class="n">config_file</span><span class="p">)</span>
+        
+        <span class="c1"># Assign the configuration parameters to meta class attributes.</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">config</span><span class="p">:</span>
+            <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">config</span><span class="p">[</span><span class="n">key</span><span class="p">])</span>
+
+        <span class="c1"># Assign run directories from output folder. These will be overwritten if subtraction if performed. </span>
+        <span class="k">if</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">rundirs</span> <span class="o">!=</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">rundirs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">rundirs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;WARNING: No run directory(ies) specified, looping over all run directories in output directory. Are you sure you want to do this?&#39;</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">rundirs</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span><span class="o">+</span><span class="s1">&#39;/&#39;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">odir</span><span class="o">+</span><span class="s1">&#39;*run*&#39;</span><span class="p">)]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">rundirs</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">odir</span><span class="o">+</span><span class="n">rdir</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)</span><span class="o">+</span><span class="s1">&#39;/&#39;</span> <span class="k">for</span> <span class="n">rdir</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">rundirs</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="JWST"><a class="viewcode-back" href="../../spaceKLIP.html#spaceKLIP.engine.JWST">[docs]</a><span class="k">class</span> <span class="nc">JWST</span><span class="p">(</span><span class="n">Pipeline</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    JWST-specifc pipeline class.</span>
+<span class="sd">    </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config_file</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize a JWST-specific pipeline class.</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        config_file : str</span>
+<span class="sd">            File path of the YAML configuration file containing the pipeline</span>
+<span class="sd">            setup parameters.</span>
+<span class="sd">        </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        
+        <span class="c1"># Initialize the parent pipeline class.</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">config_file</span><span class="p">)</span>
+        
+        <span class="c1"># Assign flags to track which pipeline stages have been performed.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">done_rampfit</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">done_imgprocess</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">done_subtraction</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">done_raw_contrast</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">done_cal_contrast</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">done_companion</span> <span class="o">=</span> <span class="kc">False</span>
+        
+        <span class="c1"># Get the JWST-specific metadata.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">get_jwst_meta</span><span class="p">()</span>
+        
+        <span class="k">return</span> <span class="kc">None</span>
+    
+<div class="viewcode-block" id="JWST.get_jwst_meta"><a class="viewcode-back" href="../../spaceKLIP.html#spaceKLIP.engine.JWST.get_jwst_meta">[docs]</a>    <span class="k">def</span> <span class="nf">get_jwst_meta</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get the JWST-specific metadata.</span>
+<span class="sd">        </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        
+        <span class="c1"># Define the telescope and instrument properties.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">diam</span> <span class="o">=</span> <span class="mf">6.5</span> <span class="c1"># m; primary mirror diameter</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">iwa</span> <span class="o">=</span> <span class="mf">1.</span> <span class="c1"># pix; inner working angle</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">owa</span> <span class="o">=</span> <span class="mf">150.</span> <span class="c1"># pix; outer working angle</span>
+        
+        <span class="c1"># Define the ancillary directories.</span>
+        <span class="k">if</span> <span class="p">(</span><span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">ancildir</span><span class="p">)):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">ancildir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">odir</span><span class="o">+</span><span class="s1">&#39;ANCILLARY/&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">psfmaskdir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">ancildir</span><span class="o">+</span><span class="s1">&#39;psfmasks/&#39;</span> <span class="c1"># no longer required</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">offsetpsfdir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">ancildir</span><span class="o">+</span><span class="s1">&#39;offsetpsfs/&#39;</span>
+        
+        <span class="c1"># Get the mean wavelengths and zero points of the NIRCam and the MIRI</span>
+        <span class="c1"># filters from the SVO Filter Profile Service. All filters are saved</span>
+        <span class="c1"># into the same dictionary. This works as long as the NIRCam and the</span>
+        <span class="c1"># MIRI filter names are distinct.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">wave</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">F0</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">filter_list</span> <span class="o">=</span> <span class="n">SvoFps</span><span class="o">.</span><span class="n">get_filter_list</span><span class="p">(</span><span class="n">facility</span><span class="o">=</span><span class="s1">&#39;JWST&#39;</span><span class="p">,</span> <span class="n">instrument</span><span class="o">=</span><span class="s1">&#39;NIRCAM&#39;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">filter_list</span><span class="p">)):</span>
+            <span class="n">name</span> <span class="o">=</span> <span class="n">filter_list</span><span class="p">[</span><span class="s1">&#39;filterID&#39;</span><span class="p">][</span><span class="n">i</span><span class="p">]</span>
+            <span class="n">name</span> <span class="o">=</span> <span class="n">name</span><span class="p">[</span><span class="n">name</span><span class="o">.</span><span class="n">rfind</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)</span><span class="o">+</span><span class="mi">1</span><span class="p">:]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">wave</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">filter_list</span><span class="p">[</span><span class="s1">&#39;WavelengthMean&#39;</span><span class="p">][</span><span class="n">i</span><span class="p">]</span><span class="o">/</span><span class="mf">1e4</span><span class="o">*</span><span class="mf">1e-6</span> <span class="c1"># m</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">F0</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">filter_list</span><span class="p">[</span><span class="s1">&#39;ZeroPoint&#39;</span><span class="p">][</span><span class="n">i</span><span class="p">]</span> <span class="c1"># Jy</span>
+        <span class="n">filter_list</span> <span class="o">=</span> <span class="n">SvoFps</span><span class="o">.</span><span class="n">get_filter_list</span><span class="p">(</span><span class="n">facility</span><span class="o">=</span><span class="s1">&#39;JWST&#39;</span><span class="p">,</span> <span class="n">instrument</span><span class="o">=</span><span class="s1">&#39;MIRI&#39;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">filter_list</span><span class="p">)):</span>
+            <span class="n">name</span> <span class="o">=</span> <span class="n">filter_list</span><span class="p">[</span><span class="s1">&#39;filterID&#39;</span><span class="p">][</span><span class="n">i</span><span class="p">]</span>
+            <span class="n">name</span> <span class="o">=</span> <span class="n">name</span><span class="p">[</span><span class="n">name</span><span class="o">.</span><span class="n">rfind</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)</span><span class="o">+</span><span class="mi">1</span><span class="p">:]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">wave</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">filter_list</span><span class="p">[</span><span class="s1">&#39;WavelengthMean&#39;</span><span class="p">][</span><span class="n">i</span><span class="p">]</span><span class="o">/</span><span class="mf">1e4</span><span class="o">*</span><span class="mf">1e-6</span> <span class="c1"># m</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">F0</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">filter_list</span><span class="p">[</span><span class="s1">&#39;ZeroPoint&#39;</span><span class="p">][</span><span class="n">i</span><span class="p">]</span> <span class="c1"># Jy</span>
+        <span class="k">del</span> <span class="n">filter_list</span>
+        
+        <span class="c1"># Get the PSF reference position with respect to the NRCA5_MASKLWB and</span>
+        <span class="c1"># the NRCA4_MASKSWB subarrays, respectively, for each NIRCam filter,</span>
+        <span class="c1"># from pySIAF.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">siaf</span> <span class="o">=</span> <span class="n">pysiaf</span><span class="o">.</span><span class="n">Siaf</span><span class="p">(</span><span class="s1">&#39;NIRCAM&#39;</span><span class="p">)</span>        
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">offset_lwb</span> <span class="o">=</span> <span class="p">{</span><span class="n">filt</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_bar_offset_from_siaf</span><span class="p">(</span><span class="n">filt</span><span class="p">,</span> <span class="n">channel</span><span class="o">=</span><span class="s1">&#39;LW&#39;</span><span class="p">)</span>
+                                <span class="k">for</span> <span class="n">filt</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;F250M&#39;</span><span class="p">,</span> <span class="s1">&#39;F277W&#39;</span><span class="p">,</span> <span class="s1">&#39;F300M&#39;</span><span class="p">,</span> <span class="s1">&#39;F335M&#39;</span><span class="p">,</span> <span class="s1">&#39;F356W&#39;</span><span class="p">,</span> <span class="s1">&#39;F360M&#39;</span><span class="p">,</span> <span class="s1">&#39;F410M&#39;</span><span class="p">,</span> <span class="s1">&#39;F430M&#39;</span><span class="p">,</span> <span class="s1">&#39;F444W&#39;</span><span class="p">,</span> <span class="s1">&#39;F460M&#39;</span><span class="p">,</span> <span class="s1">&#39;F480M&#39;</span><span class="p">,</span> <span class="s1">&#39;narrow&#39;</span><span class="p">]}</span> <span class="c1"># arcsec</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">offset_swb</span> <span class="o">=</span> <span class="p">{</span><span class="n">filt</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_bar_offset_from_siaf</span><span class="p">(</span><span class="n">filt</span><span class="p">,</span> <span class="n">channel</span><span class="o">=</span><span class="s1">&#39;SW&#39;</span><span class="p">)</span>
+                                <span class="k">for</span> <span class="n">filt</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;F182M&#39;</span><span class="p">,</span> <span class="s1">&#39;F187N&#39;</span><span class="p">,</span> <span class="s1">&#39;F200W&#39;</span><span class="p">,</span> <span class="s1">&#39;F210M&#39;</span><span class="p">,</span> <span class="s1">&#39;F212N&#39;</span><span class="p">,</span> <span class="s1">&#39;narrow&#39;</span><span class="p">]}</span> <span class="c1"># arcsec</span>
+        <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">siaf</span>
+        
+        <span class="k">return</span> <span class="kc">None</span></div>
+    
+<div class="viewcode-block" id="JWST.get_bar_offset_from_siaf"><a class="viewcode-back" href="../../spaceKLIP.html#spaceKLIP.engine.JWST.get_bar_offset_from_siaf">[docs]</a>    <span class="k">def</span> <span class="nf">get_bar_offset_from_siaf</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filt</span><span class="p">,</span> <span class="n">channel</span><span class="o">=</span><span class="s1">&#39;LW&#39;</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get the PSF reference position with respect to the NRCA5_MASKLWB and</span>
+<span class="sd">        the NRCA4_MASKSWB subarrays, respectively, from pySIAF.</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        filt : str</span>
+<span class="sd">            Name of the NIRCam filter.</span>
+<span class="sd">        channel : str, optional</span>
+<span class="sd">            Long wavelength (LW) or short wavelength (SW) channel. The default</span>
+<span class="sd">            is &#39;LW&#39;.</span>
+<span class="sd">        </span>
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bar_offset : float</span>
+<span class="sd">            Offset of the PSF reference position with respect to the</span>
+<span class="sd">            NRCA5_MASKLWB and the NRCA4_MASKSWB subarrays, respectively, in</span>
+<span class="sd">            arcseconds.</span>
+<span class="sd">        </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">channel</span> <span class="o">==</span> <span class="s1">&#39;SW&#39;</span><span class="p">):</span>
+            <span class="n">refapername</span> <span class="o">=</span> <span class="s1">&#39;NRCA4_MASKSWB&#39;</span>
+            <span class="n">apername</span> <span class="o">=</span> <span class="s1">&#39;NRCA4_MASKSWB_&#39;</span><span class="o">+</span><span class="n">filt</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span> <span class="c1"># otherwise default to LW channel</span>
+            <span class="n">refapername</span> <span class="o">=</span> <span class="s1">&#39;NRCA5_MASKLWB&#39;</span>
+            <span class="n">apername</span> <span class="o">=</span> <span class="s1">&#39;NRCA5_MASKLWB_&#39;</span><span class="o">+</span><span class="n">filt</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
+        <span class="n">offset_arcsec</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">siaf</span><span class="o">.</span><span class="n">apertures</span><span class="p">[</span><span class="n">refapername</span><span class="p">]</span><span class="o">.</span><span class="n">V2Ref</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">siaf</span><span class="o">.</span><span class="n">apertures</span><span class="p">[</span><span class="n">apername</span><span class="p">]</span><span class="o">.</span><span class="n">V2Ref</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="o">+</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">siaf</span><span class="o">.</span><span class="n">apertures</span><span class="p">[</span><span class="n">refapername</span><span class="p">]</span><span class="o">.</span><span class="n">V3Ref</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">siaf</span><span class="o">.</span><span class="n">apertures</span><span class="p">[</span><span class="n">apername</span><span class="p">]</span><span class="o">.</span><span class="n">V3Ref</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">sign</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sign</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">siaf</span><span class="o">.</span><span class="n">apertures</span><span class="p">[</span><span class="n">refapername</span><span class="p">]</span><span class="o">.</span><span class="n">V2Ref</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">siaf</span><span class="o">.</span><span class="n">apertures</span><span class="p">[</span><span class="n">apername</span><span class="p">]</span><span class="o">.</span><span class="n">V2Ref</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="n">sign</span><span class="o">*</span><span class="n">offset_arcsec</span></div>
+    
+<div class="viewcode-block" id="JWST.run_all"><a class="viewcode-back" href="../../spaceKLIP.html#spaceKLIP.engine.JWST.run_all">[docs]</a>    <span class="k">def</span> <span class="nf">run_all</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">skip_ramp</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">skip_imgproc</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">skip_sub</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">skip_rawcon</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">skip_calcon</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">skip_comps</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Single function to run all pipeline stages in sequence.</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        skip_ramp : bool</span>
+<span class="sd">            Skip the ramp fitting (JWST stage 1) stage?</span>
+<span class="sd">        skip_imgproc : bool</span>
+<span class="sd">            Skip the image processing (JWST stage 2) stage?</span>
+<span class="sd">        skip_sub : bool</span>
+<span class="sd">            Skip the KLIP subtraction stage?</span>
+<span class="sd">        skip_rawcon : bool</span>
+<span class="sd">            Skip the raw contrast estimation stage?</span>
+<span class="sd">        skip_calcon : bool</span>
+<span class="sd">            Skip the calibrated contrast estimation stage?</span>
+<span class="sd">        skip_comps : bool</span>
+<span class="sd">            Skip the companion property extraction stage?</span>
+<span class="sd">        </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        
+        <span class="k">if</span> <span class="p">(</span><span class="ow">not</span> <span class="n">skip_ramp</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">rampfit</span><span class="p">()</span>
+        <span class="k">if</span> <span class="p">(</span><span class="ow">not</span> <span class="n">skip_imgproc</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">imgprocess</span><span class="p">()</span>
+        <span class="k">if</span> <span class="p">(</span><span class="ow">not</span> <span class="n">skip_sub</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">subtraction</span><span class="p">()</span>
+        <span class="k">if</span> <span class="p">(</span><span class="ow">not</span> <span class="n">skip_rawcon</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">raw_contrast</span><span class="p">()</span>
+        <span class="k">if</span> <span class="p">(</span><span class="ow">not</span> <span class="n">skip_calcon</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cal_contrast</span><span class="p">()</span>
+        <span class="k">if</span> <span class="p">(</span><span class="ow">not</span> <span class="n">skip_comps</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">companions</span><span class="p">()</span>
+        
+        <span class="k">return</span> <span class="kc">None</span></div>
+    
+<div class="viewcode-block" id="JWST.rampfit"><a class="viewcode-back" href="../../spaceKLIP.html#spaceKLIP.engine.JWST.rampfit">[docs]</a>    <span class="k">def</span> <span class="nf">rampfit</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Wrapper function for the ramp fitting stage.</span>
+<span class="sd">        </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        
+        <span class="c1"># Set the meta flag to True.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">done_rampfit</span> <span class="o">=</span> <span class="kc">True</span>
+        
+        <span class="c1"># Run ramp fitting stage.</span>
+        <span class="n">ramp</span> <span class="o">=</span> <span class="n">rampfit</span><span class="o">.</span><span class="n">stsci_ramp_fitting</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="kc">None</span></div>
+    
+<div class="viewcode-block" id="JWST.imgprocess"><a class="viewcode-back" href="../../spaceKLIP.html#spaceKLIP.engine.JWST.imgprocess">[docs]</a>    <span class="k">def</span> <span class="nf">imgprocess</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Wrapper function for the image processing stage.</span>
+<span class="sd">        </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        
+        <span class="c1"># Set the meta flag to True.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">done_imgprocess</span> <span class="o">=</span> <span class="kc">True</span>
+        
+        <span class="c1"># Run image processing stage.</span>
+        <span class="n">img</span> <span class="o">=</span> <span class="n">imgprocess</span><span class="o">.</span><span class="n">stsci_image_processing</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="kc">None</span></div>
+    
+<div class="viewcode-block" id="JWST.subtraction"><a class="viewcode-back" href="../../spaceKLIP.html#spaceKLIP.engine.JWST.subtraction">[docs]</a>    <span class="k">def</span> <span class="nf">subtraction</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Wrapper function for the KLIP subtraction stage.</span>
+<span class="sd">        </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        
+        <span class="c1"># Set the meta flag to True.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">done_subtraction</span> <span class="o">=</span> <span class="kc">True</span>
+        
+        <span class="c1"># Run KLIP subtraction stage.</span>
+        <span class="n">sub</span> <span class="o">=</span> <span class="n">subtraction</span><span class="o">.</span><span class="n">klip_subtraction</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="kc">None</span></div>
+    
+<div class="viewcode-block" id="JWST.raw_contrast"><a class="viewcode-back" href="../../spaceKLIP.html#spaceKLIP.engine.JWST.raw_contrast">[docs]</a>    <span class="k">def</span> <span class="nf">raw_contrast</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Wrapper function for the raw contrast estimation stage.</span>
+<span class="sd">        </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        
+        <span class="c1"># Set the meta flag to True.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">done_raw_contrast</span> <span class="o">=</span> <span class="kc">True</span>
+        
+        <span class="c1"># Run raw contrast estimation stage.</span>
+        <span class="n">raw_contrast</span> <span class="o">=</span> <span class="n">contrast</span><span class="o">.</span><span class="n">raw_contrast_curve</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="kc">None</span></div>
+    
+<div class="viewcode-block" id="JWST.cal_contrast"><a class="viewcode-back" href="../../spaceKLIP.html#spaceKLIP.engine.JWST.cal_contrast">[docs]</a>    <span class="k">def</span> <span class="nf">cal_contrast</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Wrapper function for the calibrated contrast estimation stage.</span>
+<span class="sd">        </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        
+        <span class="c1"># Set the meta flag to True.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">done_cal_contrast</span> <span class="o">=</span> <span class="kc">True</span>
+        
+        <span class="c1"># Run calibrated contrast estimation stage.</span>
+        <span class="n">cal_contrast</span> <span class="o">=</span> <span class="n">contrast</span><span class="o">.</span><span class="n">calibrated_contrast_curve</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="kc">None</span></div>
+    
+<div class="viewcode-block" id="JWST.companions"><a class="viewcode-back" href="../../spaceKLIP.html#spaceKLIP.engine.JWST.companions">[docs]</a>    <span class="k">def</span> <span class="nf">companions</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Wrapper function for the companion property extraction stage.</span>
+<span class="sd">        </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        
+        <span class="c1"># Set the meta flag to True.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="o">.</span><span class="n">done_companion</span> <span class="o">=</span> <span class="kc">True</span>
+        
+        <span class="c1"># Run companion property extraction stage.</span>
+        <span class="n">extract_comps</span> <span class="o">=</span> <span class="n">companion</span><span class="o">.</span><span class="n">extract_companions</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="kc">None</span></div></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright ERS-1386 Collaboration.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

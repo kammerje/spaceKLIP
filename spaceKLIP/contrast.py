@@ -14,12 +14,16 @@ import numpy as np
 
 from astropy.table import Table
 from functools import partial
+from scipy.integrate import simpson
+from scipy.interpolate import interp1d
+from scipy.ndimage import median_filter
 from scipy.optimize import least_squares
 
 import pyklip.klip as klip
 import pyklip.instruments.JWST as JWST
 import pyklip.fakes as fakes
 import pyklip.parallelized as parallelized
+import webbpsf_ext
 
 from . import io
 from . import utils
@@ -32,49 +36,60 @@ rad2mas = 180./np.pi*3600.*1000.
 # MAIN
 # =============================================================================
 
-def raw_contrast_curve(meta):
+def raw_contrast_curve(meta, fourier=True):
     """
     Compute the raw contrast curves. Known companions and the location of
     the bar mask in both rolls will be masked out.
-    
+
     Note: currently masks a circle with a radius of 12 FWHM = ~12 lambda/D
           around known companions. This was found to be a sufficient but
           necessary value based on tests with simulated data.
-    
+
     Note: assumes that the data is photometrically calibrated including pupil
           mask and instrument throughput. Uses an offset PSF from WebbPSF that
           is normalized to a total intensity of 1 to estimate the peak flux of
           a PSF with respect to the source intensity.
-    
+
     Parameters
     ----------
     meta : object of type meta
         Meta object that contains all the metadata of the observations.
-    
+    fourier : bool
+        Whether to perform shifts in the Fourier plane. This better preserves
+        the total flux, however it can introduce Gibbs artefacts for the
+        shortest NIRCAM filters as the PSF is undersampled.
+
     """
-    
+
     if (meta.verbose == True):
         print('--> Computing raw contrast curve...')
-    
+
     # If necessary, extract the metadata of the observations.
     if (not meta.done_subtraction):
-        basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS', search=meta.sub_ext)
+        if meta.conc_usefile:
+            subdir = 'IMGPROCESS/BGSUB'
+        elif meta.use_cleaned:
+            subdir = 'IMGPROCESS/SCI+REF_CLEAN'
+        else:
+            subdir = 'IMGPROCESS/SCI+REF'
+        basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir=subdir, search=meta.sub_ext)
         meta = utils.prepare_meta(meta, basefiles)
         meta.done_subtraction = True # set the subtraction flag for the subsequent pipeline stages
-    
+
+
     # Loop through all directories of subtracted images.
     for counter, rdir in enumerate(meta.rundirs):
         if (meta.verbose == True):
             dirparts = rdir.split('/')[-2].split('_') # -2 because of trailing '/'
             print('--> Mode = {}, annuli = {}, subsections = {}, scenario {} of {}'.format(dirparts[3], dirparts[4], dirparts[5], counter+1, len(meta.rundirs)))
-        
+
         # Define the input and output directories for each set of pyKLIP
         # parameters.
         idir = rdir+'SUBTRACTED/'
-        odir = rdir+'CONTRAST/'
+        odir = rdir + 'CONTRAST_RAW/'
         if (not os.path.exists(odir)):
             os.makedirs(odir)
-        
+
         # Loop through all concatenations.
         for i, key in enumerate(meta.obs.keys()):
             hdul = pyfits.open(idir+key+'-KLmodes-all.fits')
@@ -85,42 +100,70 @@ def raw_contrast_curve(meta):
             pxsc = meta.pixscale[key] # mas
             pxar = meta.pixar_sr[key] # sr
             wave = meta.wave[filt] # m
+            weff = meta.weff[filt] # m
             fwhm = wave/meta.diam*utils.rad2mas/pxsc # pix
             head = hdul[0].header
             hdul.close()
-            
+
             # Mask out known companions and the location of the bar mask in
             # both rolls.
-            if ('4QPM' in mask):
-                fwhm_scale = 4.
-            else:
-                fwhm_scale = 12.
+            fwhm_scale = meta.fwhm_scale
+            # if ('4QPM' in mask):
+            #     fwhm_scale = 4.
+            #     print('HERE')
+            # else:
+            #     fwhm_scale = 12.
             data_masked = mask_companions(data, pxsc, cent, fwhm_scale*fwhm, meta.ra_off, meta.de_off)
 
             if (('LWB' in mask) or ('SWB' in mask)):
                 data_masked = mask_bar(data_masked, cent, meta.pa_ranges_bar)
-            
+
             if (meta.plotting == True):
                 savefile = odir+key+'-mask.pdf'
                 plotting.plot_contrast_images(meta, data, data_masked, pxsc, savefile=savefile)
-            
+
             # Convert the units and compute the contrast. Use the peak pixel
             # count of the recentered offset PSF (discussed with Jason Wang on
             # 12 May 2022).
-            offsetpsf = utils.get_offsetpsf(meta, key, recenter_offsetpsf=True, derotate=True)
+            offsetpsf = utils.get_offsetpsf(meta, key, recenter_offsetpsf=True,
+                                            derotate=True, fourier=fourier)
             Fstar = meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6*np.max(offsetpsf) # MJy; convert the host star brightness from vegamag to MJy
             Fdata = data_masked*pxar # MJy; convert the data from MJy/sr to MJy
             seps = [] # arcsec
             cons = []
-            for j in range(Fdata.shape[0]):
-                sep, con = klip.meas_contrast(dat=Fdata[j]/Fstar, iwa=meta.iwa, owa=meta.owa, resolution=2.*fwhm, center=cent, low_pass_filter=False)
-                seps += [sep*pxsc/1000.] # arcsec
-                cons += [con]
+            try:
+                offsetpsf = pyfits.getdata(meta.TA_file, 'SCI')
+                offsetpsf -= np.nanmedian(offsetpsf)
+                shift = utils.recenter(offsetpsf)
+                offsetpsf = utils.fourier_imshift(offsetpsf, shift)
+                if ('ND' in pyfits.getheader(meta.TA_file, 0)['SUBARRAY']):
+                    wd, od = webbpsf_ext.bandpasses.nircam_com_nd()
+                    od_interp = interp1d(wd*1e-6, od)
+                    nodes = np.linspace(wave-weff/2., wave+weff/2., 1000)
+                    odens = simpson(10**od_interp(nodes), nodes)/weff
+                    peak = np.max(offsetpsf)*odens
+                else:
+                    peak = np.max(offsetpsf)
+                TA_filt = pyfits.getheader(meta.TA_file, 0)['FILTER']
+                if (TA_filt != filt):
+                    peak *= 10**(-(meta.mstar[filt]-meta.mstar[TA_filt])/2.5)
+                for j in range(data_masked.shape[0]):
+                    sep, con = klip.meas_contrast(dat=data_masked[j]/peak, iwa=meta.iwa, owa=meta.owa, resolution=2.*fwhm, center=cent, low_pass_filter=False)
+                    seps += [sep*pxsc/1000.] # arcsec
+                    cons += [con]
+            except:
+                offsetpsf = utils.get_offsetpsf(meta, key, recenter_offsetpsf=True, derotate=True)
+                Fstar = meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6*np.max(offsetpsf) # MJy; convert the host star brightness from vegamag to MJy
+                Fdata = data_masked*pxar # MJy; convert the data from MJy/sr to MJy
+                for j in range(Fdata.shape[0]):
+                    sep, con = klip.meas_contrast(dat=Fdata[j]/Fstar, iwa=meta.iwa, owa=meta.owa, resolution=2.*fwhm, center=cent, low_pass_filter=False)
+                    seps += [sep*pxsc/1000.] # arcsec
+                    cons += [con]
             # seps = np.array(seps) # arcsec
             # cons = np.array(cons)
 
             # Save the contrast curve as a dictionary
-            save_dict = {'seps':seps[0].tolist(), 'cons':{}}
+            save_dict = {'seps':seps[0].tolist(), 'cons':{}, 'mstar':meta.mstar}
             for j, con in enumerate(cons):
                 save_dict['cons']['KL{}'.format(meta.numbasis[j])] = cons[j].tolist()
             rawconfile = odir+key+'-raw_save.json'
@@ -129,33 +172,34 @@ def raw_contrast_curve(meta):
 
             # np.save(odir+key+'-seps.npy', seps) # arcsec
             # np.save(odir+key+'-cons.npy', cons)
-            
+
             if (meta.plotting == True):
                 savefile = odir+key+'-cons_raw.pdf'
                 labels = []
-                for j in range(Fdata.shape[0]):
+                # for j in range(Fdata.shape[0]):
+                for j in range(data_masked.shape[0]):
                     labels.append(str(head['KLMODE{}'.format(j)])+' KL')
                 plotting.plot_contrast_raw(meta, seps[0], cons, labels=labels, savefile=savefile)
 
-    
+
     return None
 
-def calibrated_contrast_curve(meta):
+def calibrated_contrast_curve(meta, fourier=False):
     """
     Compute the calibrated contrast curves. Injection and recovery tests
     are performed to estimate the algo & coronmsk throughput.
-    
+
     Note: do not inject fake planets on top of the bar mask in either of
           the rolls!
-    
+
     Note: currently forces any fake companions to be injected at least 10
           FWHM = ~10 lambda/D away from other fake companions or known
           companions. This was found to be a sufficient but necessary
           value based on tests with simulated data.
-    
+
     TODO: use a position dependent offset PSF from pyNRC instead of the
           completely unocculted offset PSF from WebbPSF.
-    
+
     Parameters
     ----------
     mstar: dict of float
@@ -182,17 +226,28 @@ def calibrated_contrast_curve(meta):
         and the companion properties shall be computed.
     overwrite: bool
         If true overwrite existing data.
+    fourier : bool
+        Whether to perform shifts in the Fourier plane. This better preserves
+        the total flux, however it can introduce Gibbs artefacts for the
+        shortest NIRCAM filters as the PSF is undersampled.
     """
     # If necessary, build the obs dictionary etc
-    if not meta.done_subtraction:
-        basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS', search=meta.sub_ext)
+    # If necessary, extract the metadata of the observations.
+    if (not meta.done_subtraction):
+        if meta.conc_usefile == 'bgsub':
+            subdir = 'IMGPROCESS/BGSUB'
+        elif meta.use_cleaned:
+            subdir = 'IMGPROCESS/SCI+REF_CLEAN'
+        else:
+            subdir = 'IMGPROCESS/SCI+REF'
+        basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir=subdir, search=meta.sub_ext)
         meta = utils.prepare_meta(meta, basefiles)
-        # Set the subtraction flag for other stages
-        meta.done_subtraction = True
+        meta.done_subtraction = True # set the subtraction flag for the subsequent pipeline stages
+
 
     if (meta.verbose == True):
         print('--> Computing calibrated contrast curve...')
-    
+
     # Make inputs arrays.
     seps_inject_rnd = np.array(meta.seps_inject_rnd)
     pas_inject_rnd = np.array(meta.pas_inject_rnd)
@@ -200,7 +255,7 @@ def calibrated_contrast_curve(meta):
     pas_inject_bar = np.array(meta.pas_inject_bar)
     seps_inject_fqpm = np.array(meta.seps_inject_fqpm)
     pas_inject_fqpm = np.array(meta.pas_inject_fqpm)
-    
+
     # Loop through all modes, numbers of annuli, and numbers of
     # subsections.
     meta.truenumbasis = {}
@@ -221,10 +276,10 @@ def calibrated_contrast_curve(meta):
 
         # Define the input and output directories for each set of pyKLIP parameters.
         idir = rdir + 'SUBTRACTED/'
-        odir = rdir + 'CONTRAST/'
+        odir = rdir + 'CONTRAST_KL{}/'.format(meta.KL)
         if (not os.path.exists(odir)):
             os.makedirs(odir)
-        
+
         # Loop through all sets of observing parameters.
         for i, key in enumerate(meta.obs.keys()):
 
@@ -261,7 +316,7 @@ def calibrated_contrast_curve(meta):
                 raise ValueError('KL={} not found. Calculated options are: {}, and maximum possible for this data is {}'.format(meta.KL, all_numbasis, meta.maxnumbasis[key]))
 
             hdul.close()
-            
+
             # Load raw contrast curves. If overwrite is false,
             # check whether the calibrated contrast curves have
             # been computed already.
@@ -294,22 +349,24 @@ def calibrated_contrast_curve(meta):
                     todo = True
             else:
                 todo = True
-            
+
             # 2D map of the total throughput, i.e., an integration
             # time weighted average of the coronmsk transmission
             # over the rolls.
             tottp = utils.get_transmission(meta, key, odir)
-            
+
             # The calibrated contrast curves have not been
             # computed already.
             if (todo == True):
-                
+
                 # Offset PSF from WebbPSF, i.e., an integration
                 # time weighted average of the unocculted offset
                 # PSF over the rolls (does account for pupil mask
                 # throughput).
-                offsetpsf = utils.get_offsetpsf(meta, key, recenter_offsetpsf=False, derotate=True)
-                
+                offsetpsf = utils.get_offsetpsf(meta, key,
+                                                recenter_offsetpsf=False,
+                                                derotate=True, fourier=fourier)
+
                 # Convert the units and compute the injected
                 # fluxes. They need to be in the units of the data
                 # which is MJy/sr.
@@ -321,27 +378,28 @@ def calibrated_contrast_curve(meta):
                 else:
                     cons_inject = np.interp(seps_inject_rnd*pxsc/1000., seps, cons)*5. # inject at 5 times 5 sigma
                 flux_inject = cons_inject*Fstar*(180./np.pi*3600.*1000.)**2/pxsc**2 # MJy/sr; convert the injected flux from contrast to MJy/sr
-                
+
                 # If the separation is too small the
                 # interpolation of the contrasts returns nans,
                 # these need to be filtered out before feeding the
                 # fluxes into the injection and recovery routine.
                 good = np.isnan(flux_inject) == False
+                fwhm_scale = meta.fwhm_scale
                 if (mask in ['MASKASWB', 'MASKALWB']):
-                    fwhm_scale = 10
-                    flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, inst, filt, mask, fwhm_scale*fwhm, flux_inject[good], seps_inject_bar[good], pas_inject_bar, KLindex, meta.ra_off, meta.de_off)
+                    # fwhm_scale = 10
+                    flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, inst, filt, mask, fwhm_scale*fwhm, flux_inject[good], seps_inject_bar[good], pas_inject_bar, KLindex, meta.ra_off, meta.de_off, fourier)
                 elif ('4QPM' in mask):
-                    fwhm_scale = 4
-                    flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, inst, filt, mask, fwhm_scale*fwhm, flux_inject[good], seps_inject_fqpm[good], pas_inject_fqpm, KLindex, meta.ra_off, meta.de_off)
+                    #fwhm_scale = 4
+                    flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, inst, filt, mask, fwhm_scale*fwhm, flux_inject[good], seps_inject_fqpm[good], pas_inject_fqpm, KLindex, meta.ra_off, meta.de_off, fourier)
                 else:
-                    fwhm_scale = 10
-                    flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, inst, filt, mask, fwhm_scale*fwhm, flux_inject[good], seps_inject_rnd[good], pas_inject_rnd, KLindex, meta.ra_off, meta.de_off)
+                    #fwhm_scale = 10
+                    flux_all, seps_all, pas_all, flux_retr_all = inject_recover(meta, filepaths, psflib_filepaths, mode, odir, key, annuli, subsections, pxsc, inst, filt, mask, fwhm_scale*fwhm, flux_inject[good], seps_inject_rnd[good], pas_inject_rnd, KLindex, meta.ra_off, meta.de_off, fourier)
 
                 # np.save(odir+key+'-flux_all.npy', flux_all) # MJy/sr
                 # np.save(odir+key+'-seps_all.npy', seps_all) # pix
                 # np.save(odir+key+'-pas_all.npy', pas_all) # deg
                 # np.save(odir+key+'-flux_retr_all.npy', flux_retr_all) # MJy/sr
-            
+
             # Group the injection and recovery results by
             # separation and take the median, then fit a logistic
             # growth function to them.
@@ -354,7 +412,7 @@ def calibrated_contrast_curve(meta):
             # p0 = np.array([0., 1., 1.])
             # pp = least_squares(self.growth_lnprob, p0, args=(med_res['seps']*pxsc/1000., med_res['tps']))
             corr_cons = np.array(cons)/func(pp['x'], np.array(seps)*1000./pxsc)
-            
+
             # np.save(odir+key+'-pp.npy', pp['x'])
 
             # Save the contrast curve and other properties as a dictionary
@@ -362,7 +420,7 @@ def calibrated_contrast_curve(meta):
             calconfile = odir+key+'-cal_save.json'
             with open(calconfile, 'w') as cf:
                 json.dump(save_dict, cf)
-            
+
             if meta.plotting:
                 # Plot injected locations
                 savefile=odir+key+'-cons_inj.pdf'
@@ -379,17 +437,17 @@ def calibrated_contrast_curve(meta):
 
                 savefile=odir+key+'-cons_cal.pdf'
                 plotting.plot_contrast_calibrated(res, med_res, fit_thrput, seps, cons, corr_cons, savefile=savefile)
-            
+
     if (meta.verbose == True):
         print('')
-    
+
     return None
 
- 
+
 def mask_companions(data, pxsc, cent, mrad, ra_off=[], de_off=[]):
     """
     Mask out known companions.
-    
+
     Parameters
     ----------
     data: array
@@ -405,35 +463,40 @@ def mask_companions(data, pxsc, cent, mrad, ra_off=[], de_off=[]):
         RA offset of the companions that shall be masked out.
     de_off: list of float
         DEC offset of the companions that shall be masked out.
-    
+
     Returns
     -------
     data_masked: array
         Data cube of shape (Nframes, Npix, Npix) in which the companions
         are masked out.
     """
-    
+
     # Sanitize inputs.
     if (len(data.shape) != 3):
         raise UserWarning('Data has invalid shape')
-    
+
     # Mask out known companions.
     data_masked = data.copy()
     yy, xx = np.indices(data.shape[1:]) # pix
+    i = 0
     for ra, de in zip(ra_off, de_off):
         dist = np.sqrt((xx-cent[0]+ra/pxsc)**2+(yy-cent[1]-de/pxsc)**2) # pix
-        data_masked[:, dist <= mrad] = np.nan
-    
+        if (i == 0):
+            data_masked[:, dist <= mrad/2.] = np.nan
+        else:
+            data_masked[:, dist <= mrad] = np.nan
+        i += 1
+
     return data_masked
 
 
-def mask_bar(data, cent, pa_ranges_bar=[]): 
+def mask_bar(data, cent, pa_ranges_bar=[]):
     """
     Mask out bar mask occulter. This is done by specifying pizza slices
     that shall be considered when computing the contrast curves.
-    
+
     Note: make sure to mask out the bar mask in either of the rolls!
-    
+
     Parameters
     ----------
     data: array
@@ -444,18 +507,18 @@ def mask_bar(data, cent, pa_ranges_bar=[]):
     pa_ranges_bar: list of tuple of float
         List of tuples defining the pizza slices that shall be considered
         when computing the contrast curves for the bar masks (deg).
-    
+
     Returns
     -------
     data_masked: array
         Data cube of shape (Nframes, Npix, Npix) in which everything but
         the specified pizza slices is masked out.
     """
-    
+
     # Sanitize inputs.
     if (len(data.shape) != 3):
         raise UserWarning('Data has invalid shape')
-    
+
     # Mask out bar mask occulter.
     data_masked = data.copy()
     yy, xx = np.indices(data.shape[1:]) # pix
@@ -465,7 +528,7 @@ def mask_bar(data, cent, pa_ranges_bar=[]):
             data_masked[:] = np.nan
         mask = (tt >= pa_ranges_bar[i][0]) & (tt <= pa_ranges_bar[i][1])
         data_masked[:, mask] = data[:, mask]
-    
+
     return data_masked
 
 
@@ -511,23 +574,24 @@ def inject_recover(meta,
                    pas_inject=[], # deg
                    KL=-1,
                    ra_off=[], # mas
-                   de_off=[]): # mas
+                   de_off=[],
+                   fourier=True): # mas
     """
     Inject fake companions and recover them by fitting a 2D Gaussian.
     Makes sure that the injected fake companions are not too close to any
     real companions and also that fake companions which are too close to
     each other are injected into different fake datasets.
-    
+
     TODO: recover fake companions by fitting an offset PSF instead of a 2D
           Gaussian.
-    
+
     TODO: currently uses WebbPSF to compute a theoretical offset PSF. It
           should be possible to use PSF stamps extracted from the
           astrometric confirmation images in the future.
-    
+
     TODO: use a position dependent offset PSF from pyNRC instead of the
           completely unocculted offset PSF from WebbPSF.
-    
+
     Parameters
     ----------
     filepaths: list of str
@@ -568,37 +632,42 @@ def inject_recover(meta,
         RA offset of the companions that shall be masked out.
     de_off: list of float
         DEC offset of the companions that shall be masked out.
-    
+    fourier : bool
+        Whether to perform shifts in the Fourier plane. This better preserves
+        the total flux, however it can introduce Gibbs artefacts for the
+        shortest NIRCAM filters as the PSF is undersampled.
+
     Returns
     -------
-    
+
     """
-    
+
     # Sanitize inputs.
     Nfl = len(flux_inject)
     Nse = len(seps_inject)
     Npa = len(pas_inject)
     if (Nfl != Nse):
         raise UserWarning('Injected fluxes need to match injected separations')
-    
+
     # Create an output directory for the datasets with fake companions.
     odir_temp = odir+'INJECTED/'
     if (not os.path.exists(odir_temp)):
         os.makedirs(odir_temp)
-    
+
     # Offset PSF from WebbPSF, i.e., an integration time weighted average
     # of the unocculted offset PSF over the rolls (normalized to a peak
     # flux of 1).
-    offsetpsf = utils.get_offsetpsf(meta, key, recenter_offsetpsf=False, derotate=True)
+    offsetpsf = utils.get_offsetpsf(meta, key, recenter_offsetpsf=False,
+                                    derotate=True, fourier=fourier)
     offsetpsf /= np.max(offsetpsf)
-    
+
     # Initialize outputs.
     flux_all = [] # MJy/sr
     seps_all = [] # pix
     pas_all = [] # deg
     flux_retr_all = [] # MJy/sr
     done = []
-    
+
     # Do not inject fake companions closer than mrad to any known
     # companion.
     for i in range(Nse):
@@ -610,15 +679,20 @@ def inject_recover(meta,
                 if (dist < mrad*pxsc):
                     done += [i*Npa+j]
                     break
-    
+
+    if not hasattr(meta, 'blur_images'):
+        meta.blur_images = False
+
     # If not finished yet, create a new pyKLIP dataset into which fake
     # companions will be injected.
     finished = False
     ctr = 0
     while (finished == False):
         dataset = JWST.JWSTData(filepaths=filepaths,
-                                psflib_filepaths=psflib_filepaths, centering=meta.centering_alg)
-        
+                                psflib_filepaths=psflib_filepaths, centering=meta.centering_alg, badpix_threshold=meta.badpix_threshold,
+                                scishiftfile=meta.ancildir+'shifts/scishifts', refshiftfile=meta.ancildir+'shifts/refshifts',
+                                fiducial_point_override=meta.fiducial_point_override, blur=meta.blur_images)
+
         # Inject fake companions. Make sure that no other fake companion
         # closer than mrad will be injected into the same dataset.
         todo = []
@@ -645,7 +719,7 @@ def inject_recover(meta,
                         flux_all += [flux_inject[i]] # MJy/sr
                         seps_all += [seps_inject[i]] # pix
                         pas_all += [pas_inject[j]] # deg
-        
+
         # Run pyKLIP.
         parallelized.klip_dataset(dataset=dataset,
                                   mode=mode,
@@ -660,7 +734,7 @@ def inject_recover(meta,
                                   psf_library=dataset.psflib,
                                   highpass=False,
                                   verbose=False)
-        
+
         # Recover fake companions by fitting a 2D Gaussian.
         klipdataset = odir_temp+'FAKE_%04.0f_' % ctr+key+'-KLmodes-all.fits'
         with pyfits.open(klipdataset) as hdul:
@@ -672,26 +746,26 @@ def inject_recover(meta,
             fake_flux = fakes.retrieve_planet_flux(frames=outputfile, centers=outputfile_centers, astr_hdrs=dataset.output_wcs[0], sep=seps_inject[ii], pa=pas_inject[jj], searchrad=5)
             flux_retr_all += [fake_flux] # MJy/sr
         ctr += 1
-        
+
         # Check if finished, i.e., if all fake companions were injected.
         # If not, continue with a new dataset.
         if (len(done) == Nse*Npa):
             finished = True
-    
+
     # Make outputs arrays.
     flux_all = np.array(flux_all) # MJy/sr
     seps_all = np.array(seps_all) # pix
     pas_all = np.array(pas_all) # deg
     flux_retr_all = np.array(flux_retr_all) # MJy/sr
-    
+
     return flux_all, seps_all, pas_all, flux_retr_all
 
-    
+
 def func(p,x):
-    
+
     y = p[0]*(1.-np.exp(-(x-p[1])**2/(2*p[2]**2)))*(1-p[3]*np.exp(-(x-p[4])**2/(2*p[2]**2)))
     y[x < p[1]] = 0.
-    
+
     return y
 
 def func_lnprob(p,x,y):
