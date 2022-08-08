@@ -415,6 +415,9 @@ def sort_data_files(pid, sci_obs, ref_obs, outdir, expid_sci='03106',
     file_ext='uncal.fits', indir=None):
     """Create symbolic links to data in MAST data directory
     
+    Place science and reference observations of same kind in their
+    own sub-directories.
+
     Given a sequence of science and reference observation IDs, sort
     exposures with different filters into their own directory in some
     output directory location. Assumes data is in MAST download directory
@@ -447,7 +450,7 @@ def sort_data_files(pid, sci_obs, ref_obs, outdir, expid_sci='03106',
 
     from astropy.io import fits
 
-    # MAST and data directory
+    # MAST and raw data directory
     if indir is None:
         mast_dir = os.getenv('JWSTDOWNLOAD_OUTDIR')
         if mast_dir is None:
@@ -457,7 +460,7 @@ def sort_data_files(pid, sci_obs, ref_obs, outdir, expid_sci='03106',
     # Find all uncal files
     allfiles = np.sort([f for f in os.listdir(indir) if f.endswith(file_ext)])
 
-    # Select relevant data
+    # Cycle through each science observation
     for obsid in sci_obs:
         file_start = f'jw{pid:05d}{obsid:03d}'
 
