@@ -7,11 +7,11 @@ config_file = os.path.dirname(__file__)+'/nircam_config.yaml'
 #config_file = os.path.dirname(__file__)+'/miri_config.yaml'
 if __name__ == '__main__':
 	pipe = JWST(config_file)
-	pipe.run_all(skip_ramp=True, 
-				 skip_imgproc=True, 
+	pipe.run_all(skip_ramp=True,
+				 skip_imgproc=True,
 				 skip_sub=False, 
-				 skip_rawcon=True, 
-				 skip_calcon=True, 
+				 skip_rawcon=True,
+				 skip_calcon=True,
 				 skip_comps=False)
 
 
