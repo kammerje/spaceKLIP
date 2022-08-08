@@ -321,6 +321,7 @@ def calibrated_contrast_curve(meta, fourier=False):
             # check whether the calibrated contrast curves have
             # been computed already.
             rawconfile = odir+key+'-raw_save.json'
+            rawconfile = rawconfile.replace('_KL{}/'.format(meta.KL), '_RAW/')
             with open(rawconfile, 'r') as rf:
                 rawcon = json.load(rf)
 

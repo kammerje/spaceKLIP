@@ -82,7 +82,7 @@ def fourier_imshift(image, shift, pad=False, cval=0.0):
 
         # Remove padded border to return to original size
         offset = offset[pady:pady+ny, padx:padx+nx]
-    
+
     elif (image.ndim == 3):
         nslices = image.shape[0]
         shift = np.asanyarray(shift)[:, :2]
@@ -92,10 +92,10 @@ def fourier_imshift(image, shift, pad=False, cval=0.0):
         offset = np.empty_like(image, dtype=float)
         for k in range(nslices):
             offset[k] = fourier_imshift(image[k], shift[k], pad=pad, cval=cval)
-    
+
     else:
         raise ValueError(f'Input image must be either a 2D or a 3D array. Found {image.ndim} dimensions.')
-    
+
     return offset
 
 def shift_invpeak(shift, image):
@@ -236,7 +236,7 @@ def gen_offsetpsf(meta, offsetpsfdir, inst, filt, mask, source=None):
         JWST filter.
     mask : str
         JWST coronagraphic mask.
-    source: synphot.spectrum.SourceSpectrum 
+    source: synphot.spectrum.SourceSpectrum
         Default to 5700K blackbody if source=None
 
     """

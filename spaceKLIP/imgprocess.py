@@ -29,7 +29,7 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
             pipeline.output_dir = save_dir
             pipeline.logcfg = pipeline.output_dir + 'imageprocess-log.cfg'
             pipeline.save_results = True
-            pipeline.run(file) 
+            pipeline.run(file)
 
     # Perform additional cleaning
     if meta.outlier_corr != 'None':
@@ -38,16 +38,16 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
         clean_savedir = save_dir + '_CLEAN'
         if os.path.exists(clean_savedir) == False:
             os.makedirs(clean_savedir)
-        
+
         # Get the files from the image processing step only if it is completed
         if meta.outlier_only != True:
             files = glob.glob(save_dir+'/*')
 
-        #Use the JWST outlier detections step to flag a few more bad pixels. 
+        #Use the JWST outlier detections step to flag a few more bad pixels.
         if hasattr(meta,'jwst_outlier_detection'):
             if meta.jwst_outlier_detection:
                 step = OutlierDetectionStep()
-                for file in files: 
+                for file in files:
                     outDataModel = step.process(file)
                     outDataModel.save(clean_savedir+"/"+outDataModel.meta.filename)
                 files = glob.glob(clean_savedir+'/*')
@@ -104,7 +104,7 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
                                 pix_time = data[1:,row,col] #Don't use first image for this
                             else:
                                 pix_time = data[0:,row,col]
-                            
+
                             blurred = median_filter(pix_time, size=5)
                             diff = np.subtract(pix_time, blurred)
                             threshold = 2*np.std(diff)
@@ -134,14 +134,14 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
                                 cleaned = pix_time
                             else:
                                 cleaned = pix_time
-    
+
                             data[0:,row,col] = cleaned
 
                 if 'dqmed' in meta.outlier_corr:
                     for i, arr in enumerate(data):
                         baddq = np.argwhere(dq[i]>meta.dq_threshold)
                         cleaned = np.copy(arr)
-                        for pix in baddq:   
+                        for pix in baddq:
                             if pix[0] > 2 and pix[1] > 2 and pix[0]<arr.shape[0]-2 and pix[1]<arr.shape[1]-2:
                                 ylo, yhi = pix[0]-1, pix[0]+2
                                 xlo, xhi = pix[1]-1, pix[1]+2
@@ -157,7 +157,7 @@ def run_image_processing(meta, subdir_str, itype, dqcorr='None'):
                     badpix -= [1,1] #To account for DS9 offset
                     for i, arr in enumerate(data):
                         cleaned = np.copy(arr)
-                        for pix in badpix:  
+                        for pix in badpix:
                             if pix[0] > 1 and pix[1] > 1 and pix[0]<arr.shape[0]-2 and pix[1]<arr.shape[1]-2:
                                 ylo, yhi = pix[1]-1, pix[1]+2
                                 xlo, xhi = pix[0]-1, pix[0]+2
