@@ -466,8 +466,11 @@ def sort_data_files(pid, sci_obs, ref_obs, outdir, expid_sci='03106',
 
         # Get all files in given observation
         files_obs = np.sort([f for f in allfiles if (file_start in f)])
+        # Get the associated exposure IDS
         expids_all = np.array([f.split('_')[1] for f in files_obs])
+
         # Index of where science data starts
+        # Assume expid_sci is the first in a sequence of filters
         istart = np.where(expids_all==expid_sci)[0][0]
         for ii in np.arange(istart, len(expids_all)):
             file_path = os.path.join(indir, files_obs[ii])
