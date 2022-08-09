@@ -203,6 +203,7 @@ flycheck_*.el
 # Local stuff
 crds_cache
 .ipynb_checkpoints/
+spaceKLIP.egg-info
 
 tests/data/*
 tests/ultranest

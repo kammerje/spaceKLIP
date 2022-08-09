@@ -1,9 +1,0 @@
-astropy
-astroquery
-jwst
-matplotlib
-numpy
-pyyaml
-scikit-image
-scipy
-webbpsf
