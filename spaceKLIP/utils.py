@@ -22,8 +22,6 @@ from synphot.units import convert_flux
 
 import pyklip.instruments.JWST as JWST
 import webbpsf, webbpsf_ext
-
-from webbpsf_ext.image_manip import fshift
 from webbpsf_ext import robust
 
 from jwst import datamodels
@@ -752,7 +750,7 @@ def bp_fix(im, sigclip=5, niter=1, pix_shift=1, rows=True, cols=True,
         for i in xsh_vals:
             for j in ysh_vals:
                 if (i != 0) or (j != 0):
-                    shift_arr.append(fshift(im_pad, delx=i, dely=j))
+                    shift_arr.append(np.roll(im_pad, (j,i), axis=(0,1)))
         shift_arr = np.asarray(shift_arr)
         return shift_arr[:,pady:pady+ny,padx:padx+nx]
     
