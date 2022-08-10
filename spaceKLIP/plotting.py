@@ -334,7 +334,6 @@ def plot_subimages(imgdirs, subdirs, filts, submodes, numKL,
     sub_dict = {}
     for flt in filts:
         for fn in true_subfiles:
-            print('subfile: ', fn)
             if flt in fn:
                 with fits.open(fn) as hdul:
                     imgcube = hdul[0].data
@@ -348,7 +347,6 @@ def plot_subimages(imgdirs, subdirs, filts, submodes, numKL,
                     reverse_mode = None
                 numbasis = [int(KLnum) for KLnum in 
                       psfparam.split('numbasis=')[-1].split(',')[0].split(']')[0].split('[')[-1].split()]
-                print(imgcube.shape, len(numbasis))
                 if flt in sub_dict.keys():
                     sub_dict[flt][mode] = {'image':imgcube, 'numbasis':numbasis, 
                                            'filename':fn, 'center_pix':center_pix}
@@ -401,7 +399,7 @@ def plot_subimages(imgdirs, subdirs, filts, submodes, numKL,
                           int(np.rint(hdr['CRPIX1'])))
             window_pix = int(np.rint(window_size / pltscale['NIRCAM'] / 2))
         else:
-            center_pix = miri_img_centers[flt][::-1]
+            center_pix = miri_img_centers[flt]
             window_pix = int(np.rint(window_size / pltscale['MIRI'] / 2))
         print(center_pix)
         focus_slices_img = (slice(center_pix[0] - window_pix, center_pix[0] + window_pix),
