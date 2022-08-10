@@ -120,8 +120,8 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
             weff = meta.weff[filt] # m
             fwhm = wave/meta.diam*utils.rad2mas/pxsc # pix
 
-            if filt in ['F250M', 'F300M']:
-                #Can't use a fourier shift for these. 
+            if filt in ['F250M']:
+                #Don't use a fourier shift for these. 
                 fourier=False
 
             all_numbasis = []
@@ -274,7 +274,6 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
 
                 # If use_fm_psf is False, replace the forward-modeled PSF in
                 # the fm_frame with a simple offset PSF from WebbPSF.
-
                 if (use_fm_psf == False):
                     # Get a derotated and integration time weighted average of
                     # an offset PSF from WebbPSF. Apply the field-dependent

@@ -10,12 +10,12 @@
 
 ##### REQUIRED #####
 # Input Directory
-idir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/NIRCAM/F250M/'
-odir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/20220805_NIRCAM/F250M/' # Output Directory
+idir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/NIRCAM/F300M/'
+odir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/20220805_NIRCAM/F300M/' # Output Directory
 sdir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/HIP65426A_sdf_phoenix_m+modbb_disk_r.txt' #VOT table or stellar model file.
 
 ##### OPTIONAL #####
-rundirs: [] #'2022_08_02_ADI+RDI_annu1_subs1_run1', '2022_08_02_RDI_annu1_subs1_run1', '2022_08_02_ADI_annu1_subs1_run1']  #Specify directory(ies) within odir of existing runs to calculate contrast curve / companion
+rundirs: ['2022_08_06_ADI+RDI_annu1_subs1_run1'] # #Specify directory(ies) within odir of existing runs to calculate contrast curve / companion
 ancildir: None      # Specify directory to save ancillary files, if None then saved under odir/ANCILLARY/. 
 bg_sci_dir: None #'/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1140C/BGSCI/' #None if not using
 bg_ref_dir: None #'/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1140C/BGREF/' #None if not using
@@ -76,28 +76,36 @@ bgtrim: 0  # Trim the first integration in the background, science, and referenc
 bgsub: 'None'    #Perform background subtraction, 'default' for median, 'pyklip' for klip, 'leastsq' for loci
 bgmed_splits: [8,2]   #12,4  #Peform median background subtraction but split across [Nsci,Nref] ~equal different sections
 bgonly: False     # Only perform the background subtraction
-blur_images: 1
+blur_images: False
 centering_alg: 'jwstpipe'    # Algorithm to use for centering "basic", "jwstpipe", "imageregis", or 'savefile'
-mode: ['ADI+RDI']       # list of modes for pyKLIP, will loop through all
+mode: ['ADI+RDI', 'RDI']       # list of modes for pyKLIP, will loop through all
 annuli: [1]         # list of number of annuli for pyKLIP, will loop through all
 subsections: [1]    # list of number of annuli for pyKLIP, will loop through all
-numbasis: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,30,40,50] # list of number of basis vectors for pyKLIP, will loop through all
+numbasis: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,30,39,50] # list of number of basis vectors for pyKLIP, will loop through all
+
+###################################
+##### Post-Subtraction Settings #####
+###################################
+KL: 7 # Number of KL components for which the calibrated contrast curve and the companion properties shall be computed (must be in subtracted numbasis)
+psf_spec_file: '/Users/acarter/Documents/DIRECT_IMAGING/JWST/ERS/HIP65426/hip65426b_bestfit_jansky.txt'
+psf_star_file: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/HIP65426A_sdf_phoenix_m+modbb_disk_r.txt'
 
 ###################################
 ##### Contrast Curve Settings #####
 ###################################
 conc_usefile: False # Either "bgsub" for background subtracted or False for regular
-fwhm_scale: 10      #Scale to mask companions with
 repeatcentering_contrast: False # False to not repeat, "basic" is not saved and must be repeated
-KL: 10 # Number of KL components for which the calibrated contrast curve and the companion properties shall be computed (must be in subtracted numbasis)
+conc_res: 'default' #'default' for 1 lambda/D, or specific value in pixels
+cal_method: 'median'  #Median for interpolation of median inj flux, model for model fit
 
-# TODO: MASK LOCATIONS
+#fwhm_scale: [5, 10, 10, 10, 10, 7, 25, 8, 4, 4, 4, 4, 4, 10, 2]    #Scale to mask companions with, integer or list len equal to comps+masks
+fwhm_scale: [8, 10, 10, 10, 10, 7, 25, 8, 8, 8, 8, 8, 8, 10, 2] 
+ra_off_mask: [-5300, 1900, -2550, -3200, -5450, -11000, -10000, 0, 900, 1200, 800, -300, -1000,   -7200]
+de_off_mask: [6950, 9250, 8550, 7600, 3850, -6000, 3250, -1500, -1500, -800, -300, -900, 10000,   -2400]
 
-seps_inject_rnd: [5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 25., 30.0, 35.0, 40.0] # pix; list of separations at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
+seps_inject_rnd: [11, 12, 12.5, 13, 13.5, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 32, 34, 36, 38, 40, 45, 50] #[7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 22.5, 25., 27.5, 30.0, 35.0, 40.0, 50] # pix; list of separations at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
 #seps_inject_rnd: [5.0, 25.0, 40.0] # pix; list
-pas_inject_rnd: [0., 45., 90., 135., 180., 225., 270., 315.] # deg; list of position angles at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
-pas_inject_fqpm: [40.0, 130.0, 220.0, 310.0]
-
+pas_inject_rnd: [0., 22.5, 45., 225., 247.5, 270., 295.5, 315., 337.5] # deg; list of position angles at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
 
 pa_ranges_bar: [(105, 105), (285, 285)] # deg; list of tuples defining the pizza slices that shall be considered when computing the contrast curves for the bar masks
 seps_inject_bar: [2.0, 4.0, 6.0, 8.0, 10.0, 12.5, 15.0, 17.5, 20.0, 25.0, 30.0] # pix; list of separations at which fake planets shall be injected to compute the calibrated contrast curve for the bar masks
@@ -109,7 +117,6 @@ pas_inject_bar: [45., 135., 225., 315.] # deg; list of position angles at which 
 comp_usefile: False # Either "bgsub" for background subtracted or False for regular
 repeatcentering_companion: False # False to not repeat, "basic" is not saved and must be repeated
 offpsf: 'webbpsf_ext'   #'webbpsf' for shifted offaxis, 'webbpsf_ext' for ~at location and time
-psf_spec_file: '/Users/acarter/Documents/DIRECT_IMAGING/JWST/ERS/HIP65426/hip65426b_bestfit_jansky.txt'
 psfdate: '2022-07-30T00:00:00'  #Input date for webbpsf_ext model
 
 nested: False

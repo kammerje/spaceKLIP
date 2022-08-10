@@ -34,6 +34,11 @@ def plot_contrast_images(meta, data, data_masked, pxsc=None, savefile='./maskima
     for j in range(len(meta.ra_off)):
         cc = plt.Circle((meta.ra_off[j]/1000., meta.de_off[j]/1000.), 10.*pxsc/1000., fill=False, edgecolor='green', linewidth=3)
         ax[0].add_artist(cc)
+    if hasattr(meta, 'ra_off_mask') and hasattr(meta, 'de_off_mask'):
+        for j in range(len(meta.ra_off_mask)):
+            cc = plt.Circle((meta.ra_off_mask[j]/1000., meta.de_off_mask[j]/1000.), 10.*pxsc/1000., fill=False, edgecolor='red', linewidth=3)
+            ax[0].add_artist(cc)
+        
     ax[0].set_xlabel(xlabel)
     ax[0].set_ylabel(ylabel)
     ax[0].set_title('KLIP-subtracted')
@@ -78,7 +83,6 @@ def plot_contrast_raw(meta, seps, cons, labels='default', savefile='./rawcontras
 
     # Plot settings
     ax.set_yscale('log')
-    #ax.set_xlim([0., 5.]) # arcsec
     ax.grid(axis='y')
     ax.set_xlabel('Separation [arcsec]')
     ax.set_ylabel('Contrast [5$\sigma$]')
@@ -88,6 +92,8 @@ def plot_contrast_raw(meta, seps, cons, labels='default', savefile='./rawcontras
 
     # Save and close plot
     plt.savefig(savefile)
+    ax.set_xlim([0., 6.]) # arcsec
+    plt.savefig(savefile.replace('raw', 'raw_trim'))
     plt.close()
 
     return
@@ -170,6 +176,7 @@ def plot_contrast_calibrated(thrput, med_thrput, fit_thrput, con_seps, cons, cor
     ax[1].plot(con_seps, corr_cons, color='teal', label='Calibrated contrast')
     ax[1].set_yscale('log')
     ax[1].set_xlim([0., np.max(con_seps)]) # arcsec
+    ax[1].set_ylim(top=3e-3)
     ax[1].grid(axis='y')
     ax[1].set_xlabel('Separation [arcsec]')
     ax[1].set_ylabel('Contrast [5$\sigma$]')
