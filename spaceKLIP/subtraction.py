@@ -466,3 +466,314 @@ def klip_subtraction(meta, files):
                 counter += 1
     
     return
+
+
+###############################
+#### JWST Pipeline updates ####
+###############################
+
+from jwst import datamodels
+from jwst.datamodels import dqflags
+from jwst.pipeline import Coron3Pipeline
+from jwst.model_blender import blendmeta
+from collections import defaultdict
+
+from jwst.coron.align_refs_step import AlignRefsStep, median_replace_img, imageregistration
+
+class AlignRefsStepUpdates(AlignRefsStep):
+
+    """
+    AlignRefsStepUpdates: Align coronagraphic PSF images
+    with science target images, excluding mask transmission
+    """
+
+    class_alias = "align_refs"
+
+    spec = """
+        exclude_psfmask = boolean(default=True) # Don't weight alignment by coron image mask
+        median_replace = boolean(default=True)  # Replace bad pixels with median?
+    """
+
+    reference_file_types = ['psfmask']
+
+    def process(self, target, psf):
+
+        # Open the input science target model
+        with datamodels.open(target) as target_model:
+
+            # Get the name of the psf mask reference file to use
+            self.mask_name = self.get_reference_file(target_model, 'psfmask')
+            self.log.info('Using PSFMASK reference file %s', self.mask_name)
+
+            # Check for a valid reference file
+            if self.mask_name == 'N/A':
+                self.log.warning('No PSFMASK reference file found')
+                self.log.warning('Align_refs step will be skipped')
+                return None
+
+            # Open the psf mask reference file
+            mask_model = datamodels.ImageModel(self.mask_name)
+            # Update all pixels to weighting=1
+            if self.exclude_psfmask:
+                mask_model.data[:] = 1
+
+            # Open the input psf images
+            psf_model = datamodels.open(psf)
+
+            # Retrieve the box size for the filter
+            box_size = self.median_box_length
+
+            # Get the bit value of bad pixels. A value of 0 treats all pixels as good.
+            bad_bitvalue = self.bad_bits
+            bad_bitvalue = dqflags.interpret_bit_flags(bad_bitvalue, mnemonic_map=dqflags.pixel)
+            if bad_bitvalue is None:
+                bad_bitvalue = 0
+
+            # Replace bad pixels in the target and psf images?
+            if self.median_replace:
+                target_model = median_replace_img(target_model, box_size, bad_bitvalue)
+                psf_model = median_replace_img(psf_model, box_size, bad_bitvalue)
+
+            # Call the alignment routine
+            result = imageregistration.align_models(target_model, psf_model,
+                                                    mask_model)
+            result.meta.cal_step.align_psfs = 'COMPLETE'
+
+            mask_model.close()
+            psf_model.close()
+
+        return result
+
+class Coron3PipelineUpdates(Coron3Pipeline):
+    """Class for defining Coron3PipelineUpdates.
+
+    Modified to include:
+        - pixel cleaning algorithm
+        - pyKLIP PSF subtraction infrastructure (TBD)
+
+    Coron3PipelineUpdates: Apply all level-3 calibration steps to a
+    coronagraphic association of exposures. Included steps are:
+
+    #. stack_refs (assemble reference PSF inputs)
+    #. outlier_detection (flag outliers)
+    #. align_refs (align reference PSFs to target images)
+    #. klip (PSF subtraction using the KLIP algorithm)
+    #. resample (image combination and resampling)
+
+    """
+
+    class_alias = "calwebb_coron3_updates"
+
+    spec = """
+        clean_data = boolean(default=True)
+    """
+
+    def __init__(self, *args, **kwargs):
+
+        # Replace align_refs step with different Step class
+        steps_update = {
+            'align_refs': AlignRefsStepUpdates,
+        }
+        for k in steps_update.keys():
+            self.step_defs[k] = steps_update[k]
+
+        Coron3Pipeline.__init__(self, *args, **kwargs)
+
+    # Main processing
+    def process(self, user_input):
+        """Primary method for performing pipeline.
+
+        Parameters
+        ----------
+        user_input : str, Level3 Association, or ~jwst.datamodels.DataModel
+            The exposure or association of exposures to process
+        """
+        self.log.info(f'Starting {self.class_alias} ...')
+        asn_exptypes = ['science', 'psf']
+
+        # Create a DM object using the association table
+        input_models = datamodels.open(user_input, asn_exptypes=asn_exptypes)
+        acid = input_models.meta.asn_table.asn_id
+
+        # Store the output file for future use
+        self.output_file = input_models.meta.asn_table.products[0].name
+
+        # Find all the member types in the product
+        members_by_type = defaultdict(list)
+        prod = input_models.meta.asn_table.products[0].instance
+
+        for member in prod['members']:
+            members_by_type[member['exptype'].lower()].append(member['expname'])
+
+        # Set up required output products and formats
+        self.outlier_detection.suffix = f'{acid}_crfints'
+        self.outlier_detection.save_results = self.save_results
+        self.resample.blendheaders = False
+
+        # Save the original outlier_detection.skip setting from the
+        # input, because it may get toggled off within loops for
+        # processing individual inputs
+        skip_outlier_detection = self.outlier_detection.skip
+
+        # Extract lists of all the PSF and science target members
+        psf_files = members_by_type['psf']
+        targ_files = members_by_type['science']
+
+        # Make sure we found some PSF and target members
+        if len(psf_files) == 0:
+            err_str1 = 'No reference PSF members found in association table.'
+            self.log.error(err_str1)
+            self.log.error('Calwebb_coron3 processing will be aborted')
+            return
+
+        if len(targ_files) == 0:
+            err_str1 = 'No science target members found in association table'
+            self.log.error(err_str1)
+            self.log.error('Calwebb_coron3 processing will be aborted')
+            return
+
+        for member in psf_files + targ_files:
+            self.prefetch(member)
+
+        # Assemble all the input psf files into a single ModelContainer
+        psf_models = datamodels.ModelContainer()
+        for i in range(len(psf_files)):
+            psf_input = datamodels.CubeModel(psf_files[i])
+            psf_models.append(psf_input)
+
+            psf_input.close()
+
+        # Perform outlier detection on the PSFs.
+        if not skip_outlier_detection:
+            for model in psf_models:
+                self.outlier_detection(model)
+                # step may have been skipped for this model;
+                # turn back on for next model
+                self.outlier_detection.skip = False
+        else:
+            self.log.info('Outlier detection skipped for PSF\'s')
+            
+        #### Clean model data in place
+        if self.clean_data:
+            for model in psf_models:
+                model.data = self.clean_images(model)
+
+        # Stack all the PSF images into a single CubeModel
+        psf_stack = self.stack_refs(psf_models)
+        psf_models.close()
+
+        # Save the resulting PSF stack
+        self.save_model(psf_stack, suffix='psfstack')
+
+        # Call the sequence of steps: outlier_detection, align_refs, and klip
+        # once for each input target exposure
+        resample_input = datamodels.ModelContainer()
+        for target_file in targ_files:
+            with datamodels.open(target_file) as target:
+
+                # Remove outliers from the target
+                if not skip_outlier_detection:
+                    target = self.outlier_detection(target)
+                    # step may have been skipped for this model;
+                    # turn back on for next model
+                    self.outlier_detection.skip = False
+                    
+                #### Clean science model data in place
+                median_replace_orig = self.align_refs.median_replace
+                if self.clean_data:
+                    target.data = self.clean_images(target)
+                    # No need to replace bad pixels in align_refs Step
+                    self.align_refs.median_replace = False
+
+                # Call align_refs
+                psf_aligned = self.align_refs(target, psf_stack)
+                self.align_refs.median_replace = median_replace_orig
+
+                # Save the alignment results
+                self.save_model(
+                    psf_aligned, output_file=target_file,
+                    suffix='psfalign', acid=acid
+                )
+
+                # Call KLIP
+                psf_sub = self.do_klip_step(target, psf_aligned)
+                psf_sub = self.klip(target, psf_aligned)
+                psf_aligned.close()
+
+                # Save the psf subtraction results
+                self.save_model(
+                    psf_sub, output_file=target_file,
+                    suffix='psfsub', acid=acid
+                )
+                
+                #### Clean PSF-subtracted data
+                if self.clean_data:
+                    psf_sub.data = self.clean_images(psf_sub)
+
+                    # Save the psf subtraction results
+                    self.save_model(
+                        psf_sub, output_file=target_file,
+                        suffix='psfsub_cleaned', acid=acid
+                    )
+
+                # Split out the integrations into separate models
+                # in a ModelContainer to pass to `resample`
+                for model in psf_sub.to_container():
+                    resample_input.append(model)
+
+        # Call the resample step to combine all psf-subtracted target images
+        result = self.resample(resample_input)
+
+        # Blend the science headers
+        try:
+            completed = result.meta.cal_step.resample
+        except AttributeError:
+            self.log.debug('Could not determine if resample was completed.')
+            self.log.debug('Presuming not.')
+
+            completed = 'SKIPPED'
+        if completed == 'COMPLETE':
+            self.log.debug(f'Blending metadata for {result}')
+            blendmeta.blendmodels(result, inputs=targ_files)
+
+        try:
+            result.meta.asn.pool_name = input_models.meta.asn_table.asn_pool
+            result.meta.asn.table_name = os.path.basename(user_input)
+        except AttributeError:
+            self.log.debug('Cannot set association information on final')
+            self.log.debug(f'result {result}')
+
+        # Save the final result
+        self.save_model(result, suffix=self.suffix)
+
+        # We're done
+        self.log.info(f'...ending {self.class_alias}')
+
+        return
+
+    def clean_images(self, model, **kwargs):
+        """Perform bad pixel fixing on flagged and outlier pixels."""
+        return utils.clean_data(model.data, model.dq, in_place=True, **kwargs)
+
+    def do_klip_step(self, target, psfs_aligned, kl_modes=None):
+        """Perform KLIP subtraction
+        
+        Includes option to specify number of KL modes.
+        """
+
+        # Just do default
+        if kl_modes is None:
+            return self.klip(target, psfs_aligned)
+        else:
+            kl_orig = self.klip.truncate
+            self.klip.truncate = kl_modes
+            
+            # Perform KLIP subtraction
+            psf_sub = self.klip(target, psfs_aligned)
+
+            # Return to original value
+            self.klip.truncate = kl_orig
+
+            return psf_sub
+
+

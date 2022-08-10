@@ -147,7 +147,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                 centering_alg = 'savefile'
             else:
                 centering_alg = meta.repeatcentering_companion
-            
+
             if not hasattr(meta, 'blur_images'):
                 meta.blur_images = False
 
@@ -185,7 +185,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                 offsetpsf_func = psf.JWST_PSF(inst, filt, immask, fov_pix=65,
                                               sp=SED, use_coeff=True,
                                               date=meta.psfdate)
-                field_dep_corr = None #WebbPSF already corrects for transmissions. 
+                field_dep_corr = None #WebbPSF already corrects for transmissions.
 
             # Loop through all companions.
             res[key] = {}
@@ -234,9 +234,15 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                                                  field_dependent_correction=field_dep_corr)
 
                     # Compute the forward-modeled dataset.
-                    annulus = meta.annuli#[[guess_sep-20., guess_sep+20.]] # pix
+                    annulus = meta.annuli #[[guess_sep-20., guess_sep+20.]] # pix
                     if len(annulus) == 1:
                         annulus = annulus[0]
+                    try:
+                        if annulus == 1:
+                            annulus = [(0, dataset.input.shape[1]//2)]
+                    except:
+                        continue
+                    print(annulus)
                     subsection = 1
                     fm.klip_dataset(dataset=dataset,
                                     fm_class=fm_class,
@@ -408,7 +414,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                         dstarmag = 0.1
                     res[key][temp]['appmag'] = starmag+deltamag
                     res[key][temp]['dappmag'] = np.sqrt((dstarmag/starmag)**2+(ddeltamag/deltamag)**2)*res[key][temp]['appmag']
- 
+
                     if (meta.verbose == True):
                         print('--> Companion %.0f' % (j+1))
                         print('   RA  = %.2f+/-%.2f mas (%.2f mas guess)' % (res[key][temp]['ra'], res[key][temp]['dra'], meta.ra_off[j]))
@@ -514,7 +520,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                         print('No stellar magnitude errors supplied yet so assuming +/- 0.1 mag (FIX TBD!)')
                         dstarmag = 0.1
                     res[key][temp]['appmag'] = starmag+deltamag
-                    res[key][temp]['dappmag'] = np.sqrt((dstarmag/starmag)**2+(ddeltamag/deltamag)**2)*res[key][temp]['appmag']
+                    res[key][temp]['dappmag'] = np.sqrt((dstarmag/starmag)**2+(ddeltamag/deltamag)**2)
 
                     if (meta.verbose == True):
                         print('--> Companion %.0f' % (j+1))
