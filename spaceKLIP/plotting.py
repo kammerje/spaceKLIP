@@ -363,9 +363,9 @@ def plot_subimages(imgdirs, subdirs, filts, submodes, numKL,
                                                        'filename':fn, 'center_pix':center_pix}
 
     #miri centers from pyklip v2.6 (y, x)
-    miri_img_centers = {'F1065C': (int(np.rint(111.89-5)), int(np.rint(120.81-14))),
-                        'F1140C': (int(np.rint(112.2-7)) , int(np.rint(119.99-13))) ,
-                        'F1550C': (int(np.rint(113.33-8)), int(np.rint(119.84-13))),  }
+    miri_img_centers = {'F1065C': (int(np.rint(111.89)), int(np.rint(120.81))),
+                        'F1140C': (int(np.rint(112.2)) , int(np.rint(119.99))) ,
+                        'F1550C': (int(np.rint(113.33)), int(np.rint(119.84))),  }
     pltscale = {'NIRCAM': 0.063, 'MIRI': 0.11}
     plot_extent = (-1*window_size/2, window_size/2, -1*window_size/2, window_size/2)
 
