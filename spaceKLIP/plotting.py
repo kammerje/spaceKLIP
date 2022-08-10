@@ -1,6 +1,7 @@
-import jFits
 import glob, os
 
+import matplotlib
+from matplotlib.ticker import MultipleLocator
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gs
 from matplotlib import font_manager
@@ -248,7 +249,9 @@ def plot_chains(chain, savefile):
     plt.savefig(savefile)
     plt.close()
 
-def plot_subimages(imgdirs, subdirs, filts, submodes, numKL, **imshowkwargs):
+def plot_subimages(imgdirs, subdirs, filts, submodes, numKL, 
+                   window_size=2.5, cmaps_list=['viridis'],
+                   imgVmin=[-40], imgVmax=[40], subVmin=[-10], subVmax=[10]):
     '''
     Create a "publication ready" plot of the coronagraphic images, alongside
     the PSF subtracted images. A grid of images will be made. Rows will correspond to 
@@ -265,12 +268,28 @@ def plot_subimages(imgdirs, subdirs, filts, submodes, numKL, **imshowkwargs):
     filts : list of strings
         List of filter strings to include in the plot
     submodes : list of strings
-        'ADI', 'RDI', 'RDI+ADI' (or 'ADI+RDI', if that's what your filenames
-        include)
-    KLmodes : list of ints
+        'ADI', 'RDI', 'RDI+ADI' (or 'ADI+RDI')
+    numKL : list of ints
         output images are 3-D with the third axis corresponding to different KL
         modes used in subtraction. Indicate the number of KL modes you want to
-        display, if more than one, display all.
+        display, if more than one, display each for each submode on the same row .
+    window_size : float
+        the number of arcseconds on a side
+    cmaps_list : list
+        a list of strings naming the colormaps for each filter. If len(cmaps_list)==1
+        the same cmap will be used for each filter.
+    imgVmin : list
+        a list of the min values for the the cmaps for each filter. if len(imgVmin)==1
+        the same min value will be used for each filter.
+    imgVmax : list
+        a list of the max values for the the cmaps for each filter. if len(imgVmax)==1
+        the same max value will be used for each filter.
+    subVmin : list
+        a list of the min values for the the subtracted image cmaps for each filter. 
+        if len(imgVmin)==1 the same min value will be used for each filter.
+    subVmax : list
+        a list of the max values for the the subtracted image cmaps for each filter. 
+        if len(imgVmin)==1 the same min value will be used for each filter.
     '''
 
     # Get the files we care about
@@ -287,7 +306,7 @@ def plot_subimages(imgdirs, subdirs, filts, submodes, numKL, **imshowkwargs):
             # This keyword only exists when larger than 1. If so,
             # this is a dithered reference observation, which we don't want.
             continue
-        elif hdr['EXP_TYPE'] != 'NRC_CORON':
+        elif (hdr['EXP_TYPE'] != 'NRC_CORON') and (hdr['EXP_TYPE'] != 'MIR_4QPM'):
             # Don't want TACONFIRM or TACQ
             continue
         elif hdr['FILTER'] not in filts:
@@ -310,7 +329,8 @@ def plot_subimages(imgdirs, subdirs, filts, submodes, numKL, **imshowkwargs):
         if any(filt in subfile for filt in filts):
             true_subfiles.append(subfile)
 
-    subfn_list = [ []*len(submodes) ] * len(filts)
+
+    #read the subtracted images, store relevant info
     sub_dict = {}
     for flt in filts:
         for fn in true_subfiles:
@@ -318,49 +338,124 @@ def plot_subimages(imgdirs, subdirs, filts, submodes, numKL, **imshowkwargs):
                 with fits.open(fn) as hdul:
                     imgcube = hdul[0].data
                     psfparam = hdul[0].header['PSFPARAM']
-                mode = psfparam.split('mode=')[-1].split(',')[0]
+                    center_pix = (int(np.rint(hdul[0].header['PSFCENTY'])), 
+                                  int(np.rint(hdul[0].header['PSFCENTX'])))
+                mode = psfparam.split('mode=')[-1].split(',')[0]#ADI/RDI/ADI+RDI
+                if '+' in mode:
+                    reverse_mode = mode.split('+')[-1] + '+' + mode.split('+')[0]
+                else:
+                    reverse_mode = None
                 numbasis = [int(KLnum) for KLnum in 
                       psfparam.split('numbasis=')[-1].split(',')[0].split(']')[0].split('[')[-1].split()]
                 if flt in sub_dict.keys():
-                    sub_dict[flt][mode] ={'image':imgcube,'numbasis':numbasis, 'filename':fn}
+                    sub_dict[flt][mode] = {'image':imgcube, 'numbasis':numbasis, 
+                                           'filename':fn, 'center_pix':center_pix}
+                    if reverse_mode is not None:
+                        sub_dict[flt][reverse_mode] ={'image':imgcube, 'numbasis':numbasis, 
+                                              'filename':fn, 'center_pix':center_pix}
+
+
                 else:
-                    sub_dict[flt] = {mode:{'image':imgcube,'numbasis':numbasis, 'filename':fn}}
+                    sub_dict[flt] = {mode:{'image':imgcube, 'numbasis':numbasis, 
+                                           'filename':fn, 'center_pix':center_pix}}
+                    if reverse_mode is not None:
+                        sub_dict[flt][reverse_mode] = {'image':imgcube, 'numbasis':numbasis, 
+                                                       'filename':fn, 'center_pix':center_pix}
+
+    #miri centers from pyklip v2.6 (y, x)
+    miri_img_centers = {'F1065C': (int(np.rint(111.89-5)), int(np.rint(120.81-14))),
+                        'F1140C': (int(np.rint(112.2-7)) , int(np.rint(119.99-13))) ,
+                        'F1550C': (int(np.rint(113.33-8)), int(np.rint(119.84-13))),  }
+    pltscale = {'NIRCAM': 0.063, 'MIRI': 0.11}
+    plot_extent = (-1*window_size/2, window_size/2, -1*window_size/2, window_size/2)
 
     ydim = len(filts)
     xdim = len(submodes)*len(numKL) + 1
 
     # Start making the figure
-    fig = plt.figure(figsize=[xdim*5, ydim*5])
+    fig = plt.figure(figsize=[xdim*3, ydim*3])
     grid = gs.GridSpec(ydim, xdim, figure=fig)
 
+    if len(cmaps_list) == 1:
+        cmaps_list *= len(filts)
+    if len(imgVmin) == 1:
+        imgVmin *= len(filts)
+    if len(imgVmax) == 1:
+        imgVmax *= len(filts)
+    if len(subVmin) == 1:
+        subVmin *= len(filts)
+    if len(subVmax) == 1:
+        subVmax *= len(filts)
+
     for row, flt in enumerate(filts):
-        hdr = fits.getheader(true_imgfiles[flt])
+        prihdr = fits.getheader(true_imgfiles[flt])
+        instrument = prihdr['INSTRUME']
         ax = plt.subplot(grid[row, 0])
         with fits.open(true_imgfiles[flt]) as hdul:
             img = hdul['SCI'].data[-1]
-        ax.imshow(img, **imshowkwargs)
-        ax.set_ylabel(hdr['FILTER'])
+            hdr = hdul['SCI'].header
+        if instrument == 'NIRCAM':
+            center_pix = (int(np.rint(hdr['CRPIX2'])), 
+                          int(np.rint(hdr['CRPIX1'])))
+            window_pix = int(np.rint(window_size / pltscale['NIRCAM'] / 2))
+        else:
+            center_pix = miri_img_centers[flt]
+            window_pix = int(np.rint(window_size / pltscale['MIRI'] / 2))
+        print(center_pix)
+        focus_slices_img = (slice(center_pix[0] - window_pix, center_pix[0] + window_pix),
+                            slice(center_pix[1] - window_pix, center_pix[1] + window_pix))
+
+        ax.imshow(img[focus_slices_img], extent=plot_extent, cmap=cmaps_list[row], vmin=imgVmin[row], vmax=imgVmax[row])
+        ax.set_ylabel(prihdr['FILTER']+'\nDec offset [arcsec]', fontproperties=compModern(14))
+        #ax.xaxis.set_major_locator(MaxNLocator(nbins=7, min_n_ticks=3, prune='both'))
+        ax.yaxis.set_major_locator(MultipleLocator(1))
+        ax.xaxis.set_major_locator(MultipleLocator(1))
+        if row != (len(filts)-1):
+            plt.setp(ax.get_xticklabels(), visible=False)
+        else:
+            ax.set_xlabel('RA offset [arcsec]', fontproperties=compModern(14))
+            tickFont(ax, 'x', fontproperties=compModern(10))
+        tickFont(ax, 'y', fontproperties=compModern(10))
+        ax.tick_params(which='major', length=4)
+        ax.tick_params(which='minor', length=2)
+
         for mm, mde in enumerate(submodes):
+            focus_slices_sub = (slice(sub_dict[flt][mde]['center_pix'][0] - window_pix, 
+                                      sub_dict[flt][mde]['center_pix'][0] + window_pix),
+                                slice(sub_dict[flt][mde]['center_pix'][1] - window_pix, 
+                                      sub_dict[flt][mde]['center_pix'][1] + window_pix))
             for kk, nkl in enumerate(numKL):
                 column = 1 + (len(numKL)*mm + kk)
                 ax = plt.subplot(grid[row, column])
                 print(sub_dict[flt][mde]['filename'], numbasis, nkl, numbasis.index(nkl))
-                ax.imshow(sub_dict[flt][mde]['image'][numbasis.index(nkl),:,:], **imshowkwargs)
+                ax.imshow(sub_dict[flt][mde]['image'][numbasis.index(nkl),:,:][focus_slices_sub], 
+                          extent=plot_extent, cmap=cmaps_list[row], vmin=subVmin[row], vmax=subVmax[row])
+                ax.xaxis.set_major_locator(MultipleLocator(1))
+                ax.yaxis.set_major_locator(MultipleLocator(1))
+                plt.setp(ax.get_yticklabels(), visible=False)
+                ax.tick_params(which='major', length=4)
+                ax.tick_params(which='minor', length=2)
+                if row != (len(filts)-1):
+                    plt.setp(ax.get_xticklabels(), visible=False)
+                else:
+                    #ax.xaxis.set_major_locator(MaxNLocator(nbins=7, min_n_ticks=3, prune='both'))
+                    tickFont(ax, 'x', fontproperties=compModern(10))
+                    ax.set_xlabel('RA offset [arcsec]', fontproperties=compModern(14))
                 if row == 0:
-                    ax.set_title('{:s} {:d} modes'.format(mde, nkl))
+                    ax.set_title('{:s} {:d} modes'.format(mde, nkl), fontproperties=compModern(16))
+    fig.tight_layout()
+    fig.tight_layout()
+    fig.tight_layout()
     plt.show()
-
-    disp = jFits.jInteractive_Display(img)
-    disp = jFits.jInteractive_Display(sub_dict[flt][mde]['image'][-1])
+    return fig
 
 
-    return
-
-def tickFont(ax, xy='x', fontproperties=None):
+def tickFont(ax, xy, fontproperties):
     if xy == 'x':
         plt.setp(ax.get_xticklabels(), fontproperties=fontproperties)
     if xy == 'y':
         plt.setp(ax.get_yticklabels(), fontproperties=fontproperties)
+
 
 def compModern(size=20):
     computerModern = font_manager.FontProperties(size=size,
