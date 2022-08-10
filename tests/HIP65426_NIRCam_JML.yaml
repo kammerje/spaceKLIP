@@ -63,9 +63,9 @@ imgproc_idir: True
 imgproc_ext: 'rateints.fits'
 imgproc_bgdirs: False
 jwst_outlier_detection: False
-outlier_only: False    # Must have already run image processing
-outlier_corr: 'dqmed+timemed_alt'
-#outlier_corr: 'bpclean'
+outlier_only: False    # Only perform cleaning. Must have already run image processing
+#outlier_corr: 'dqmed+timemed_alt'
+outlier_corr: 'bpclean'
 outmed_blur: 5         # Size of median blurring window
 outmed_threshold: 1    # Threshold to detect outliers
 clean_sigclip : 5      # Pixel sigma clipping 
