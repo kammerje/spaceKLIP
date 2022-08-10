@@ -40,8 +40,7 @@ def run_image_processing(meta, subdir_str, itype):
             os.makedirs(clean_savedir)
 
         # Get the files from the image processing step only if it is completed
-        if meta.outlier_only != True:
-            files = glob.glob(save_dir+'/*')
+        files = glob.glob(save_dir+'/*')
 
         #Use the JWST outlier detections step to flag a few more bad pixels.
         if hasattr(meta,'jwst_outlier_detection'):
@@ -101,7 +100,7 @@ def run_image_processing(meta, subdir_str, itype):
                         #   arr[int(3*arry/5):int(4*arry/5),int(3*arrx/5):int(4*arrx/5)]
 
                         data[i] = cleaned
-                if 'timemed' in meta.outlier_corr:
+                if ('timemed' in meta.outlier_corr) and ('timemed_alt' not in meta.outlier_corr):
                     z, y, x = data.shape
                     # datacopy = np.copy(data)
                     for row in range(y):

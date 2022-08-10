@@ -460,6 +460,10 @@ def field_dependent_correction(stamp,
     # Get transmission at this point
     transmission_at_center = transmission[int(c0),int(c1)]
 
+    plt.imshow(xy)
+    plt.imshow(transmission)
+    plt.show()
+
     ## Old way use peak of flux
     # peak_index = np.unravel_index(stamp.argmax(), stamp.shape)
     # transmission_at_center =  transmission[peak_index[1],peak_index[0]]
@@ -568,8 +572,14 @@ def get_maxnumbasis(meta):
     # frames.
     meta.maxnumbasis = {}
     for key in meta.obs.keys():
-        ww = meta.obs[key]['TYP'] == 'CAL'
-        meta.maxnumbasis[key] = np.sum(meta.obs[key]['NINTS'][ww], dtype=int)
+        # Get all science and calibrator keys
+        ws = meta.obs[key]['TYP'] == 'SCI'
+        wc = meta.obs[key]['TYP'] == 'CAL'
+        # Sum integrations in science (except for 1 as we won't self reference)
+        nbs = np.sum(meta.obs[key]['NINTS'][ws][1:], dtype=int) #
+        # Sum all integrations in calibration (Reference)
+        nbc = np.sum(meta.obs[key]['NINTS'][wc][:], dtype=int)
+        meta.maxnumbasis[key] = nbs + nbc
 
     return meta
 
@@ -600,14 +610,19 @@ def get_psfmasknames(meta):
     meta.psfmask = {}
     for key in meta.obs.keys():
         if '1065' in key:
-            # TODO
-            raise ValueError('Get a 1065 mask!')
+            trstring = '/../resources/transmissions/JWST_MIRI_F1065C_transmission_webbpsf-ext_v1.fits'
+            trfile = os.path.join(os.path.dirname(__file__) + trstring)
+            meta.psfmask[key] = trfile
         elif '1140' in key:
-            trstring = '/../resources/miri_transmissions/JWST_MIRI_F1140C_transmission_webbpsf-ext_v0.fits'
+            trstring = '/../resources/transmissions/JWST_MIRI_F1140C_transmission_webbpsf-ext_v1.fits'
             trfile = os.path.join(os.path.dirname(__file__) + trstring)
             meta.psfmask[key] = trfile
         elif '1550' in key:
-            trstring = '/../resources/miri_transmissions/JWST_MIRI_F1550C_transmission_webbpsf-ext_v0.fits'
+            trstring = '/../resources/transmissions/JWST_MIRI_F1550C_transmission_webbpsf-ext_v1.fits'
+            trfile = os.path.join(os.path.dirname(__file__) + trstring)
+            meta.psfmask[key] = trfile
+        elif 'MASK335R' in key:
+            trstring = '/../resources/transmissions/jwst_nircam_psfmask_mask335r_shift.fits'
             trfile = os.path.join(os.path.dirname(__file__) + trstring)
             meta.psfmask[key] = trfile
         else:
