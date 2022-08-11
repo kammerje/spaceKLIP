@@ -123,6 +123,27 @@ class JWST(Pipeline):
 
         return None
 
+    def sort_files(self):
+        """Sort files into subdirectories like filter_mask (e.g., F300M_MASK335R)"""
+
+        idir = self.meta.idir[:-1] if self.meta.idir[-1]=='/' else self.meta.idir
+        outdir = os.path.dirname(idir)
+
+        if hasattr(self.meta, 'filter') and self.meta.filter.lower()!='none':
+            filter = self.meta.filter
+        else:
+            filter = None
+        if hasattr(self.meta, 'coron_mask') and self.meta.coron_mask.lower()!='none':
+            coron_mask = self.meta.coron_mask
+        else:
+            coron_mask = None
+
+        indir = None if self.meta.data_dir.lower()=='none' else self.meta.data_dir
+
+        io.sort_data_files(self.meta.pid, self.meta.sci_obs, self.meta.ref_obs, outdir, 
+                           indir=indir, expid_sci=self.meta.expid_sci, 
+                           filter=filter, coron_mask=coron_mask)
+
     def get_jwst_meta(self):
         """
         Get the JWST-specific metadata.

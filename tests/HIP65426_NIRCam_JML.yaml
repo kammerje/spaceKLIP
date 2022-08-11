@@ -15,6 +15,16 @@ odir: '/data/NIRData/MAST_proc/01386/HIP65426/F300M_MASK335R/' # Output Director
 sdir: '/data/NIRData/MAST_proc/01386/HIP65426.vot' #VOT table or stellar model file.
 
 ##### OPTIONAL #####
+
+# File sorting information to create symlinks to uncal files in SpaceKLIP directory structure
+pid: 1386
+filter: 'F300M'
+coron_mask: 'MASK335R'
+sci_obs: [2,3]     # Observations corresponding to science roll positions
+ref_obs: [1]       # Observations for reference sources
+expid_sci: '03106' # Exp ID corresponding to first science exposure. Will depend on whether astrometric conf images were specified.
+data_dir: None     # Input data directory to original uncal files. If not specified, searches MAST directory: $JWSTDOWNLOAD_OUTDIR/01386
+
 rundirs: ['2022_08_02_RDI_annu1_subs1_run1'] #'2022_08_02_ADI+RDI_annu1_subs1_run1', '2022_08_02_RDI_annu1_subs1_run1', '2022_08_02_ADI_annu1_subs1_run1']  #Specify directory(ies) within odir of existing runs to calculate contrast curve / companion
 ancildir: None      # Specify directory to save ancillary files, if None then saved under odir/ANCILLARY/. 
 bg_sci_dir: None #'/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1140C/BGSCI/' #None if not using
@@ -62,19 +72,19 @@ ramp_fit_max_cores: 'quarter' #Options are 'none', 'quarter', 'half', 'all'
 imgproc_idir: True
 imgproc_ext: 'rateints.fits'
 imgproc_bgdirs: False
-jwst_outlier_detection: False
-outlier_only: False    # Only perform cleaning. Must have already run image processing
-#outlier_corr: 'dqmed+timemed_alt'
-outlier_corr: 'bpclean'
-outmed_blur: 5         # Size of median blurring window
-outmed_threshold: 1    # Threshold to detect outliers
-clean_sigclip : 5      # Pixel sigma clipping 
-clean_niter : 5        # Number of iterations 
-dq_threshold: 1000
-tmed_alt_frac: 0.2
+jwst_outlier_detection: True  # Include JWST pipeline outlier detection Step?
+outlier_only: True       # Only perform cleaning. Must have created .calints with image processing with outlier_corr='None'
+#outlier_corr: 'dqmed+timemed_alt'  # Set to "None" for no cleaning
+outlier_corr: 'bpclean'  # Set to "None" for no cleaning
+bpclean_sigclip : 5      # Pixel sigma clipping for bpclean / bpfix 
+bpclean_niter : 5        # Number of iterations for bpclean / bpfix
+outmed_blur: 5           # Size of median blurring window for outmedian
+outmed_threshold: 1      # Threshold to detect outliers for outmedian
+dq_threshold: 1000       # Threshold for dqmed
+tmed_alt_frac: 0.2       # timemed_alt parameter
 # File containing list pixels to always fix. Values are 1-based (ie. ds9-like).
 # custom_file: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/pixmask_nircam.txt'
-custom_file: None
+custom_file: ''
 
 ####################################
 ##### PSF Subtraction Settings #####
