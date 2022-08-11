@@ -424,7 +424,7 @@ def get_working_files(meta, runcheck, subdir='RAMPFIT', search='uncal.fits', ity
     if meta.verbose:
         print('--> Found {} file(s) under: {}'.format(len(files), rdir))
 
-    return files
+    return np.sort(files)
 
 
 def sort_data_files(pid, sci_obs, ref_obs, outdir, expid_sci='03106', 
