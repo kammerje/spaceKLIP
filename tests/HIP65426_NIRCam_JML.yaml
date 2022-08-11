@@ -73,7 +73,7 @@ imgproc_idir: True
 imgproc_ext: 'rateints.fits'
 imgproc_bgdirs: False
 jwst_outlier_detection: True  # Include JWST pipeline outlier detection Step?
-outlier_only: False       # Only perform cleaning. Must have created .calints with image processing with outlier_corr='None'
+outlier_only: False       # Only perform cleaning. Must have created .calints with outlier_corr='None'. Mainly for testing/debugging. 
 #outlier_corr: 'dqmed+timemed_alt'  # Set to "None" for no cleaning
 outlier_corr: 'bpclean'  # Set to "None" for no cleaning
 bpclean_sigclip : 5      # Pixel sigma clipping for bpclean / bpfix 
