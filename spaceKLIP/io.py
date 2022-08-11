@@ -424,11 +424,11 @@ def get_working_files(meta, runcheck, subdir='RAMPFIT', search='uncal.fits', ity
     if meta.verbose:
         print('--> Found {} file(s) under: {}'.format(len(files), rdir))
 
-    return files
+    return np.sort(files)
 
 
 def sort_data_files(pid, sci_obs, ref_obs, outdir, expid_sci='03106', 
-    file_ext='uncal.fits', indir=None):
+    file_ext='uncal.fits', indir=None, filter=None, coron_mask=None):
     """Create symbolic links to data in MAST data directory
     
     Place science and reference observations of same kind in their
@@ -501,12 +501,18 @@ def sort_data_files(pid, sci_obs, ref_obs, outdir, expid_sci='03106',
                 for mask in mask_arr:
                     if mask in apname:
                         image_mask = mask
-                image_mask = '_' + image_mask
+                image_mask_str = '_' + image_mask
             else:
-                image_mask = ''
+                image_mask_str = image_mask = ''
+
+            # Skip this file if specified filter or coron mask don't match
+            if (filter is not None) and (filter!=filt):
+                continue
+            if (coron_mask is not None) and (coron_mask!=image_mask):
+                continue
 
             # Get filter directory location
-            sub_str = filt + image_mask
+            sub_str = filt + image_mask_str
             subdir = os.path.join(outdir, sub_str)
             # Create if it doesn't currently exist
             if not os.path.isdir(subdir):

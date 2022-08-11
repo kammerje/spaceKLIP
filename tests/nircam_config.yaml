@@ -44,9 +44,11 @@ starmagerrs: [0.054, 0] #Add 0 for NIRCam because of 335M [F210M: 0.054, F300M: 
 rampfit_idir:  True   #Toggle if you want to rampfit the sci/ref images
 rampfit_bgdirs: False #Toggle if you want to rampfit the backgrounds
 ramp_ext: 'uncal.fits'
+save_intermediate: False # Save intermediate steps?
 sat_boundary: 0  #Number of pixels to flag around saturated pixels
-skip_dark_current: True
-skip_ipc: False
+grow_diagonal: True      # When flagging additional sat pixels, include diagonal as well as up/down/right/left?
+skip_dark_current: True  # Exclude pipeline's dark current step?
+skip_ipc: False          # Exclude pipeline's IPC correction step?
 skip_jump: False #Whether to skip the jump detection step of the pipeline
 jump_threshold: 4  #Adjust the jump detection threshold if not skipped
 ramp_fit_max_cores: 'none' #Options are 'none', 'quarter', 'half', 'all'
