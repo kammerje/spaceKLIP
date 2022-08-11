@@ -475,9 +475,8 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                     null_evidence = evidence[1]['nested sampling global log-evidence']
                     #null parameter distributions, containing the median and percentiles for each
                     null_posteriors = evidence[1]['marginals']
-                    evidence_ratio = np.exp(fm_evidence - null_evidence)
+                    evidence_ratio = fm_evidence - null_evidence
 
-                    print('evidence ratio is: ',round(np.log(evidence_ratio), 4),' >5 is strong evidence')
                     residnfig = fit.fm_residuals()
                     if (meta.plotting == True):
                         # savefile = odir+key+'-chains_c%.0f' % (j+1)+'.pdf'
@@ -486,9 +485,6 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                         plt.close()
                         corn
                         plt.savefig(odir+key+'-corner_c%.0f' % (j+1)+'.pdf')
-                        plt.close()
-                        nullcorn
-                        plt.savefig(odir+key+'-nullcorner_c%.0f' % (j+1)+'.pdf')
                         plt.close()
                         fit.fm_residuals()
                         plt.savefig(odir+key+'-model_c%.0f' % (j+1)+'.pdf')
@@ -521,7 +517,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                         dstarmag = 0.1
                     res[key][temp]['appmag'] = starmag+deltamag
                     res[key][temp]['dappmag'] = np.sqrt((dstarmag/starmag)**2+(ddeltamag/deltamag)**2)
-
+                    res[key][temp]['evidence_ratio'] = evidence_ratio
                     if (meta.verbose == True):
                         print('--> Companion %.0f' % (j+1))
                         print('   RA  = %.2f+/-%.2f mas (%.2f mas guess)' % (res[key][temp]['ra'], res[key][temp]['dra'], meta.ra_off[j]))
@@ -537,6 +533,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                         except:
                             print('   CON = %.2e+/-%.2e' % (res[key][temp]['f'], res[key][temp]['df']))
                         print('   APPMAG = %.2f+/-%.2f' % (res[key][temp]['appmag'], res[key][temp]['dappmag']))
+                        print('   lnZ/Z0 = %.2f' % (res[key][temp]['evidence_ratio']))
 
         # Save the results
         compfile = odir+key+'-comp_save.json'
