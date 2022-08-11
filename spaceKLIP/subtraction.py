@@ -544,14 +544,14 @@ class AlignRefsStepUpdates(AlignRefsStep):
 
         return result
 
-class Coron3PipelineUpdates(Coron3Pipeline):
-    """Class for defining Coron3PipelineUpdates.
+class Coron3PipelinePYKLIP(Coron3Pipeline):
+    """Class for defining Coron3PipelinePYKLIP.
 
     Modified to include:
         - pixel cleaning algorithm
         - pyKLIP PSF subtraction infrastructure (TBD)
 
-    Coron3PipelineUpdates: Apply all level-3 calibration steps to a
+    Coron3PipelineSPYKLIP: Apply all level-3 calibration steps to a
     coronagraphic association of exposures. Included steps are:
 
     #. stack_refs (assemble reference PSF inputs)
@@ -562,7 +562,7 @@ class Coron3PipelineUpdates(Coron3Pipeline):
 
     """
 
-    class_alias = "calwebb_coron3_updates"
+    class_alias = "calwebb_coron3_pyklip"
 
     spec = """
         clean_data = boolean(default=True)
