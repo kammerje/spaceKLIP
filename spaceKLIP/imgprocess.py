@@ -14,6 +14,11 @@ from jwst.pipeline.calwebb_image2 import Image2Pipeline
 from jwst.associations.load_as_asn import LoadAsLevel2Asn
 from jwst.outlier_detection.outlier_detection_step import OutlierDetectionStep
 
+# Define logging
+import logging
+log = logging.getLogger(__name__)
+log.setLevel(logging.INFO)
+
 from . import utils
 from . import io
 
@@ -480,7 +485,42 @@ def run_image_processing(meta, subdir_str, itype):
     # Update input files if do_clean_only
     if do_clean_only:
         subdir_str = subdir_str.replace('RAMPFIT', 'IMGPROCESS')
-        files = io.get_working_files(meta, meta.done_rampfit, subdir=subdir_str, search=meta.sub_ext, itype=itype)
+        try:
+            # Get calints to be cleaned
+            files_clean = io.get_working_files(meta, meta.done_rampfit, subdir=subdir_str, search=meta.sub_ext, itype=itype)
+        except ValueError:
+            log.warning('meta.outlier_only was set, but no existing calints found! Generating calints first...')
+
+            # Run basic Stage2 pipeline if no cal files present for outlier_only=True
+            for file in files:
+                logger, fh = io.open_new_log_file(file, save_dir, stage_str='image2')
+                pipeline = Coron2Pipeline(
+                    output_dir=save_dir, 
+                    clean_data=False, 
+                    clean_only=False, 
+                    find_outliers = False,
+                )
+
+                pipeline.save_results = True
+                
+                # Run pipeline, raise exception on error, and close log file handler
+                try:
+                    pipeline.run(file)
+                except Exception as e:
+                    raise RuntimeError(
+                        'Caught exception during pipeline processing.'
+                        '\nException: {}'.format(e)
+                    )
+                finally:
+                    pipeline.closeout()
+                    io.close_log_file(logger, fh)
+
+            log.info('Completed calints. Continuing...')
+            # Get calints to be cleaned
+            files_clean = io.get_working_files(meta, meta.done_rampfit, subdir=subdir_str, search=meta.sub_ext, itype=itype)
+        finally:
+            # Set files at end
+            files = files_clean
 
     #####################################
     # Run pipeline
@@ -525,7 +565,7 @@ def run_image_processing(meta, subdir_str, itype):
             pipeline.run(file)
         except Exception as e:
             raise RuntimeError(
-                'Caugh exception during pipeline processing.'
+                'Caught exception during pipeline processing.'
                 '\nException: {}'.format(e)
             )
         finally:
