@@ -78,6 +78,7 @@ bgsub: 'None'    #Perform background subtraction, 'default' for median, 'pyklip'
 bgmed_splits: [8,2]   #12,4  #Peform median background subtraction but split across [Nsci,Nref] ~equal different sections
 bgonly: False     # Only perform the background subtraction
 blur_images: False
+load_file0_center: False # If True then look for and load an ANCILLARY file that contains the star position of the first frame. Else, calculate it and save it
 centering_alg: 'jwstpipe'    # Algorithm to use for centering "basic", "jwstpipe", "imageregis", or 'savefile'
 mode: ['ADI+RDI', 'RDI']       # list of modes for pyKLIP, will loop through all
 annuli: [1]         # list of number of annuli for pyKLIP, will loop through all
