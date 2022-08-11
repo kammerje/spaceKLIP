@@ -451,7 +451,7 @@ def run_image_processing(meta, subdir_str, itype):
         os.makedirs(save_dir)
 
     # Type of outlier correction / cleaning requested
-    if hasattr(meta, 'outlier_corr') and meta.outlier_corr.lower() != 'none':
+    if hasattr(meta, 'outlier_corr') and ((meta.outlier_corr is not None) or (meta.outlier_corr.lower() != 'none')):
         outlier_type = meta.outlier_corr
     else:
         outlier_type = ''
