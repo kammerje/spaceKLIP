@@ -821,6 +821,39 @@ def clean_data(data, dq_masks, sigclip=5, niter=5, in_place=True, **kwargs):
     unflagged (good) pixels. Assumes anything with values of 0 were previously
     cleaned by the jwst pipeline and will be replaced with more representative 
     values.
+
+    Parameters
+    ----------
+    data : ndarray
+        Image cube.
+    dq_masks : ndarray
+        Data quaity array same size as data.
+    sigclip : int
+        How many sigma from mean doe we fix?
+    niter : int
+        How many iterations for sigma clipping? 
+        Ignored if bpmask is set.
+    in_place : bool
+        Do in-place corrections of input array.
+        Otherwise, works on a copy.
+
+    Keyword Args
+    ------------
+    pix_shift : int
+        Size of border pixels to compare to.
+        We find bad pixels by comparing to neighbors and replacing.
+        E.g., if set to 1, use immediate adjacents neighbors.
+        Replaces with a median of surrounding pixels.
+    rows : bool
+        Compare to row pixels? Setting to False will ignore pixels
+        along rows during comparison. Recommended to increase
+        ``pix_shift`` parameter if using only rows or cols.
+    cols : bool
+        Compare to column pixels? Setting to False will ignore pixels
+        along columns during comparison. Recommended to increase
+        ``pix_shift`` parameter if using only rows or cols.
+    verbose : bool
+        Print number of fixed pixels per iteration
     """
 
     if not in_place:
@@ -853,13 +886,13 @@ def clean_data(data, dq_masks, sigclip=5, niter=5, in_place=True, **kwargs):
             bp_mask = bp_mask | mask
 
         # Flag out-of-family spatial outliers
-        _, bp_mask2 = bp_fix(im, sigclip=sigclip, in_place=False, niter=niter, return_mask=True)
+        _, bp_mask2 = bp_fix(im, sigclip=sigclip, in_place=False, niter=niter, return_mask=True, **kwargs)
         bp_mask = bp_mask | bp_mask2
 
         # Fix only those pixels flagged in the input mask
-        data[i] = bp_fix(im, bpmask=bp_mask, in_place=True, niter=10)
+        data[i] = bp_fix(im, bpmask=bp_mask, in_place=True, niter=10, **kwargs)
         # Final pass of additional median clipping
-        data[i] = bp_fix(data[i], sigclip=sigclip, in_place=True, niter=niter)
+        data[i] = bp_fix(data[i], sigclip=sigclip, in_place=True, niter=niter, **kwargs)
         
     # Return back to 2-dimensional image if that was the input
     if ndim_orig==2:
