@@ -67,6 +67,8 @@ class CleanPixStep(Step):
         inst = self.input_model.meta.instrument.name
         if inst == 'MIRI':
             filt = self.input_model.meta.instrument.filter
+            if filt.upper() not in ['F1065C', 'F1140C', 'F1550C', 'F2300C']:
+                raise ValueError(f'Filter {filt} does not match one of [F1065C, F1140C, F1550C, F2300C]')
             data_trim, trim = trim_miri_data([data, dq], filt)
             data, dq = data_trim
         else:
