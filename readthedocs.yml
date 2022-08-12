@@ -9,6 +9,8 @@ build:
 python:
   version: 3.8
   setup_py_install: true
+  install:
+    - requirements: requirements-dev.txt
 
 # Don't build any extra formats
 formats: []
