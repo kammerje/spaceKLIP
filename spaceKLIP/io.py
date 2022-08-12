@@ -450,7 +450,7 @@ def sort_data_files(pid, sci_obs, ref_obs, outdir, expid_sci='03106',
     ref_obs : array_like
         List of observations observed as reference stars.
     outdir : str
-        Base path to create filter directories.
+        Base path to create directories for each filter / mask.
     
     Keyword Args
     ============
@@ -461,7 +461,7 @@ def sort_data_files(pid, sci_obs, ref_obs, outdir, expid_sci='03106',
         File extension (default: 'uncal.fits')
     indir : str or None
         Location of original files. If not set, then searches for MAST
-        directory location at  $JWSTDOWNLOAD_OUTDIR env variable.
+        directory location at $JWSTDOWNLOAD_OUTDIR env variable.
     """
 
     from astropy.io import fits

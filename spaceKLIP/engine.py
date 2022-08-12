@@ -21,6 +21,10 @@ from . import subtraction
 from . import contrast
 from . import companion
 
+# Define logging
+import logging
+log = logging.getLogger(__name__)
+log.setLevel(logging.INFO)
 
 # =============================================================================
 # MAIN
@@ -81,7 +85,7 @@ class Pipeline():
         # Assign run directories from output folder. These will be overwritten if subtraction if performed.
         if (self.meta.rundirs != None) or (len(self.meta.rundirs) == 0):
             if len(self.meta.rundirs) == 0:
-                print('WARNING: No run directory(ies) specified, looping over all run directories in output directory. Are you sure you want to do this?')
+                log.warning('No run directory(ies) specified, looping over all run directories in output directory. Are you sure you want to do this?')
                 self.meta.rundirs = [i+'/' for i in glob.glob(self.meta.odir+'*run*')]
             else:
                 self.meta.rundirs = [self.meta.odir+rdir.replace('/', '')+'/' for rdir in self.meta.rundirs]
@@ -143,6 +147,33 @@ class JWST(Pipeline):
         io.sort_data_files(self.meta.pid, self.meta.sci_obs, self.meta.ref_obs, outdir, 
                            indir=indir, expid_sci=self.meta.expid_sci, 
                            filter=filter, coron_mask=coron_mask)
+
+    def meta_checks(self):
+        """Check some consistencies in the meta file"""
+
+        meta = self.meta
+
+        # Check if outlier correction / cleaning requested
+        if hasattr(meta, 'outlier_corr') and ((meta.outlier_corr is not None) or (meta.outlier_corr.lower() != 'none')):
+            outlier_type = meta.outlier_corr
+        else:
+            outlier_type = None
+
+        # Was cleaning requested on existing cal data?
+        do_clean_only = do_clean = False
+        if hasattr(meta, 'outlier_only') and meta.outlier_only:
+            do_clean_only = True
+            do_clean = True  # Must be set to True
+            if outlier_type is None:
+                log.warning('Meta: outlier_only=True but outlier_corr not specified.')
+        if outlier_type is not None:
+            do_clean = True
+
+        if hasattr(meta, 'use_cleaned'):
+            if meta.used_clean and not do_clean:
+                log.warning('Meta: use_cleaned=True for KLIP subtraction, but no cleaning options specified.')
+            if not meta.used_clean and do_clean:
+                log.warning('Meta: Image cleaning will be performed, but use_cleaned=False for KLIP subtraction.')
 
     def get_jwst_meta(self):
         """
@@ -207,6 +238,8 @@ class JWST(Pipeline):
         self.meta.offset_swb = {filt: self.get_bar_offset_from_siaf(filt, channel='SW')
                                 for filt in ['F182M', 'F187N', 'F200W', 'F210M', 'F212N', 'narrow']} # arcsec
         del self.siaf
+
+
 
         return None
 
@@ -285,11 +318,11 @@ class JWST(Pipeline):
 
         """
 
-        # Set the meta flag to True.
-        self.meta.done_rampfit = True
-
         # Run ramp fitting stage.
         ramp = rampfit.stsci_ramp_fitting(self.meta)
+
+        # Set the meta flag to True.
+        self.meta.done_rampfit = True
 
         return None
 
@@ -299,11 +332,11 @@ class JWST(Pipeline):
 
         """
 
-        # Set the meta flag to True.
-        self.meta.done_imgprocess = True
-
         # Run image processing stage.
         img = imgprocess.stsci_image_processing(self.meta)
+
+        # Set the meta flag to True.
+        self.meta.done_imgprocess = True
 
         return None
 
@@ -313,11 +346,11 @@ class JWST(Pipeline):
 
         """
 
-        # Set the meta flag to True.
-        self.meta.done_subtraction = True
-
         # Run KLIP subtraction stage.
         sub = subtraction.perform_subtraction(self.meta)
+
+        # Set the meta flag to True.
+        self.meta.done_subtraction = True
 
         return None
 
@@ -327,11 +360,11 @@ class JWST(Pipeline):
 
         """
 
-        # Set the meta flag to True.
-        self.meta.done_raw_contrast = True
-
         # Run raw contrast estimation stage.
         raw_contrast = contrast.raw_contrast_curve(self.meta)
+
+        # Set the meta flag to True.
+        self.meta.done_raw_contrast = True
 
         return None
 
@@ -341,11 +374,11 @@ class JWST(Pipeline):
 
         """
 
-        # Set the meta flag to True.
-        self.meta.done_cal_contrast = True
-
         # Run calibrated contrast estimation stage.
         cal_contrast = contrast.calibrated_contrast_curve(self.meta)
+
+        # Set the meta flag to True.
+        self.meta.done_cal_contrast = True
 
         return None
 
@@ -355,10 +388,10 @@ class JWST(Pipeline):
 
         """
 
-        # Set the meta flag to True.
-        self.meta.done_companion = True
-
         # Run companion property extraction stage.
         extract_comps = companion.extract_companions(self.meta)
+
+        # Set the meta flag to True.
+        self.meta.done_companion = True
 
         return None
