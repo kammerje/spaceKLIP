@@ -17,6 +17,10 @@ import pyklip.instruments.utils.bkgd as bkgd
 from . import io
 from . import utils
 
+# Define logging
+import logging
+log = logging.getLogger(__name__)
+log.setLevel(logging.INFO)
 
 def perform_subtraction(meta):
     '''
@@ -40,7 +44,7 @@ def perform_subtraction(meta):
     meta = utils.prepare_meta(meta, files)
 
     if meta.bgsub != 'None':
-        print('WARNING: Background subtraction only works if running one filter at a time!')
+        log.warning('Background subtraction only works if running one filter at a time!')
         bgout = bg_subtraction(meta)
         # Reinitialise meta info for pyKLIP
         files = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS/BGSUB', search=meta.sub_ext)
@@ -71,7 +75,7 @@ def bg_subtraction(meta):
         raise ValueError('Not implemented yet!')
     else:
         if meta.bgsub == 'None':
-            print('Skipping background subtraction')
+            log.info('Skipping background subtraction')
             return
         else:
             raise ValueError('Background subtraction {} not recognised'.format(meta.bgsub))
@@ -379,7 +383,7 @@ def klip_subtraction(meta, files):
     """
 
     if meta.verbose:
-        print('--> Running pyKLIP...')
+        log.info('--> Running pyKLIP...')
 
     # Loop through all modes, numbers of annuli, and numbers of subsections.
     Nscenarios = len(meta.mode)*len(meta.annuli)*len(meta.subsections)
@@ -392,7 +396,7 @@ def klip_subtraction(meta, files):
 
                 # Update terminal if requested
                 if meta.verbose:
-                    print('--> Mode = '+mode+', annuli = %.0f, subsections = %.0f, scenario %.0f of %.0f' % (annuli, subsections, counter, Nscenarios))
+                    log.info(f'--> Mode = {mode}, annuli = {annuli:.0f}, subsections = {subsections:.0f}, scenario {counter:.0f} of {Nscenarios:.0f}')
 
                 # Create an output directory for each set of pyKLIP parameters
                 today = date.today().strftime('%Y_%m_%d_')
@@ -431,8 +435,7 @@ def klip_subtraction(meta, files):
                     psflib_filepaths = np.array(meta.obs[key]['FITSFILE'][ww_cal], dtype=str).tolist()
                     load_file0_center = meta.load_file0_center if hasattr(meta,'load_file0_center')  else False
 
-                    dataset = JWST.JWSTData(filepaths=filepaths,
-                                            psflib_filepaths=psflib_filepaths, centering=meta.centering_alg, badpix_threshold=meta.badpix_threshold,
+                    dataset = JWST.JWSTData(filepaths=filepaths, psflib_filepaths=psflib_filepaths, centering=meta.centering_alg, 
                                             scishiftfile=meta.ancildir+'shifts/scishifts', refshiftfile=meta.ancildir+'shifts/refshifts',
                                             fiducial_point_override=meta.fiducial_point_override, blur=meta.blur_images,
                                             load_file0_center=load_file0_center,save_center_file=meta.ancildir+'shifts/file0_centers',
@@ -473,6 +476,7 @@ def klip_subtraction(meta, files):
 
 ###############################
 #### JWST Pipeline updates ####
+####   UNDER DEVELOPMENT   ####
 ###############################
 
 from jwst import datamodels
@@ -681,7 +685,7 @@ class Coron3PipelinePYKLIP(Coron3Pipeline):
                     # turn back on for next model
                     self.outlier_detection.skip = False
                     
-                #### Clean science model data in place
+                #### Clean science data in place
                 median_replace_orig = self.align_refs.median_replace
                 if self.clean_data:
                     target.data = self.clean_images(target)
