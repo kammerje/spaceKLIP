@@ -592,3 +592,14 @@ def close_log_file(logger, file_handler):
 
     logger.removeHandler(file_handler)
     file_handler.close()
+
+def expand_path(path_string):
+    """Expand environment variables or user home directories in a path specification
+
+    Parameters
+    ==========
+    path_string : str
+        Any path string, relative or absolute, optionally containing environment variables.
+
+    """
+    return os.path.expanduser(os.path.expandvars(path_string))

@@ -78,6 +78,12 @@ class Pipeline():
         for key in config:
             setattr(self.meta, key, config[key])
 
+        # For required path parameters, expand any environment variables or ~ for user home directory
+        for key in ['idir', 'odir', 'sdir']:
+            setattr(self.meta, key, io.expand_path(getattr(self.meta, key)))
+        if hasattr(self.meta, 'data_dir'):
+            setattr(self.meta, 'data_dir', io.expand_path(getattr(self.meta, 'data_dir')))
+
         # Assign run directories from output folder. These will be overwritten if subtraction if performed.
         if (self.meta.rundirs != None) or (len(self.meta.rundirs) == 0):
             if len(self.meta.rundirs) == 0:
@@ -91,7 +97,7 @@ class Pipeline():
 
 class JWST(Pipeline):
     """
-    JWST-specifc pipeline class.
+    JWST-specific pipeline class.
 
     """
 
