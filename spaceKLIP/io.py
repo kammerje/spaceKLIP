@@ -428,7 +428,7 @@ def get_working_files(meta, runcheck, subdir='RAMPFIT', search='uncal.fits', ity
 
 
 def sort_data_files(pid, sci_obs, ref_obs, outdir, expid_sci='03106', 
-    file_ext='uncal.fits', indir=None, filter=None, coron_mask=None):
+    file_ext='uncal.fits', indir=None, filter=None, coron_mask=None, verbose=False, filename_start='jw'):
     """Create symbolic links to data in MAST data directory
     
     Place science and reference observations of same kind in their
@@ -462,6 +462,10 @@ def sort_data_files(pid, sci_obs, ref_obs, outdir, expid_sci='03106',
     indir : str or None
         Location of original files. If not set, then searches for MAST
         directory location at  $JWSTDOWNLOAD_OUTDIR env variable.
+    filename_start : str
+        Initial string at start of filenames. This will generally always be the default 'jw',
+        but can be overridden if necessary, for instance if dealing with simulated data.
+
     """
 
     from astropy.io import fits
@@ -473,17 +477,30 @@ def sort_data_files(pid, sci_obs, ref_obs, outdir, expid_sci='03106',
             raise RuntimeError('Cannot file environment variable: $JWSTDOWNLOAD_OUTDIR')
         indir = os.path.join(mast_dir, f'{pid:05d}/')
 
+    if verbose:
+            print(f"""Sorting data from program {pid} for {coron_mask}, {filter}
+    Sci Obs: {sci_obs}\tPSF Reference Obs: {ref_obs}
+    Sorting files with extension {file_ext}
+    from input dir {indir}
+    into output dir {outdir}""")
+
     # Find all uncal files
     allfiles = np.sort([f for f in os.listdir(indir) if f.endswith(file_ext)])
+    if len(allfiles)==0:
+        raise RuntimeError(f"Could not find any files ending with {file_ext}")
 
     # Cycle through each science observation
     for obsid in sci_obs:
-        file_start = f'jw{pid:05d}{obsid:03d}'
+        file_start = f'{filename_start}{pid:05d}{obsid:03d}'
 
         # Get all files in given observation
         files_obs = np.sort([f for f in allfiles if (file_start in f)])
+
+        if len(files_obs)==0:
+            raise RuntimeError(f"Could not find any files matching {file_start}")
         # Get the associated exposure IDS
-        expids_all = np.array([f.split('_')[1] for f in files_obs])
+        expid_index = 1+filename_start.count('_')  # Exp ID is usually at index 1, unless there's an extra underscore earlier
+        expids_all = np.array([f.split('_')[expid_index] for f in files_obs])
 
         # Index of where science data starts
         # Assume expid_sci is the first in a sequence of filters
@@ -542,7 +559,8 @@ def sort_data_files(pid, sci_obs, ref_obs, outdir, expid_sci='03106',
                         # Generate symbolic link to new location
                         file_link_path = os.path.join(subdir, fref)
                         if not os.path.isfile(file_link_path):
-                            os.symlink(file_path_ref, file_link_path)                        
+                            os.symlink(file_path_ref, file_link_path)
+    print(f"Sorting complete for {pid} {coron_mask} {filter}")
 
 
 

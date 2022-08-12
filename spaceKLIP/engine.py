@@ -129,7 +129,7 @@ class JWST(Pipeline):
 
         return None
 
-    def sort_files(self):
+    def sort_files(self, **kwargs):
         """Sort files into subdirectories like filter_mask (e.g., F300M_MASK335R)"""
 
         idir = self.meta.idir[:-1] if self.meta.idir[-1]=='/' else self.meta.idir
@@ -148,7 +148,7 @@ class JWST(Pipeline):
 
         io.sort_data_files(self.meta.pid, self.meta.sci_obs, self.meta.ref_obs, outdir, 
                            indir=indir, expid_sci=self.meta.expid_sci, 
-                           filter=filter, coron_mask=coron_mask)
+                           filter=filter, coron_mask=coron_mask, **kwargs)
 
     def get_jwst_meta(self):
         """
