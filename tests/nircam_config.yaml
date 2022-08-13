@@ -11,11 +11,11 @@
 ##### REQUIRED #####
 # Input Directory
 idir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/NIRCAM/F300M/'
-odir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/20220805_NIRCAM/F300M/' # Output Directory
+odir: '/Users/acarter/Documents/DIRECT_IMAGING/JWST/ERS/HIP65426/CORONAGRAPHY_PAPER/spaceKLIP/20220813/F444W/' # Output Directory
 sdir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/HIP65426A_sdf_phoenix_m+modbb_disk_r.txt' #VOT table or stellar model file.
 
 ##### OPTIONAL #####
-rundirs: ['2022_08_06_ADI+RDI_annu1_subs1_run1'] # #Specify directory(ies) within odir of existing runs to calculate contrast curve / companion
+rundirs: [] # #Specify directory(ies) within odir of existing runs to calculate contrast curve / companion
 ancildir: None      # Specify directory to save ancillary files, if None then saved under odir/ANCILLARY/. 
 bg_sci_dir: None #'/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1140C/BGSCI/' #None if not using
 bg_ref_dir: None #'/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1140C/BGREF/' #None if not using

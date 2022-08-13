@@ -14,6 +14,7 @@ if __name__ == '__main__':
 				 skip_calcon=False, 
 				 skip_comps=True)
 
+
 # imgdir = '/Users/wbalmer/JWST-HCI/HIP65426/MIRI/F1140C/IMGPROCESS/'
 # subdir = '/Users/wbalmer/JWST-HCI/HIP65426/MIRI/F1140C/2022_06_28_RDI_annu1_subs1_run1/SUBTRACTED/'
 
