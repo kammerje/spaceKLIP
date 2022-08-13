@@ -22,8 +22,6 @@ from synphot.units import convert_flux
 
 import pyklip.instruments.JWST as JWST
 import webbpsf, webbpsf_ext
-
-from webbpsf_ext.image_manip import fshift
 from webbpsf_ext import robust
 
 from jwst import datamodels
@@ -767,7 +765,7 @@ def bp_fix(im, sigclip=5, niter=1, pix_shift=1, rows=True, cols=True,
         for i in xsh_vals:
             for j in ysh_vals:
                 if (i != 0) or (j != 0):
-                    shift_arr.append(fshift(im_pad, delx=i, dely=j))
+                    shift_arr.append(np.roll(im_pad, (j,i), axis=(0,1)))
         shift_arr = np.asarray(shift_arr)
         return shift_arr[:,pady:pady+ny,padx:padx+nx]
     
@@ -823,6 +821,39 @@ def clean_data(data, dq_masks, sigclip=5, niter=5, in_place=True, **kwargs):
     unflagged (good) pixels. Assumes anything with values of 0 were previously
     cleaned by the jwst pipeline and will be replaced with more representative 
     values.
+
+    Parameters
+    ----------
+    data : ndarray
+        Image cube.
+    dq_masks : ndarray
+        Data quaity array same size as data.
+    sigclip : int
+        How many sigma from mean doe we fix?
+    niter : int
+        How many iterations for sigma clipping? 
+        Ignored if bpmask is set.
+    in_place : bool
+        Do in-place corrections of input array.
+        Otherwise, works on a copy.
+
+    Keyword Args
+    ------------
+    pix_shift : int
+        Size of border pixels to compare to.
+        We find bad pixels by comparing to neighbors and replacing.
+        E.g., if set to 1, use immediate adjacents neighbors.
+        Replaces with a median of surrounding pixels.
+    rows : bool
+        Compare to row pixels? Setting to False will ignore pixels
+        along rows during comparison. Recommended to increase
+        ``pix_shift`` parameter if using only rows or cols.
+    cols : bool
+        Compare to column pixels? Setting to False will ignore pixels
+        along columns during comparison. Recommended to increase
+        ``pix_shift`` parameter if using only rows or cols.
+    verbose : bool
+        Print number of fixed pixels per iteration
     """
 
     if not in_place:
@@ -855,13 +886,13 @@ def clean_data(data, dq_masks, sigclip=5, niter=5, in_place=True, **kwargs):
             bp_mask = bp_mask | mask
 
         # Flag out-of-family spatial outliers
-        _, bp_mask2 = bp_fix(im, sigclip=sigclip, in_place=False, niter=niter, return_mask=True)
+        _, bp_mask2 = bp_fix(im, sigclip=sigclip, in_place=False, niter=niter, return_mask=True, **kwargs)
         bp_mask = bp_mask | bp_mask2
 
         # Fix only those pixels flagged in the input mask
-        data[i] = bp_fix(im, bpmask=bp_mask, in_place=True, niter=10)
+        data[i] = bp_fix(im, bpmask=bp_mask, in_place=True, niter=10, **kwargs)
         # Final pass of additional median clipping
-        data[i] = bp_fix(data[i], sigclip=sigclip, in_place=True, niter=niter)
+        data[i] = bp_fix(data[i], sigclip=sigclip, in_place=True, niter=niter, **kwargs)
         
     # Return back to 2-dimensional image if that was the input
     if ndim_orig==2:
