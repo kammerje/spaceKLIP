@@ -180,6 +180,8 @@ def extract_obs(meta, fitsfiles_all):
     EFFINTTM = np.empty(Nfitsfiles) # s
     SUBARRAY = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
     SUBPXPTS = np.empty(Nfitsfiles, dtype=int)
+    ISPSF    = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
+    SELFREF  = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
     APERNAME = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
     PIXSCALE = np.empty(Nfitsfiles) # mas
     PIXAR_SR = np.empty(Nfitsfiles) # sr
@@ -190,6 +192,7 @@ def extract_obs(meta, fitsfiles_all):
     for i, file in enumerate(fitsfiles):
         hdul = pyfits.open(file)
 
+        # Primary Header
         head = hdul[0].header
         if ('SGD' in file): # MIRI test data
             TARGPROP[i] = 'CALIBRATOR'
@@ -216,19 +219,28 @@ def extract_obs(meta, fitsfiles_all):
         NFRAMES[i] = head['NFRAMES']
         EFFINTTM[i] = head['EFFINTTM'] # s
         SUBARRAY[i] = head['SUBARRAY']
-        if ('SGD' in file): # MIRI test data
-            SUBPXPTS[i] = 5
-        elif ('HD141569' in file): # MIRI test data
+        ### Kim says these are no longer needed, so commenting out (8/12/2022)
+        # if ('SGD' in file): # MIRI test data
+        #     SUBPXPTS[i] = 5
+        # elif ('HD141569' in file): # MIRI test data
+        #     SUBPXPTS[i] = 1
+        # else:
+        try:
+            SUBPXPTS[i] = head['NUMDTHPT']
+        except:
             SUBPXPTS[i] = 1
-        else:
-            try:
-                SUBPXPTS[i] = head['NUMDTHPT']
-            except:
-                SUBPXPTS[i] = 1
-            try:
-                SUBPXPTS[i] = head['NUMDTHPT']
-            except:
-                SUBPXPTS[i] = 1
+        try:
+            SUBPXPTS[i] = head['NUMDTHPT']
+        except:
+            SUBPXPTS[i] = 1
+        try: # Check for ISPSF header keyword
+            ISPSF[i] = head['ISPSF']
+        except:
+            ISPSF[i] = 'NONE'
+        try: # Check for SELFREF header keyword
+            SELFREF[i] = head['SELFREF']
+        except:
+            SELFREF[i] = 'NONE'
         try:
             APERNAME[i] = head['APERNAME']
         except:
@@ -243,6 +255,7 @@ def extract_obs(meta, fitsfiles_all):
         else:
             raise UserWarning('Unknown instrument')
 
+        # Science header
         head = hdul['SCI'].header
         try:
             PIXAR_SR[i] = head['PIXAR_SR'] # sr
@@ -250,13 +263,14 @@ def extract_obs(meta, fitsfiles_all):
             PIXAR_SR[i] = PIXSCALE[i]**2/rad2mas**2 # sr
         RA_REF[i] = head['RA_REF'] # deg
         DEC_REF[i] = head['DEC_REF'] # deg
+        ### Kim says these are no longer needed, so commenting out (8/12/2022)
+        # if ('SGD' in file): # MIRI test data
+        #     ROLL_REF[i] = 0. # deg
+        # elif ('HD141569' in file): # MIRI test data
+        #     ROLL_REF[i] = file.split('/')[-1].split('_')[2][2:] # deg
+        # else:
         # Roll Ref: V3 roll angle at the ref point (N over E)
-        if ('SGD' in file): # MIRI test data
-            ROLL_REF[i] = 0. # deg
-        elif ('HD141569' in file): # MIRI test data
-            ROLL_REF[i] = file.split('/')[-1].split('_')[2][2:] # deg
-        else:
-            ROLL_REF[i] = head['ROLL_REF'] # deg
+        ROLL_REF[i] = head['ROLL_REF'] # deg
 
         # Create a hash for each observation. All observations with the same
         # hash will be grouped together into a concatenation. Each
@@ -283,39 +297,34 @@ def extract_obs(meta, fitsfiles_all):
     for i in range(NHASH_unique):
         ww = HASH == HASH_unique[i]
 
-        # Science and reference PSFs are identified based on their number of
-        # dither positions, assuming that there is no dithering for the
-        # science PSFs and dithering for the reference PSFs.
-        dpts = SUBPXPTS[ww]
-        dpts_unique = np.unique(dpts)
-
-        if ((len(dpts_unique) == 2) and (dpts_unique[0] == 1)):
-            ww_sci = np.where(dpts == dpts_unique[0])[0]
-            ww_cal = np.where(dpts == dpts_unique[1])[0]
+        # Flight data have keywords ISPSF and SELFREF to identify ref sources.
+        # We are going to try that first, then fall back to previous version
+        # if the keywords are not found in order to support backwards 
+        # compatability of simulated data
+        # TODO: Incorporate SELFREF keyword
+        isref_i = ISPSF[ww]
+        if isref_i[0] != 'NONE':
+            ww_sci = np.where(isref_i == 'False')[0]
+            ww_cal = np.where(isref_i == 'True')[0]
         else:
-            raise UserWarning(
-                'Science and reference PSFs are identified based on their'
-                '\nnumber of dither positions, with the assumption of no dithering'
-                '\nfor the science PSFs and small grid dithers for the reference PSFs.'
-            )
+            print("WARNING: Unable to find ISPSF keyword in ")
 
-        # try:
-        #     ww_sci = []
-        #     for j in range(len(meta.sci)):
-        #         ww_sci += [np.where(fitsfiles == meta.idir+meta.sci[j])[0][0]]
-        #     ww_sci = np.array(ww_sci)
-        #     ww_cal = []
-        #     for j in range(len(meta.cal)):
-        #         ww_cal += [np.where(fitsfiles == meta.idir+meta.cal[j])[0][0]]
-        #     ww_cal = np.array(ww_cal)
-        #     if ((len(ww_sci) == 0) or (len(ww_cal) == 0)):
-        #         raise UserWarning('No science or calibrator data found')
-        # except:
-        #     if ((len(dpts_unique) == 2) and (dpts_unique[0] == 1)):
-        #         ww_sci = np.where(dpts == dpts_unique[0])[0]
-        #         ww_cal = np.where(dpts == dpts_unique[1])[0]
-        #     else:
-        #         raise UserWarning('Science and reference PSFs are identified based on their number of dither positions, assuming that there is no dithering for the science PSFs and dithering for the reference PSFs')
+            # Science and reference PSFs are identified based on their number of
+            # dither positions, assuming that there is no dithering for the
+            # science PSFs and dithering for the reference PSFs.
+            dpts = SUBPXPTS[ww]
+            dpts_unique = np.unique(dpts)
+
+            if ((len(dpts_unique) == 2) and (dpts_unique[0] == 1)):
+                ww_sci = np.where(dpts == dpts_unique[0])[0]
+                ww_cal = np.where(dpts == dpts_unique[1])[0]
+            else:
+                raise UserWarning(
+                    'Unable to find ISPSF keyword, so fell back to looking for NUMDTHPT.'
+                    '\nScience and reference PSFs are identified based on their'
+                    '\nnumber of dither positions, with the assumption of no dithering'
+                    '\nfor the science PSFs and small grid dithers for the reference PSFs.'
+                )
 
         # These metadata are the same for all observations within one
         # concatenation.
