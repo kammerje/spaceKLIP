@@ -221,7 +221,7 @@ def get_offsetpsf(meta, key, recenter_offsetpsf=False, derotate=True,
 
     return totpsf
 
-def gen_offsetpsf(meta, offsetpsfdir, inst, filt, mask, source=None):
+def gen_offsetpsf(meta, offsetpsfdir, inst, filt, mask, radecoff=None, source=None):
     """
     Generate an offset PSF using WebbPSF and save it in the offsetpsfdir. The
     offset PSF will be normalized to a total intensity of 1.
@@ -236,6 +236,8 @@ def gen_offsetpsf(meta, offsetpsfdir, inst, filt, mask, source=None):
         JWST filter.
     mask : str
         JWST coronagraphic mask.
+    radecoff : tuple
+        RA/Dec offset in arcsec from mask center to generate position-dep psf (RA, Dec)
     source: synphot.spectrum.SourceSpectrum 
         Default to 5700K blackbody if source=None
 
@@ -263,7 +265,10 @@ def gen_offsetpsf(meta, offsetpsfdir, inst, filt, mask, source=None):
             miri.pupil_mask = 'MASKFQPM' #F not 4 for WebbPSF
         else:
             miri.pupil_mask = 'MASKLYOT'
-        miri.image_mask = None #mask.replace('4QPM_', 'FQPM')
+        if radecoff: # assume if an offset is applied that the PSF should be relative to 4QPM
+            miri.image_mask = mask.replace('4QPM_', 'FQPM')
+        else:
+            miri.image_mask = None #mask.replace('4QPM_', 'FQPM')
         webbpsf_inst = miri
     else:
         raise UserWarning('Unknown instrument')
@@ -276,14 +281,23 @@ def gen_offsetpsf(meta, offsetpsfdir, inst, filt, mask, source=None):
     else:
         SED = None
 
-    # Assign the correct filter and compute the offset PSF.
+    # Assign the correct filter:
     webbpsf_inst.filter = filt
-    hdul = webbpsf_inst.calc_psf(oversample=1, normalize='last', source=SED)
+
+    # If the PSF is position-dependent, offset from center:
+    if radecoff:
+        webbpsf_inst.options['source_offset_x'] = radecoff[0]
+        webbpsf_inst.options['source_offset_y'] = radecoff[1]
+
+    # Compute the offset PSF:
+    hdul = webbpsf_inst.calc_psf(oversample=1, fov_pixels = 65, normalize='last', source=SED) # kwd - hardcode fov pix?
 
     # Save the offset PSF.
     if (not os.path.exists(offsetpsfdir)):
         os.makedirs(offsetpsfdir)
-    hdul.writeto(offsetpsfdir+filt+'_'+mask+'.fits')
+    # don't save it again if you don't have to:        
+    if (not os.path.exists(offsetpsfdir+filt+'_'+mask+'.fits')):
+        hdul.writeto(offsetpsfdir+filt+'_'+mask+'.fits')
     hdul.close()
 
     # Get the PSF array to return
@@ -416,6 +430,11 @@ def field_dependent_correction(stamp,
                                meta):
     """
     Apply the coronagraphic mask transmission to a PSF stamp.
+    TEST REVISION (2022-8-12, KWD): 
+        Make a *new* PSF stamp within the function as to generate a more
+        appropriate position-dependent PSF using WebbPSF directly.
+        Note that this will have to be modified to include the offset
+        relative to the mask position, which is often NOT the star center
 
     Note: assumes that the pyKLIP PSF center is the center of the
           coronagraphic mask transmission map.
@@ -444,8 +463,32 @@ def field_dependent_correction(stamp,
         PSF stamp to which the coronagraphic mask transmission was applied.
 
     """
+    # generate a new stamp using regular webbpsf! 
+    # need to fix for instance with many keys: how many of these can there be?
+    if len(meta.obs.keys()) == 1:
+        key = list(meta.obs.keys())[0]
+        inst = meta.instrume[key] 
+        filt = meta.filter[key]
+        mask = meta.coronmsk[key]
+    offsetpsfdir = meta.offsetpsfdir
+    
+    # generate stamp of psf at appropriate position relative to mask
+    print('GENERATING AN OFFSET PSF! yay')
+
+    # Get center of stamp
+    c0 = (stamp.shape[0]-1)/2
+    c1 = (stamp.shape[1]-1)/2
+
+    radecoff=(stamp_dx[int(c0),int(c1)]*0.11, stamp_dy[int(c0),int(c1)]*0.11) # convert to arcsec, prone to error
+    print('these are the offsets. ', radecoff)
+    stamp = gen_offsetpsf(meta, offsetpsfdir, inst, filt, mask, radecoff=radecoff)
+    # shift stamp image so that correct offset PSF is centered relative to stamp dimensions
+    stamp = fourier_imshift(stamp, (-1*radecoff[0]/0.11, -1*radecoff[1]/0.11))
+
+
 
     # Apply coronagraphic mask transmission.
+    # need to check this relative to the input coordinates!
     xy = np.vstack((stamp_dy.flatten(), stamp_dx.flatten())).T
     transmission = meta.transmission(xy)
     transmission = transmission.reshape(stamp.shape)
@@ -460,8 +503,10 @@ def field_dependent_correction(stamp,
     ## Old way use peak of flux
     # peak_index = np.unravel_index(stamp.argmax(), stamp.shape)
     # transmission_at_center =  transmission[peak_index[1],peak_index[0]]
-
-    return transmission*stamp
+    
+    # kwd - JUST A TEST BUT what if we don't consider the transmission...
+    #return transmission*stamp
+    return stamp
 
 def get_stellar_magnitudes(meta):
     # First find out if a file was provided correctly
