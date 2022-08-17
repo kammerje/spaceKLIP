@@ -166,21 +166,6 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                                                 recenter_offsetpsf=recenter_offsetpsf,
                                                 derotate=False, fourier=fourier)
                 
-                # kwd - added a ton of stuff here, a bit janky
-                field_dep_corr = partial(utils.field_dependent_correction, meta=meta) # kwd - what is this
-                sx = offsetpsf.shape[1]
-                sy = offsetpsf.shape[0]
-                guess_dx = meta.ra_off[0]/pxsc # pix - hard-coded for one companion??
-                guess_dy = meta.de_off[0]/pxsc # pix - hard-coded for one companion??               
-                xx = np.arange(sx)-sx//2-(int(guess_dx)+(guess_dx-int(guess_dx))) # just make these the guess, I suppose???
-                yy = np.arange(sy)-sy//2+(int(guess_dy)-(guess_dy-int(guess_dy)))
-                stamp_dx, stamp_dy = np.meshgrid(xx, yy)
-                field_dep_corr = utils.field_dependent_correction(offsetpsf, stamp_dx, stamp_dy, meta) # kwd 
-                print('USING the NEW PSFs! whoo')
-                # set the input psfs for forward modeling to be the field_dep_corr as well - kwd
-                offsetpsf = field_dep_corr
-                offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
-                print("checking the offsetpsf... is something wrong?",offsetpsf.max())
 
             elif meta.offpsf == 'webbpsf_ext':
                 # Define some quantities
@@ -222,7 +207,24 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                     # Negative sign on ra as webbpsf_ext expects in x,y space
                     offsetpsf = offsetpsf_func.gen_psf([-meta.ra_off[j]/1e3,meta.de_off[j]/1e3], do_shift=False, quick=False)
 
+                #offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
+                
+                # kwd
+                if meta.offpsf == 'webbpsf':
+                    # kwd - added a ton of stuff here, a bit janky
+                    #field_dep_corr = partial(utils.field_dependent_correction, meta=meta) # kwd - what is this
+                    sx = offsetpsf.shape[1]
+                    sy = offsetpsf.shape[0]           
+                    xx = np.arange(sx)-sx//2-(int(guess_dx)+(guess_dx-int(guess_dx))) # just make these the guess, I suppose???
+                    yy = np.arange(sy)-sy//2+(int(guess_dy)-(guess_dy-int(guess_dy)))
+                    stamp_dx, stamp_dy = np.meshgrid(xx, yy)
+                    field_dep_corr = utils.field_dependent_correction(offsetpsf, stamp_dx, stamp_dy, meta) # kwd 
+                    print('USING the NEW PSFs! whoo')
+                    # set the input psfs for forward modeling to be the field_dep_corr as well - kwd
+                    offsetpsf = field_dep_corr
+                
                 offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
+                print("checking the offsetpsf... is something wrong?",offsetpsf.max())                    
 
                 if meta.blur_images != False:
                     offsetpsf = gaussian_filter(offsetpsf, meta.blur_images)
@@ -246,7 +248,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                                                  input_wvs=input_wvs,
                                                  spectrallib=[guess_spec],
                                                  spectrallib_units='contrast',
-                                                 field_dependent_correction=None) # kwd - should be something, not nothing
+                                                 field_dependent_correction=None) # kwd - set to None b/c correction is done in psf gen
 
                     # Compute the forward-modeled dataset.
                     annulus = meta.annuli#[[guess_sep-20., guess_sep+20.]] # pix
