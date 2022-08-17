@@ -1,4 +1,5 @@
 # .readthedocs.yml
+version: 2
 
 sphinx:
   configuration: docs/source/conf.py
@@ -7,8 +8,12 @@ build:
   image: latest
 
 python:
-  version: 3.9
-  setup_py_install: true
+  version: 3.8
+  install:
+    - requirements: requirements.txt
+    - requirements: requirements-dev.txt
+    - method: pip
+      path: .
 
 # Don't build any extra formats
 formats: []

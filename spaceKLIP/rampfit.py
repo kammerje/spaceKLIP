@@ -358,7 +358,7 @@ def run_ramp_fitting(meta, idir, osubdir):
             pipeline.run(file)
         except Exception as e:
             raise RuntimeError(
-                'Caugh exception during pipeline processing.'
+                'Caught exception during pipeline processing.'
                 '\nException: {}'.format(e)
             )
         finally:
