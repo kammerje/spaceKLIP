@@ -211,20 +211,24 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                 
                 # kwd
                 if meta.offpsf == 'webbpsf':
-                    # kwd - added a ton of stuff here, a bit janky
-                    #field_dep_corr = partial(utils.field_dependent_correction, meta=meta) # kwd - what is this
+                    # Generate PSF for initial guess, if very different this could be garbage
+                    # Negative sign on ra as webbpsf_ext expects in x,y space
+                    #offsetpsf = offsetpsf_func.gen_psf([-meta.ra_off[j]/1e3,meta.de_off[j]/1e3], do_shift=False, quick=False)
+                    
+                    # kwd - make a temporary placeholder that should in principle produce a pos-dep psf
                     sx = offsetpsf.shape[1]
                     sy = offsetpsf.shape[0]           
-                    xx = np.arange(sx)-sx//2-(int(guess_dx)+(guess_dx-int(guess_dx))) # just make these the guess, I suppose???
+                    xx = np.arange(sx)-sx//2-(int(guess_dx)+(guess_dx-int(guess_dx))) # just make these the guess
                     yy = np.arange(sy)-sy//2+(int(guess_dy)-(guess_dy-int(guess_dy)))
                     stamp_dx, stamp_dy = np.meshgrid(xx, yy)
-                    field_dep_corr = utils.field_dependent_correction(offsetpsf, stamp_dx, stamp_dy, meta) # kwd 
-                    print('USING the NEW PSFs! whoo')
-                    # set the input psfs for forward modeling to be the field_dep_corr as well - kwd
-                    offsetpsf = field_dep_corr
+                    offsetpsf = utils.field_dependent_correction(offsetpsf, stamp_dx, stamp_dy, meta)  
+
+                    print("Using the partial() function with a slightly different kwarg approach -- will it break?")
+                    field_dep_corr = partial(utils.field_dependent_correction, meta) 
+
                 
                 offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
-                print("checking the offsetpsf... is something wrong?",offsetpsf.max())                    
+                                  
 
                 if meta.blur_images != False:
                     offsetpsf = gaussian_filter(offsetpsf, meta.blur_images)
@@ -239,16 +243,17 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                     input_wvs = np.unique(dataset.wvs)
                     if (len(input_wvs) != 1):
                         raise UserWarning('Only works with broadband photometry')
+                    
                     fm_class = fmpsf.FMPlanetPSF(inputs_shape=dataset.input.shape,
-                                                 numbasis=np.array(meta.truenumbasis[key]),
-                                                 sep=guess_sep,
-                                                 pa=guess_pa,
-                                                 dflux=guess_flux,
-                                                 input_psfs=np.array([offsetpsf]),
-                                                 input_wvs=input_wvs,
-                                                 spectrallib=[guess_spec],
-                                                 spectrallib_units='contrast',
-                                                 field_dependent_correction=None) # kwd - set to None b/c correction is done in psf gen
+                                                numbasis=np.array(meta.truenumbasis[key]),
+                                                sep=guess_sep,
+                                                pa=guess_pa,
+                                                dflux=guess_flux,
+                                                input_psfs=np.array([offsetpsf]),
+                                                input_wvs=input_wvs,
+                                                spectrallib=[guess_spec],
+                                                spectrallib_units='contrast',
+                                                field_dependent_correction=field_dep_corr) 
 
                     # Compute the forward-modeled dataset.
                     annulus = meta.annuli#[[guess_sep-20., guess_sep+20.]] # pix

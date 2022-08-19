@@ -492,8 +492,7 @@ def field_dependent_correction(stamp,
     c1 = (stamp.shape[1]-1)/2
     
     # generate stamp of psf at appropriate position relative to mask
-    print()
-    radecoff=(stamp_dx[int(c0),int(c1)]*pxscale, stamp_dy[int(c0),int(c1)]*pxscale) # convert to arcsec
+    radecoff=(stamp_dx[int(c0),int(c1)]*pxscale, stamp_dy[int(c0),int(c1)]*pxscale) # convert to arcsec for webbpsf
     print(f'Injected offset PSF at {radecoff} using the pixel scale of {pxscale} for {inst}')
 
     # generate stamp with appropriate position-dep PSF (replaces input argument stamp)
@@ -501,6 +500,7 @@ def field_dependent_correction(stamp,
 
     # shift stamp image so that correct position-dep PSF is centered relative to stamp dimensions
     stamp = fourier_imshift(stamp, (-1*radecoff[0]/pxscale, -1*radecoff[1]/pxscale)) # convert back into px for shift
+    print("the maximum value of the stamp after fourier_imshift is: ", stamp.max())
 
     # Apply coronagraphic mask transmission.
     # need to check this relative to the input coordinates!
@@ -519,8 +519,8 @@ def field_dependent_correction(stamp,
     # peak_index = np.unravel_index(stamp.argmax(), stamp.shape)
     # transmission_at_center =  transmission[peak_index[1],peak_index[0]]
     
+    print('generated a new psf from within field_dependent_correction')
     return transmission*stamp
-    #return stamp
     
 
 def get_stellar_magnitudes(meta):
