@@ -225,35 +225,20 @@ def extract_obs(meta, fitsfiles_all):
         # elif ('HD141569' in file): # MIRI test data
         #     SUBPXPTS[i] = 1
         # else:
-        try:
-            SUBPXPTS[i] = head['NUMDTHPT']
-        except:
-            SUBPXPTS[i] = 1
-        try:
-            SUBPXPTS[i] = head['NUMDTHPT']
-        except:
-            SUBPXPTS[i] = 1
-        try: # Check for ISPSF header keyword
-            ISPSF[i] = head['ISPSF']
-        except:
-            ISPSF[i] = 'NONE'
-        try: # Check for SELFREF header keyword
-            SELFREF[i] = head['SELFREF']
-        except:
-            SELFREF[i] = 'NONE'
-        try:
-            APERNAME[i] = head['APERNAME']
-        except:
-            APERNAME[i] = 'NONE'
+        SUBPXPTS[i] = head.get('NUMDTHPT', 1)
+        # Check for ISPSF and SELFREF header keywords
+        ISPSF[i] = head.get('ISPSF', 'NONE') 
+        SELFREF[i] = head.get('SELFREF', 'NONE')
+        APERNAME[i] = head.get('APERNAME', 'NONE')
         if (INSTRUME[i] == 'NIRCAM'):
-            if ('LONG' in DETECTOR[i]):
+            if ('LONG' in DETECTOR[i] or '5' in DETECTOR[i]):
                 PIXSCALE[i] = nrc._pixelscale_long*1e3 # mas
             else:
                 PIXSCALE[i] = nrc._pixelscale_short*1e3 # mas
         elif (INSTRUME[i] == 'MIRI'):
             PIXSCALE[i] = mir.pixelscale*1e3 # mas
         else:
-            raise UserWarning('Unknown instrument')
+            raise UserWarning(f'Unknown instrument: {INSTRUME[i]}. Must be either NIRCAM or MIRI.')
 
         # Science header
         head = hdul['SCI'].header
@@ -293,7 +278,7 @@ def extract_obs(meta, fitsfiles_all):
     meta.pixar_sr = {}
     meta.obs = {}
 
-    print(SUBPXPTS)
+    # print(SUBPXPTS)
     for i in range(NHASH_unique):
         ww = HASH == HASH_unique[i]
 
