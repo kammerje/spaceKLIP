@@ -464,12 +464,14 @@ def field_dependent_correction(stamp,
 
     """
     # generate a new stamp using regular webbpsf! 
-    # TODO need to fix for instance with many keys!
+    # TODO need to fix for instance with many keys (companions)!
     if len(meta.obs.keys()) == 1:
         key = list(meta.obs.keys())[0]
         inst = meta.instrume[key] 
         filt = meta.filter[key]
         mask = meta.coronmsk[key]
+        pxar = meta.pixar_sr[key]
+
     offsetpsfdir = meta.offsetpsfdir
 
     # get appropriate pixel scale for instrument in question
@@ -487,11 +489,26 @@ def field_dependent_correction(stamp,
 
     pxscale = webbpsf_inst.pixelscale
 
+    # a silly idea, but what if we regenerate the stamp deltas here too
+    # guess_dx = (meta.ra_off[0]/1000.)/pxscale # pix
+    # guess_dy = (meta.de_off[0]/1000.)/pxscale # pix 
+    # sx = stamp.shape[1]
+    # sy = stamp.shape[0]
+    # xx = np.arange(sx)-sx//2-(int(guess_dx)+(guess_dx-int(guess_dx))) # just make these the guess
+    # yy = np.arange(sy)-sy//2+(int(guess_dy)-(guess_dy-int(guess_dy)))
+    # stamp_dx, stamp_dy = np.meshgrid(xx, yy)        
+
+
     # Get center of input placeholder stamp
     c0 = (stamp.shape[0]-1)/2
     c1 = (stamp.shape[1]-1)/2
-    
+ 
+
     # generate stamp of psf at appropriate position relative to mask
+    # # out of curiosity, what if we make it the guess directly instead
+    #radecoff=(-1*meta.ra_off[0]/1000., meta.de_off[0]/1000.) # convert to arcsec for webbpsf
+
+    # use input offset from within pyklip fmpsf generate_models
     radecoff=(stamp_dx[int(c0),int(c1)]*pxscale, stamp_dy[int(c0),int(c1)]*pxscale) # convert to arcsec for webbpsf
     print(f'Injected offset PSF at {radecoff} using the pixel scale of {pxscale} for {inst}')
 
@@ -500,7 +517,10 @@ def field_dependent_correction(stamp,
 
     # shift stamp image so that correct position-dep PSF is centered relative to stamp dimensions
     stamp = fourier_imshift(stamp, (-1*radecoff[0]/pxscale, -1*radecoff[1]/pxscale)) # convert back into px for shift
-    print("the maximum value of the stamp after fourier_imshift is: ", stamp.max())
+
+    # I believe we need to scale here as well to get the flux right
+    stamp *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
+    print("the maximum value of the stamp after fourier_imshift and scaling is: ", stamp.max())
 
     # Apply coronagraphic mask transmission.
     # need to check this relative to the input coordinates!
@@ -521,6 +541,7 @@ def field_dependent_correction(stamp,
     
     print('generated a new psf from within field_dependent_correction')
     return transmission*stamp
+    #return stamp
     
 
 def get_stellar_magnitudes(meta):

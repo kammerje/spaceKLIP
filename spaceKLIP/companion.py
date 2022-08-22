@@ -165,6 +165,21 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                 offsetpsf = utils.get_offsetpsf(meta, key,
                                                 recenter_offsetpsf=recenter_offsetpsf,
                                                 derotate=False, fourier=fourier)
+                #kwd - just debugging
+                if pxsc > 100:
+                    inst = 'MIRI'
+                    immask = 'FQPM{}'.format(filt[1:5])
+                else:
+                    inst = 'NIRCAM'
+                    immask = key.split('_')[-1]
+                if hasattr(meta, "psf_spec_file"):
+                    if meta.psf_spec_file != False:
+                        SED = io.read_spec_file(meta.psf_spec_file)
+                    else:
+                        SED = None                    
+                offsetpsf_func = psf.JWST_PSF(inst, filt, immask, fov_pix=65,
+                                              sp=SED, use_coeff=True,
+                                              date=meta.psfdate)
                 
 
             elif meta.offpsf == 'webbpsf_ext':
@@ -213,25 +228,27 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                 if meta.offpsf == 'webbpsf':
                     # Generate PSF for initial guess, if very different this could be garbage
                     # Negative sign on ra as webbpsf_ext expects in x,y space
-                    #offsetpsf = offsetpsf_func.gen_psf([-meta.ra_off[j]/1e3,meta.de_off[j]/1e3], do_shift=False, quick=False)
-                    
-                    # kwd - make a temporary placeholder that should in principle produce a pos-dep psf
-                    sx = offsetpsf.shape[1]
-                    sy = offsetpsf.shape[0]           
-                    xx = np.arange(sx)-sx//2-(int(guess_dx)+(guess_dx-int(guess_dx))) # just make these the guess
-                    yy = np.arange(sy)-sy//2+(int(guess_dy)-(guess_dy-int(guess_dy)))
-                    stamp_dx, stamp_dy = np.meshgrid(xx, yy)
-                    offsetpsf = utils.field_dependent_correction(offsetpsf, stamp_dx, stamp_dy, meta)  
+                    offsetpsf = offsetpsf_func.gen_psf([-meta.ra_off[j]/1e3,meta.de_off[j]/1e3], do_shift=False, quick=False)
 
-                    print("Using the partial() function with a slightly different kwarg approach -- will it break?")
-                    field_dep_corr = partial(utils.field_dependent_correction, meta) 
+                    # kwd - make a temporary placeholder that should in principle produce a pos-dep psf
+                    # sx = offsetpsf.shape[1]
+                    # sy = offsetpsf.shape[0]           
+                    # xx = np.arange(sx)-sx//2-(int(guess_dx)+(guess_dx-int(guess_dx))) # just make these the guess
+                    # yy = np.arange(sy)-sy//2+(int(guess_dy)-(guess_dy-int(guess_dy)))
+                    # stamp_dx, stamp_dy = np.meshgrid(xx, yy)
+                    # offsetpsf = utils.field_dependent_correction(offsetpsf, stamp_dx, stamp_dy, meta)  
+
+                    print("Using the partial() function with a slightly different approach -- will it break?")
+                    field_dep_corr = partial(utils.field_dependent_correction, meta=meta) 
 
                 
                 offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
+                print("maximum! ", offsetpsf.max())
+                
                                   
 
                 if meta.blur_images != False:
-                    offsetpsf = gaussian_filter(offsetpsf, meta.blur_images)
+                    offsetpsf = gaussian_filter(offsetpsf, meta.blur_images)               
 
                 # Compute the forward-modeled dataset if it does not exist,
                 # yet, or if overwrite is True.
@@ -243,7 +260,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                     input_wvs = np.unique(dataset.wvs)
                     if (len(input_wvs) != 1):
                         raise UserWarning('Only works with broadband photometry')
-                    
+ 
                     fm_class = fmpsf.FMPlanetPSF(inputs_shape=dataset.input.shape,
                                                 numbasis=np.array(meta.truenumbasis[key]),
                                                 sep=guess_sep,
@@ -260,6 +277,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                     if len(annulus) == 1:
                         annulus = annulus[0]
                     subsection = 1
+
                     fm.klip_dataset(dataset=dataset,
                                     fm_class=fm_class,
                                     mode=mode,
