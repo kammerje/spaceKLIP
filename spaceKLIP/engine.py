@@ -271,9 +271,9 @@ class JWST(Pipeline):
             do_clean = True
 
         if hasattr(meta, 'use_cleaned'):
-            if meta.used_clean and not do_clean:
+            if meta.use_cleaned and not do_clean:
                 log.warning('Meta: use_cleaned=True for KLIP subtraction, but no cleaning options specified.')
-            if not meta.used_clean and do_clean:
+            if not meta.use_cleaned and do_clean:
                 log.warning('Meta: Image cleaning will be performed, but use_cleaned=False for KLIP subtraction.')
 
     def run_all(self, skip_ramp=False, skip_imgproc=False, skip_sub=False,
