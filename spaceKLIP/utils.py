@@ -221,7 +221,7 @@ def get_offsetpsf(meta, key, recenter_offsetpsf=False, derotate=True,
 
     return totpsf
 
-def gen_offsetpsf(meta, offsetpsfdir, inst, filt, mask, radecoff=None, source=None):
+def gen_offsetpsf(meta, offsetpsfdir, inst, filt, mask, radecoff=None, source=None, date=None):
     """
     Generate an offset PSF using WebbPSF and save it in the offsetpsfdir. The
     offset PSF will be normalized to a total intensity of 1.
@@ -240,6 +240,9 @@ def gen_offsetpsf(meta, offsetpsfdir, inst, filt, mask, radecoff=None, source=No
         RA/Dec offset in arcsec from mask center to generate position-dep psf (RA, Dec)
     source: synphot.spectrum.SourceSpectrum 
         Default to 5700K blackbody if source=None
+    date : str or None
+        Date time in UTC as ISO-format string, a la 2022-07-01T07:20:00.
+        If not set, then default webbpsf OPD is used (e.g., RevAA).
 
     """
 
@@ -288,6 +291,14 @@ def gen_offsetpsf(meta, offsetpsfdir, inst, filt, mask, radecoff=None, source=No
     if radecoff:
         webbpsf_inst.options['source_offset_x'] = radecoff[0]
         webbpsf_inst.options['source_offset_y'] = radecoff[1]
+
+    # Load date-specific OPD files? 
+    date = None # test
+    if date is not None: 
+        print("----")
+        print(f"loading time-dependent OPD of {date}! yay")
+        print("----")
+        webbpsf_inst.load_wss_opd_by_date(date=date, choice='before', verbose=False, plot=False)
 
     # Compute the offset PSF:
     hdul = webbpsf_inst.calc_psf(oversample=1, fov_pixels = 65, normalize='last', source=SED) # kwd - hardcode fov pix?
@@ -474,6 +485,9 @@ def field_dependent_correction(stamp,
 
     offsetpsfdir = meta.offsetpsfdir
 
+    # fix date for getting closest OPD - maybe this should not be forced?
+    date = meta.psfdate
+
     # get appropriate pixel scale for instrument in question
 
     # NIRCam.
@@ -513,7 +527,7 @@ def field_dependent_correction(stamp,
     print(f'Injected offset PSF at {radecoff} using the pixel scale of {pxscale} for {inst}')
 
     # generate stamp with appropriate position-dep PSF (replaces input argument stamp)
-    stamp = gen_offsetpsf(meta, offsetpsfdir, inst, filt, mask, radecoff=radecoff)
+    stamp = gen_offsetpsf(meta, offsetpsfdir, inst, filt, mask, radecoff=radecoff, date=date)
 
     # shift stamp image so that correct position-dep PSF is centered relative to stamp dimensions
     stamp = fourier_imshift(stamp, (-1*radecoff[0]/pxscale, -1*radecoff[1]/pxscale)) # convert back into px for shift
@@ -540,8 +554,7 @@ def field_dependent_correction(stamp,
     # transmission_at_center =  transmission[peak_index[1],peak_index[0]]
     
     print('generated a new psf from within field_dependent_correction')
-    return transmission*stamp
-    #return stamp
+    return stamp
     
 
 def get_stellar_magnitudes(meta):

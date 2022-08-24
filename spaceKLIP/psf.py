@@ -83,9 +83,9 @@ class JWST_PSF():
                                   fov_pix=fov_pix, oversample=oversample, **kwargs)
 
         # Load date-specific OPD files? 
-        # if date is not None: # KWD edit - only webbpsf and not webbpsf_ext...?
-        #     inst_on.load_wss_opd_by_date(date=date, choice='before', verbose=False, plot=False)
-        #     inst_off.load_wss_opd_by_date(date=date, choice='before', verbose=False, plot=False)
+        if date is not None: # KWD edit - only webbpsf and not webbpsf_ext...?
+            inst_on.load_wss_opd_by_date(date=date, choice='before', verbose=False, plot=False)
+            inst_off.load_wss_opd_by_date(date=date, choice='before', verbose=False, plot=False)
         
         # Generating initial PSFs...
         print('Generating initial PSFs...')
