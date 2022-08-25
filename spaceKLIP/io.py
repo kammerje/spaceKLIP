@@ -180,7 +180,7 @@ def extract_obs(meta, fitsfiles_all):
     EFFINTTM = np.empty(Nfitsfiles) # s
     SUBARRAY = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
     SUBPXPTS = np.empty(Nfitsfiles, dtype=int)
-    ISPSF    = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
+    IS_PSF    = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
     SELFREF  = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
     APERNAME = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
     PIXSCALE = np.empty(Nfitsfiles) # mas
@@ -226,8 +226,8 @@ def extract_obs(meta, fitsfiles_all):
         #     SUBPXPTS[i] = 1
         # else:
         SUBPXPTS[i] = head.get('NUMDTHPT', 1)
-        # Check for ISPSF and SELFREF header keywords
-        ISPSF[i] = head.get('ISPSF', 'NONE') 
+        # Check for IS_PSF and SELFREF header keywords
+        IS_PSF[i] = head.get('IS_PSF', 'NONE') 
         SELFREF[i] = head.get('SELFREF', 'NONE')
         APERNAME[i] = head.get('APERNAME', 'NONE')
         if (INSTRUME[i] == 'NIRCAM'):
@@ -282,17 +282,17 @@ def extract_obs(meta, fitsfiles_all):
     for i in range(NHASH_unique):
         ww = HASH == HASH_unique[i]
 
-        # Flight data have keywords ISPSF and SELFREF to identify ref sources.
+        # Flight data have keywords IS_PSF and SELFREF to identify ref sources.
         # We are going to try that first, then fall back to previous version
         # if the keywords are not found in order to support backwards 
         # compatability of simulated data
         # TODO: Incorporate SELFREF keyword
-        isref_i = ISPSF[ww]
+        isref_i = IS_PSF[ww]
         if isref_i[0] != 'NONE':
             ww_sci = np.where(isref_i == 'False')[0]
             ww_cal = np.where(isref_i == 'True')[0]
         else:
-            print("WARNING: Unable to find ISPSF keyword in ")
+            print("WARNING: Unable to find IS_PSF keyword.")
 
             # Science and reference PSFs are identified based on their number of
             # dither positions, assuming that there is no dithering for the
@@ -305,7 +305,7 @@ def extract_obs(meta, fitsfiles_all):
                 ww_cal = np.where(dpts == dpts_unique[1])[0]
             else:
                 raise UserWarning(
-                    'Unable to find ISPSF keyword, so fell back to looking for NUMDTHPT.'
+                    'Unable to find IS_PSF keyword, so fell back to looking for NUMDTHPT.'
                     '\nScience and reference PSFs are identified based on their'
                     '\nnumber of dither positions, with the assumption of no dithering'
                     '\nfor the science PSFs and small grid dithers for the reference PSFs.'
