@@ -82,6 +82,12 @@ class Pipeline():
         for key in config:
             setattr(self.meta, key, config[key])
 
+        # For required path parameters, expand any environment variables or ~ for user home directory
+        for key in ['idir', 'odir', 'sdir']:
+            setattr(self.meta, key, io.expand_path(getattr(self.meta, key)))
+        if hasattr(self.meta, 'data_dir'):
+            setattr(self.meta, 'data_dir', io.expand_path(getattr(self.meta, 'data_dir')))
+
         # Assign run directories from output folder. These will be overwritten if subtraction if performed.
         if (self.meta.rundirs != None) or (len(self.meta.rundirs) == 0):
             if len(self.meta.rundirs) == 0:
@@ -95,7 +101,7 @@ class Pipeline():
 
 class JWST(Pipeline):
     """
-    JWST-specifc pipeline class.
+    JWST-specific pipeline class.
 
     """
 
@@ -128,7 +134,7 @@ class JWST(Pipeline):
 
         return None
 
-    def sort_files(self):
+    def sort_files(self, **kwargs):
         """Sort files into subdirectories like filter_mask (e.g., F300M_MASK335R)"""
 
         idir = self.meta.idir[:-1] if self.meta.idir[-1]=='/' else self.meta.idir
@@ -147,7 +153,7 @@ class JWST(Pipeline):
 
         io.sort_data_files(self.meta.pid, self.meta.sci_obs, self.meta.ref_obs, outdir, 
                            indir=indir, expid_sci=self.meta.expid_sci, 
-                           filter=filter, coron_mask=coron_mask)
+                           filter=filter, coron_mask=coron_mask, **kwargs)
 
     def get_jwst_meta(self):
         """
