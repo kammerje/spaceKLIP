@@ -138,6 +138,22 @@ def raw_contrast_curve(meta):
                     cons += [con]
             seps = np.array(seps) # arcsec
             cons = np.array(cons)
+            
+            # Correct contrast for coronagraphic mask throughput
+            psfmask = meta.psfmask[key]
+            psfmask = pyfits.getdata(psfmask, 'SCI')
+            sy, sx = psfmask.shape
+            if ('SWB' in mask):
+                psfprof = psfmask[sy//2:, int(round(sx//2-0.5+meta.offset_swb[filt]/(pxsc/1e3)))]
+                psfprof = interp1d((0.5+np.arange(len(psfprof)))*pxsc/1e3, psfprof)
+            elif ('LWB' in mask):
+                psfprof = psfmask[sy//2:, int(round(sx//2-0.5+meta.offset_lwb[filt]/(pxsc/1e3)))]
+                psfprof = interp1d((0.5+np.arange(len(psfprof)))*pxsc/1e3, psfprof)
+            else:
+                psfprof = utils.azimuthalAverage(psfmask, returnradii=True, binsize=1.)
+                psfprof = interp1d(psfprof[0]*pxsc/1e3, psfprof[1])
+            cons = np.true_divide(cons, psfprof(seps))
+            
             np.save(odir+key+'-seps.npy', seps) # arcsec
             np.save(odir+key+'-cons.npy', cons)
             
