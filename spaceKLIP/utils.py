@@ -7,9 +7,6 @@ from __future__ import division
 
 import os
 
-os.environ['CRDS_PATH'] = '../crds_cache'
-os.environ['CRDS_SERVER_URL'] = 'https://jwst-crds.stsci.edu'
-
 import astropy.io.fits as pyfits
 import matplotlib.pyplot as plt
 import numpy as np
