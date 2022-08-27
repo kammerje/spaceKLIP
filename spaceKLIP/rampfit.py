@@ -362,7 +362,8 @@ def run_ramp_fitting(meta, idir, osubdir):
             pipeline.nrow_ref = meta.grow_diagonal
         if hasattr(meta, 'sat_boundary'):
             pipeline.saturation.n_pix_grow_sat = meta.sat_boundary
-
+        if hasattr(meta, 'weighting'):
+            pipeline.ramp_fit.weighting = meta.weighting
 
         # Run pipeline, raise exception on error, and close log file handler
         try:

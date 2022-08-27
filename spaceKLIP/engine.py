@@ -82,6 +82,12 @@ class Pipeline():
         for key in config:
             setattr(self.meta, key, config[key])
 
+        # For required path parameters, expand any environment variables or ~ for user home directory
+        for key in ['idir', 'odir', 'sdir']:
+            setattr(self.meta, key, io.expand_path(getattr(self.meta, key)))
+        if hasattr(self.meta, 'data_dir'):
+            setattr(self.meta, 'data_dir', io.expand_path(getattr(self.meta, 'data_dir')))
+
         # Assign run directories from output folder. These will be overwritten if subtraction if performed.
         if (self.meta.rundirs != None) or (len(self.meta.rundirs) == 0):
             if len(self.meta.rundirs) == 0:
@@ -95,7 +101,7 @@ class Pipeline():
 
 class JWST(Pipeline):
     """
-    JWST-specifc pipeline class.
+    JWST-specific pipeline class.
 
     """
 
@@ -124,10 +130,11 @@ class JWST(Pipeline):
 
         # Get the JWST-specific metadata.
         self.get_jwst_meta()
+        self.meta_checks()
 
         return None
 
-    def sort_files(self):
+    def sort_files(self, **kwargs):
         """Sort files into subdirectories like filter_mask (e.g., F300M_MASK335R)"""
 
         idir = self.meta.idir[:-1] if self.meta.idir[-1]=='/' else self.meta.idir
@@ -146,34 +153,7 @@ class JWST(Pipeline):
 
         io.sort_data_files(self.meta.pid, self.meta.sci_obs, self.meta.ref_obs, outdir, 
                            indir=indir, expid_sci=self.meta.expid_sci, 
-                           filter=filter, coron_mask=coron_mask)
-
-    def meta_checks(self):
-        """Check some consistencies in the meta file"""
-
-        meta = self.meta
-
-        # Check if outlier correction / cleaning requested
-        if hasattr(meta, 'outlier_corr') and ((meta.outlier_corr is not None) or (meta.outlier_corr.lower() != 'none')):
-            outlier_type = meta.outlier_corr
-        else:
-            outlier_type = None
-
-        # Was cleaning requested on existing cal data?
-        do_clean_only = do_clean = False
-        if hasattr(meta, 'outlier_only') and meta.outlier_only:
-            do_clean_only = True
-            do_clean = True  # Must be set to True
-            if outlier_type is None:
-                log.warning('Meta: outlier_only=True but outlier_corr not specified.')
-        if outlier_type is not None:
-            do_clean = True
-
-        if hasattr(meta, 'use_cleaned'):
-            if meta.used_clean and not do_clean:
-                log.warning('Meta: use_cleaned=True for KLIP subtraction, but no cleaning options specified.')
-            if not meta.used_clean and do_clean:
-                log.warning('Meta: Image cleaning will be performed, but use_cleaned=False for KLIP subtraction.')
+                           filter=filter, coron_mask=coron_mask, **kwargs)
 
     def get_jwst_meta(self):
         """
@@ -274,6 +254,33 @@ class JWST(Pipeline):
         sign = np.sign(self.siaf.apertures[refapername].V2Ref-self.siaf.apertures[apername].V2Ref)
 
         return sign*offset_arcsec
+
+    def meta_checks(self):
+        """Check some consistencies in the meta file"""
+
+        meta = self.meta
+
+        # Check if outlier correction / cleaning requested
+        if hasattr(meta, 'outlier_corr') and ((meta.outlier_corr is not None) or (meta.outlier_corr.lower() != 'none')):
+            outlier_type = meta.outlier_corr
+        else:
+            outlier_type = None
+
+        # Was cleaning requested on existing cal data?
+        do_clean_only = do_clean = False
+        if hasattr(meta, 'outlier_only') and meta.outlier_only:
+            do_clean_only = True
+            do_clean = True  # Must be set to True
+            if outlier_type is None:
+                log.warning('Meta: outlier_only=True but outlier_corr not specified.')
+        if outlier_type is not None:
+            do_clean = True
+
+        if hasattr(meta, 'use_cleaned'):
+            if meta.use_cleaned and not do_clean:
+                log.warning('Meta: use_cleaned=True for KLIP subtraction, but no cleaning options specified.')
+            if not meta.use_cleaned and do_clean:
+                log.warning('Meta: Image cleaning will be performed, but use_cleaned=False for KLIP subtraction.')
 
     def run_all(self, skip_ramp=False, skip_imgproc=False, skip_sub=False,
                 skip_rawcon=False, skip_calcon=False, skip_comps=False):

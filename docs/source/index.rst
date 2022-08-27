@@ -3,11 +3,16 @@
 .. Welcome to ``spaceKLIP``'s documentation
 .. ========================================
 
+Documentation for spaceKLIP
+===========================
+
 .. image:: _static/logo.png
    :align: center
    :width: 400px
 
-spaceKLIP is a data reduction pipeline for JWST high contrast imaging. All code is currently under heavy development
+spaceKLIP is a data reduction pipeline for JWST high contrast imaging. 
+
+All code is currently under heavy development
 and typically expected features may not be available. 
 
 Compatible Simulated Data: `Here <https://stsci.box.com/s/cktghuyrwrallb401rw5y5da2g5ije6t>`_
@@ -27,6 +32,7 @@ Compatible Simulated Data: `Here <https://stsci.box.com/s/cktghuyrwrallb401rw5y5
    :hidden:
 
    tutos
+   tutorials/Introduction.ipynb
    tutorials/01_quickstart.ipynb
 
 .. toctree::

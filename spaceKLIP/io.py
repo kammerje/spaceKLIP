@@ -180,6 +180,8 @@ def extract_obs(meta, fitsfiles_all):
     EFFINTTM = np.empty(Nfitsfiles) # s
     SUBARRAY = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
     SUBPXPTS = np.empty(Nfitsfiles, dtype=int)
+    IS_PSF    = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
+    SELFREF  = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
     APERNAME = np.empty(Nfitsfiles, dtype=np.dtype('U100'))
     PIXSCALE = np.empty(Nfitsfiles) # mas
     PIXAR_SR = np.empty(Nfitsfiles) # sr
@@ -190,6 +192,7 @@ def extract_obs(meta, fitsfiles_all):
     for i, file in enumerate(fitsfiles):
         hdul = pyfits.open(file)
 
+        # Primary Header
         head = hdul[0].header
         if ('SGD' in file): # MIRI test data
             TARGPROP[i] = 'CALIBRATOR'
@@ -216,33 +219,28 @@ def extract_obs(meta, fitsfiles_all):
         NFRAMES[i] = head['NFRAMES']
         EFFINTTM[i] = head['EFFINTTM'] # s
         SUBARRAY[i] = head['SUBARRAY']
-        if ('SGD' in file): # MIRI test data
-            SUBPXPTS[i] = 5
-        elif ('HD141569' in file): # MIRI test data
-            SUBPXPTS[i] = 1
-        else:
-            try:
-                SUBPXPTS[i] = head['NUMDTHPT']
-            except:
-                SUBPXPTS[i] = 1
-            try:
-                SUBPXPTS[i] = head['NUMDTHPT']
-            except:
-                SUBPXPTS[i] = 1
-        try:
-            APERNAME[i] = head['APERNAME']
-        except:
-            APERNAME[i] = 'NONE'
+        ### Kim says these are no longer needed, so commenting out (8/12/2022)
+        # if ('SGD' in file): # MIRI test data
+        #     SUBPXPTS[i] = 5
+        # elif ('HD141569' in file): # MIRI test data
+        #     SUBPXPTS[i] = 1
+        # else:
+        SUBPXPTS[i] = head.get('NUMDTHPT', 1)
+        # Check for IS_PSF and SELFREF header keywords
+        IS_PSF[i] = head.get('IS_PSF', 'NONE') 
+        SELFREF[i] = head.get('SELFREF', 'NONE')
+        APERNAME[i] = head.get('APERNAME', 'NONE')
         if (INSTRUME[i] == 'NIRCAM'):
-            if ('LONG' in DETECTOR[i]):
+            if ('LONG' in DETECTOR[i] or '5' in DETECTOR[i]):
                 PIXSCALE[i] = nrc._pixelscale_long*1e3 # mas
             else:
                 PIXSCALE[i] = nrc._pixelscale_short*1e3 # mas
         elif (INSTRUME[i] == 'MIRI'):
             PIXSCALE[i] = mir.pixelscale*1e3 # mas
         else:
-            raise UserWarning('Unknown instrument')
+            raise UserWarning(f'Unknown instrument: {INSTRUME[i]}. Must be either NIRCAM or MIRI.')
 
+        # Science header
         head = hdul['SCI'].header
         try:
             PIXAR_SR[i] = head['PIXAR_SR'] # sr
@@ -250,13 +248,14 @@ def extract_obs(meta, fitsfiles_all):
             PIXAR_SR[i] = PIXSCALE[i]**2/rad2mas**2 # sr
         RA_REF[i] = head['RA_REF'] # deg
         DEC_REF[i] = head['DEC_REF'] # deg
+        ### Kim says these are no longer needed, so commenting out (8/12/2022)
+        # if ('SGD' in file): # MIRI test data
+        #     ROLL_REF[i] = 0. # deg
+        # elif ('HD141569' in file): # MIRI test data
+        #     ROLL_REF[i] = file.split('/')[-1].split('_')[2][2:] # deg
+        # else:
         # Roll Ref: V3 roll angle at the ref point (N over E)
-        if ('SGD' in file): # MIRI test data
-            ROLL_REF[i] = 0. # deg
-        elif ('HD141569' in file): # MIRI test data
-            ROLL_REF[i] = file.split('/')[-1].split('_')[2][2:] # deg
-        else:
-            ROLL_REF[i] = head['ROLL_REF'] # deg
+        ROLL_REF[i] = head['ROLL_REF'] # deg
 
         # Create a hash for each observation. All observations with the same
         # hash will be grouped together into a concatenation. Each
@@ -282,39 +281,34 @@ def extract_obs(meta, fitsfiles_all):
     for i in range(NHASH_unique):
         ww = HASH == HASH_unique[i]
 
-        # Science and reference PSFs are identified based on their number of
-        # dither positions, assuming that there is no dithering for the
-        # science PSFs and dithering for the reference PSFs.
-        dpts = SUBPXPTS[ww]
-        dpts_unique = np.unique(dpts)
-
-        if ((len(dpts_unique) == 2) and (dpts_unique[0] == 1)):
-            ww_sci = np.where(dpts == dpts_unique[0])[0]
-            ww_cal = np.where(dpts == dpts_unique[1])[0]
+        # Flight data have keywords IS_PSF and SELFREF to identify ref sources.
+        # We are going to try that first, then fall back to previous version
+        # if the keywords are not found in order to support backwards 
+        # compatability of simulated data
+        # TODO: Incorporate SELFREF keyword
+        isref_i = IS_PSF[ww]
+        if isref_i[0] != 'NONE':
+            ww_sci = np.where(isref_i == 'False')[0]
+            ww_cal = np.where(isref_i == 'True')[0]
         else:
-            raise UserWarning(
-                'Science and reference PSFs are identified based on their'
-                '\nnumber of dither positions, with the assumption of no dithering'
-                '\nfor the science PSFs and small grid dithers for the reference PSFs.'
-            )
+            print("WARNING: Unable to find IS_PSF keyword.")
 
-        # try:
-        #     ww_sci = []
-        #     for j in range(len(meta.sci)):
-        #         ww_sci += [np.where(fitsfiles == meta.idir+meta.sci[j])[0][0]]
-        #     ww_sci = np.array(ww_sci)
-        #     ww_cal = []
-        #     for j in range(len(meta.cal)):
-        #         ww_cal += [np.where(fitsfiles == meta.idir+meta.cal[j])[0][0]]
-        #     ww_cal = np.array(ww_cal)
-        #     if ((len(ww_sci) == 0) or (len(ww_cal) == 0)):
-        #         raise UserWarning('No science or calibrator data found')
-        # except:
-        #     if ((len(dpts_unique) == 2) and (dpts_unique[0] == 1)):
-        #         ww_sci = np.where(dpts == dpts_unique[0])[0]
-        #         ww_cal = np.where(dpts == dpts_unique[1])[0]
-        #     else:
-        #         raise UserWarning('Science and reference PSFs are identified based on their number of dither positions, assuming that there is no dithering for the science PSFs and dithering for the reference PSFs')
+            # Science and reference PSFs are identified based on their number of
+            # dither positions, assuming that there is no dithering for the
+            # science PSFs and dithering for the reference PSFs.
+            dpts = SUBPXPTS[ww]
+            dpts_unique = np.unique(dpts)
+
+            if ((len(dpts_unique) == 2) and (dpts_unique[0] == 1)):
+                ww_sci = np.where(dpts == dpts_unique[0])[0]
+                ww_cal = np.where(dpts == dpts_unique[1])[0]
+            else:
+                raise UserWarning(
+                    'Unable to find IS_PSF keyword, so fell back to looking for NUMDTHPT.'
+                    '\nScience and reference PSFs are identified based on their'
+                    '\nnumber of dither positions, with the assumption of no dithering'
+                    '\nfor the science PSFs and small grid dithers for the reference PSFs.'
+                )
 
         # These metadata are the same for all observations within one
         # concatenation.
@@ -427,7 +421,7 @@ def get_working_files(meta, runcheck, subdir='RAMPFIT', search='uncal.fits', ity
 
 
 def sort_data_files(pid, sci_obs, ref_obs, outdir, expid_sci='03106', 
-    file_ext='uncal.fits', indir=None, filter=None, coron_mask=None):
+    file_ext='uncal.fits', indir=None, filter=None, coron_mask=None, verbose=False, filename_start='jw'):
     """Create symbolic links to data in MAST data directory
     
     Place science and reference observations of same kind in their
@@ -461,6 +455,9 @@ def sort_data_files(pid, sci_obs, ref_obs, outdir, expid_sci='03106',
     indir : str or None
         Location of original files. If not set, then searches for MAST
         directory location at $JWSTDOWNLOAD_OUTDIR env variable.
+    filename_start : str
+        Initial string at start of filenames. This will generally always be the default 'jw',
+        but can be overridden if necessary, for instance if dealing with simulated data.
     """
 
     from astropy.io import fits
@@ -472,17 +469,30 @@ def sort_data_files(pid, sci_obs, ref_obs, outdir, expid_sci='03106',
             raise RuntimeError('Cannot file environment variable: $JWSTDOWNLOAD_OUTDIR')
         indir = os.path.join(mast_dir, f'{pid:05d}/')
 
+    if verbose:
+            print(f"""Sorting data from program {pid} for {coron_mask}, {filter}
+    Sci Obs: {sci_obs}\tPSF Reference Obs: {ref_obs}
+    Sorting files with extension {file_ext}
+    from input dir {indir}
+    into output dir {outdir}""")
+
     # Find all uncal files
     allfiles = np.sort([f for f in os.listdir(indir) if f.endswith(file_ext)])
+    if len(allfiles)==0:
+        raise RuntimeError(f"Could not find any files ending with {file_ext}")
 
     # Cycle through each science observation
     for obsid in sci_obs:
-        file_start = f'jw{pid:05d}{obsid:03d}'
+        file_start = f'{filename_start}{pid:05d}{obsid:03d}'
 
         # Get all files in given observation
         files_obs = np.sort([f for f in allfiles if (file_start in f)])
+
+        if len(files_obs)==0:
+            raise RuntimeError(f"Could not find any files matching {file_start}")
         # Get the associated exposure IDS
-        expids_all = np.array([f.split('_')[1] for f in files_obs])
+        expid_index = 1+filename_start.count('_')  # Exp ID is usually at index 1, unless there's an extra underscore earlier
+        expids_all = np.array([f.split('_')[expid_index] for f in files_obs])
 
         # Index of where science data starts
         # Assume expid_sci is the first in a sequence of filters
@@ -541,9 +551,8 @@ def sort_data_files(pid, sci_obs, ref_obs, outdir, expid_sci='03106',
                         # Generate symbolic link to new location
                         file_link_path = os.path.join(subdir, fref)
                         if not os.path.isfile(file_link_path):
-                            os.symlink(file_path_ref, file_link_path)                        
-
-
+                            os.symlink(file_path_ref, file_link_path)
+    print(f"Sorting complete for {pid} {coron_mask} {filter}")
 
 def open_new_log_file(fits_file, output_dir, stage_str=None):
     """Create and open a new log file
@@ -613,3 +622,15 @@ def save_fitpsf_images(odir, fitpsf):
 
     hdul = pyfits.HDUList([pri,sci,res,mod])
     hdul.writeto(odir, overwrite=True)
+
+def expand_path(path_string):
+    """Expand environment variables or user home directories in a path specification
+
+    Parameters
+    ==========
+    path_string : str
+        Any path string, relative or absolute, optionally containing environment variables.
+
+    """
+    return os.path.expanduser(os.path.expandvars(path_string))
+
