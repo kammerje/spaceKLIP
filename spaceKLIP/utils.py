@@ -214,7 +214,7 @@ def get_offsetpsf(meta, key, recenter_offsetpsf=False, derotate=True,
         totexp = 0. # s
         for i in range(len(ww_sci)):
             totint = meta.obs[key]['NINTS'][ww_sci[i]]*meta.obs[key]['EFFINTTM'][ww_sci[i]] # s
-            totpsf += totint*rotate(offsetpsf.copy(), -meta.obs[key]['ROLL_REF'][ww_sci[i]], reshape=False, mode='constant', cval=0.)
+            totpsf += totint*rotate(offsetpsf.copy(), meta.obs[key]['ROLL_REF'][ww_sci[i]], reshape=False, mode='constant', cval=0.)
             totexp += totint # s
         totpsf /= totexp
     else:
@@ -330,7 +330,7 @@ def get_transmission(meta, key, odir, derotate=False):
     inst = meta.instrume[key]
     mask = meta.coronmsk[key]
     pxsc = meta.pixscale[key] # mas
-
+   
     # NIRCam.
     if (inst == 'NIRCAM'):
         tp = hdul['SCI'].data[1:-1, 1:-1] # crop artifact at the edge
@@ -362,8 +362,7 @@ def get_transmission(meta, key, odir, derotate=False):
     # transmission).
     if (mask in ['MASKALWB', 'MASKASWB']):
         tp = shift(tp, (0., -meta.bar_offset[key]*1000./pxsc), mode='constant', cval=0.)
-
-
+ 
     # Derotate the PSF mask and coadd it weighted by the integration time of
     # the different rolls.
     if (derotate == True):
@@ -389,6 +388,24 @@ def get_transmission(meta, key, odir, derotate=False):
     totmsk[rr > meta.owa] = np.nan
 
     meta.transmission = RegularGridInterpolator((yy[:, 0], xx[0, :]), totmsk)
+    if '335R' in mask:
+        true_cen = [149.9-0.5, 174.4-0.5] #x, y, 0.5 offset
+        shape = [320, 320]
+        offset = [s/2-c for c,s in zip(true_cen, shape)]
+        meta.current_mask_center_offset = offset
+    elif '1140' in mask:
+        true_cen = [119.749-13-1-0.5, 112.236-7-0.5] #x, y, offsets from pyKLIP
+        shape = np.flip(tp.shape)
+        offset = [s/2-c for c,s in zip(true_cen, shape)]
+        meta.current_mask_center_offset = offset
+    elif '1550' in mask:
+        true_cen = [119.746-13-1-0.5, 113.289-8-0.5] #x, y, 0.5 offsets from pyKLIP
+        shape = tp.shape
+        offset = [s/2-c for c,s in zip(true_cen, shape)]
+        meta.current_mask_center_offset = offset
+    else:
+        print('WARNING: Center offsets have not yet been determined for this mask!')
+        meta.current_mask_center_offset = [0, 0]
 
     # Plot.
     plt.figure(figsize=(6.4, 4.8))
@@ -447,9 +464,24 @@ def field_dependent_correction(stamp,
     """
 
     # Apply coronagraphic mask transmission.
+
+    # Need to calculate offset of mask to center of array
+    offset = meta.current_mask_center_offset
+
+    stamp_dy -= offset[1]
+    stamp_dx -= offset[0]
+
     xy = np.vstack((stamp_dy.flatten(), stamp_dx.flatten())).T
+    
     transmission = meta.transmission(xy)
     transmission = transmission.reshape(stamp.shape)
+
+    # fig, axs = plt.subplots(1, 3)
+    # print(stamp.shape)
+    # axs[0].imshow(transmission)
+    # axs[1].imshow(stamp)
+    # axs[2].imshow(transmission*stamp)
+    # plt.show()
 
     # Get center of stamp
     c0 = (stamp.shape[0]-1)/2
@@ -457,10 +489,6 @@ def field_dependent_correction(stamp,
 
     # Get transmission at this point
     transmission_at_center = transmission[int(c0),int(c1)]
-
-    plt.imshow(xy)
-    plt.imshow(transmission)
-    plt.show()
 
     ## Old way use peak of flux
     # peak_index = np.unravel_index(stamp.argmax(), stamp.shape)
@@ -569,6 +597,8 @@ def get_maxnumbasis(meta):
     # Find the maximum numbasis based on the number of available calibrator
     # frames.
     meta.maxnumbasis = {}
+    meta.adimaxnumbasis = {}
+    meta.rdimaxnumbasis = {}
     for key in meta.obs.keys():
         # Get all science and calibrator keys
         ws = meta.obs[key]['TYP'] == 'SCI'
@@ -578,6 +608,8 @@ def get_maxnumbasis(meta):
         # Sum all integrations in calibration (Reference)
         nbc = np.sum(meta.obs[key]['NINTS'][wc][:], dtype=int)
         meta.maxnumbasis[key] = nbs + nbc
+        meta.adimaxnumbasis[key] = nbs
+        meta.rdimaxnumbasis[key] = nbc
 
     return meta
 
@@ -608,15 +640,15 @@ def get_psfmasknames(meta):
     meta.psfmask = {}
     for key in meta.obs.keys():
         if '1065' in key:
-            trstring = '/../resources/transmissions/JWST_MIRI_F1065C_transmission_webbpsf-ext_v1.fits'
+            trstring = '/../resources/transmissions/JWST_MIRI_F1065C_transmission_webbpsf-ext_v2.fits'
             trfile = os.path.join(os.path.dirname(__file__) + trstring)
             meta.psfmask[key] = trfile
         elif '1140' in key:
-            trstring = '/../resources/transmissions/JWST_MIRI_F1140C_transmission_webbpsf-ext_v1.fits'
+            trstring = '/../resources/transmissions/JWST_MIRI_F1140C_transmission_webbpsf-ext_v2.fits'
             trfile = os.path.join(os.path.dirname(__file__) + trstring)
             meta.psfmask[key] = trfile
         elif '1550' in key:
-            trstring = '/../resources/transmissions/JWST_MIRI_F1550C_transmission_webbpsf-ext_v1.fits'
+            trstring = '/../resources/transmissions/JWST_MIRI_F1550C_transmission_webbpsf-ext_v2.fits'
             trfile = os.path.join(os.path.dirname(__file__) + trstring)
             meta.psfmask[key] = trfile
         elif 'MASK335R' in key:
@@ -909,3 +941,4 @@ def clean_file(file, sigclip=5, niter=5, **kwargs):
     hdul['SCI'].data = data
     hdul.writeto(file, overwrite=True)
     hdul.close()
+

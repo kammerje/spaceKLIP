@@ -207,7 +207,7 @@ class JWST(Pipeline):
                 for filt in list(filt_info.keys()):
                     self.meta.wave[filt] = filt_info[filt]['WavelengthMean']/1e4*1e-6 # m
                     self.meta.weff[filt] = filt_info[filt]['WidthEff']/1e4*1e-6 # m
-                    self.meta.F0[filt] = filt_info[filt]['ZeroPoint'] # Jy
+                    self.meta.F0[filt] = filt_info[filt]['ZeroPoint'] # Jy 
 
         # Get the PSF reference position with respect to the NRCA5_MASKLWB and
         # the NRCA4_MASKSWB subarrays, respectively, for each NIRCam filter,

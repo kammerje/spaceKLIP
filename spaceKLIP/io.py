@@ -13,7 +13,7 @@ import copy
 
 from astropy.table import Table
 import astropy.io.fits as pyfits
-
+import scipy.ndimage.interpolation as sinterp
 import astropy.units as u
 from synphot import SourceSpectrum
 from synphot.models import Empirical1D
@@ -278,7 +278,6 @@ def extract_obs(meta, fitsfiles_all):
     meta.pixar_sr = {}
     meta.obs = {}
 
-    # print(SUBPXPTS)
     for i in range(NHASH_unique):
         ww = HASH == HASH_unique[i]
 
@@ -555,8 +554,6 @@ def sort_data_files(pid, sci_obs, ref_obs, outdir, expid_sci='03106',
                             os.symlink(file_path_ref, file_link_path)
     print(f"Sorting complete for {pid} {coron_mask} {filter}")
 
-
-
 def open_new_log_file(fits_file, output_dir, stage_str=None):
     """Create and open a new log file
     
@@ -604,6 +601,28 @@ def close_log_file(logger, file_handler):
     logger.removeHandler(file_handler)
     file_handler.close()
 
+def save_fitpsf_images(odir, fitpsf):
+
+    # create best fit FM
+    dx = fitpsf.fit_x.bestfit - fitpsf.data_stamp_x_center
+    dy = fitpsf.fit_y.bestfit - fitpsf.data_stamp_y_center
+
+    fm_bestfit = fitpsf.fit_flux.bestfit * sinterp.shift(fitpsf.fm_stamp, [dy, dx])
+    if fitpsf.padding > 0:
+        fm_bestfit = fm_bestfit[fitpsf.padding:-fitpsf.padding, fitpsf.padding:-fitpsf.padding]
+
+    # make residual map
+    residual_map = fitpsf.data_stamp - fm_bestfit
+
+    # Create FITS
+    pri = pyfits.PrimaryHDU()
+    sci = pyfits.ImageHDU(fitpsf.data_stamp, name='SCI')
+    mod = pyfits.ImageHDU(fm_bestfit, name='MOD')
+    res = pyfits.ImageHDU(residual_map, name='RES')
+
+    hdul = pyfits.HDUList([pri,sci,res,mod])
+    hdul.writeto(odir, overwrite=True)
+
 def expand_path(path_string):
     """Expand environment variables or user home directories in a path specification
 
@@ -614,3 +633,4 @@ def expand_path(path_string):
 
     """
     return os.path.expanduser(os.path.expandvars(path_string))
+

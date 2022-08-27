@@ -1,10 +1,13 @@
 import glob, os
 
 import matplotlib
-from matplotlib.ticker import MultipleLocator
+from matplotlib.ticker import MultipleLocator, MaxNLocator
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gs
+import matplotlib.patheffects as patheffects
+from matplotlib.patches import Rectangle
 from matplotlib import font_manager
+import scipy.ndimage as ndi
 
 import numpy as np
 from astropy.io import fits
@@ -139,6 +142,8 @@ def plot_injected_locs(meta, data, transmission, seps, pas, pxsc=None, savefile=
     ax[0].set_title('KLIP-subtracted')
 
     p1 = ax[1].imshow(transmission, origin='lower', cmap='viridis', vmin=0., vmax=1., extent=extent_tr)
+    ax[1].text(0.5, 0.9, 'THIS PLOT IS WRONG', fontsize=16, transform=plt.gca().transAxes, 
+                c='k', fontweight='bold', ha='center', va='center')
     c1 = plt.colorbar(p1, ax=ax[1])
     c1.set_label('Transmission', rotation=270, labelpad=20)
     for i in range(len(meta.ra_off)):
@@ -258,7 +263,9 @@ def plot_chains(chain, savefile):
 
 def plot_subimages(imgdirs, subdirs, filts, submodes, numKL, 
                    window_size=2.5, cmaps_list=['viridis'],
-                   imgVmin=[-40], imgVmax=[40], subVmin=[-10], subVmax=[10]):
+                   imgVmin=[-40], imgVmax=[40], subVmin=[-10], subVmax=[10],
+                   labelpos=[0.04, 0.05], imtext_col='w', showKL=True, useticklabels=True, cbar_textoff=1,
+                   hspace=0.05, wspace=0.05):
     '''
     Create a "publication ready" plot of the coronagraphic images, alongside
     the PSF subtracted images. A grid of images will be made. Rows will correspond to 
@@ -297,6 +304,10 @@ def plot_subimages(imgdirs, subdirs, filts, submodes, numKL,
     subVmax : list
         a list of the max values for the the subtracted image cmaps for each filter. 
         if len(imgVmin)==1 the same min value will be used for each filter.
+    labelpos: list
+        Position of the [RA, Dec] axis labels (figure coords)
+    imtext_col: str
+        Color of any text / arrows that go on top of the images
     '''
 
     # Get the files we care about
@@ -336,18 +347,18 @@ def plot_subimages(imgdirs, subdirs, filts, submodes, numKL,
         if any(filt in subfile for filt in filts):
             true_subfiles.append(subfile)
 
-
     #read the subtracted images, store relevant info
     sub_dict = {}
     for flt in filts:
         for fn in true_subfiles:
             if flt in fn:
+                print(flt)
                 with fits.open(fn) as hdul:
                     imgcube = hdul[0].data
                     psfparam = hdul[0].header['PSFPARAM']
                     center_pix = (int(np.rint(hdul[0].header['PSFCENTY'])), 
                                   int(np.rint(hdul[0].header['PSFCENTX'])))
-                mode = psfparam.split('mode=')[-1].split(',')[0]#ADI/RDI/ADI+RDI
+                mode = psfparam.split('mode=')[-1].split(',')[0].replace("'", '')#ADI/RDI/ADI+RDI
                 if '+' in mode:
                     reverse_mode = mode.split('+')[-1] + '+' + mode.split('+')[0]
                 else:
@@ -370,18 +381,21 @@ def plot_subimages(imgdirs, subdirs, filts, submodes, numKL,
                                                        'filename':fn, 'center_pix':center_pix}
 
     #miri centers from pyklip v2.6 (y, x)
-    miri_img_centers = {'F1065C': (int(np.rint(111.89)), int(np.rint(120.81))),
-                        'F1140C': (int(np.rint(112.2)) , int(np.rint(119.99))) ,
-                        'F1550C': (int(np.rint(113.33)), int(np.rint(119.84))),  }
+    miri_img_centers = {'F1065C': (int(np.rint(111.89-1)), int(np.rint(120.81-1))),
+                        'F1140C': (int(np.rint(112.2-1)) , int(np.rint(119.99-1))) ,
+                        'F1550C': (int(np.rint(113.33-1)), int(np.rint(119.84-1))),  }
     pltscale = {'NIRCAM': 0.063, 'MIRI': 0.11}
     plot_extent = (-1*window_size/2, window_size/2, -1*window_size/2, window_size/2)
 
     ydim = len(filts)
     xdim = len(submodes)*len(numKL) + 1
 
+    wratios = [1]*xdim
+    wratios.append(0.015*xdim) 
+
     # Start making the figure
     fig = plt.figure(figsize=[xdim*3, ydim*3])
-    grid = gs.GridSpec(ydim, xdim, figure=fig)
+    grid = gs.GridSpec(ydim, xdim+1, figure=fig, wspace=wspace, hspace=hspace, width_ratios=wratios, left=0.06, right=0.94, bottom=0.08, top=0.93)
 
     if len(cmaps_list) == 1:
         cmaps_list *= len(filts)
@@ -399,32 +413,83 @@ def plot_subimages(imgdirs, subdirs, filts, submodes, numKL,
         instrument = prihdr['INSTRUME']
         ax = plt.subplot(grid[row, 0])
         with fits.open(true_imgfiles[flt]) as hdul:
-            img = hdul['SCI'].data[-1]
+            img = np.nanmedian(hdul['SCI'].data, axis=0)
             hdr = hdul['SCI'].header
+            roll = hdr['PA_V3']
+
+        # get center information
         if instrument == 'NIRCAM':
-            center_pix = (int(np.rint(hdr['CRPIX2'])), 
-                          int(np.rint(hdr['CRPIX1'])))
+            center_pix = (int(np.rint(hdr['CRPIX2']-1)), 
+                          int(np.rint(hdr['CRPIX1']-1)))
             window_pix = int(np.rint(window_size / pltscale['NIRCAM'] / 2))
+            offset = (window_pix - window_size / 0.063 / 2) *0.063
         else:
             center_pix = miri_img_centers[flt]
             window_pix = int(np.rint(window_size / pltscale['MIRI'] / 2))
-        print(center_pix)
-        focus_slices_img = (slice(center_pix[0] - window_pix, center_pix[0] + window_pix),
-                            slice(center_pix[1] - window_pix, center_pix[1] + window_pix))
+            offset = (window_pix - window_size / 0.11 / 2) *0.11
 
-        ax.imshow(img[focus_slices_img], extent=plot_extent, cmap=cmaps_list[row], vmin=imgVmin[row], vmax=imgVmax[row])
-        ax.set_ylabel(prihdr['FILTER']+'\nDec offset [arcsec]', fontproperties=compModern(14))
+        # Rotate unsubtracted image so North is up
+        x = np.linspace(0, img.shape[0], img.shape[0])
+        y = np.linspace(0, img.shape[1], img.shape[1])
+        xmesh, ymesh = np.meshgrid(x, y)
+
+        old_center = [img.shape[1]/2, img.shape[0]/2] #y, x
+        xmesh += center_pix[1]
+        ymesh += center_pix[0]
+        xmesh -= old_center[1]
+        ymesh -= old_center[0]
+
+        new_data = ndi.map_coordinates(img, [ymesh, xmesh])
+
+        rot_img = ndi.rotate(new_data, -roll)
+        rotshape = rot_img.shape
+        focus_slices_img = (slice(int(rotshape[0]/2) - window_pix, int(rotshape[0]/2) + window_pix),
+                            slice(int(rotshape[1]/2) - window_pix, int(rotshape[1]/2) + window_pix))
+
+        ax.imshow(rot_img[focus_slices_img], extent=plot_extent, cmap=cmaps_list[row], vmin=imgVmin[row], vmax=imgVmax[row])
+
+        if row == 0:
+            unsub = ax.text(0.95, 0.88, 'Unsub', fontsize=16, transform=plt.gca().transAxes, c='w', fontweight='bold', ha='right')
+
+        # Plot N-E arrows
+        ar_n = ax.arrow(0.9, 0.096, 0.0, 0.1, transform=plt.gca().transAxes, color=imtext_col, width=0.01, \
+                head_width=0.04, head_length=0.04, path_effects=[patheffects.Stroke(linewidth=3, foreground='k'), patheffects.Normal()])
+        n = ax.text(0.9, 0.29, 'N', fontsize=16, transform=plt.gca().transAxes, c=imtext_col, \
+                va='center', ha='center', fontweight='bold')
+        ar_e = ax.arrow(0.905, 0.1, -0.1, 0.0, transform=plt.gca().transAxes, color=imtext_col, width=0.01, \
+                head_width=0.04, head_length=0.04, path_effects=[patheffects.Stroke(linewidth=3, foreground='k'), patheffects.Normal()])
+        e = ax.text(0.71, 0.1, 'E', fontsize=16, transform=plt.gca().transAxes, c=imtext_col, \
+                va='center', ha='center', fontweight='bold')
+        # Plot 1" Line
+        arc1text = ax.text(-int(window_size/2)+0.5, -int(window_size/2)+(window_size/75), '1"', fontsize=16, c=imtext_col, \
+                va='bottom', ha='center', fontweight='bold')
+        ax.add_patch(Rectangle((-int(window_size/2), -int(window_size/2)-0.075), 1, 0.15,
+                      alpha=1, facecolor='w', edgecolor='k', linewidth=1))
+
+        #ax.set_ylabel(prihdr['FILTER']+'\n\n', fontsize=18)#, fontproperties=compModern(14))
+        # Draw lines around image text etc
+        ftext = ax.text(0.05, 0.88, prihdr['FILTER'], fontsize=16, transform=plt.gca().transAxes, c='w', fontweight='bold')
+        for ti, temp in enumerate([unsub, n, e, ftext, arc1text]):
+            temp = temp.set_path_effects([patheffects.withStroke(linewidth=2, foreground='k')])
+        # Draw another arrow on top to mask the line
+        ax.arrow(0.9, 0.096, 0.0, 0.1, transform=plt.gca().transAxes, color=imtext_col, width=0.01, \
+                head_width=0.04, head_length=0.04)
         #ax.xaxis.set_major_locator(MaxNLocator(nbins=7, min_n_ticks=3, prune='both'))
         ax.yaxis.set_major_locator(MultipleLocator(1))
         ax.xaxis.set_major_locator(MultipleLocator(1))
         if row != (len(filts)-1):
             plt.setp(ax.get_xticklabels(), visible=False)
-        else:
-            ax.set_xlabel('RA offset [arcsec]', fontproperties=compModern(14))
-            tickFont(ax, 'x', fontproperties=compModern(10))
-        tickFont(ax, 'y', fontproperties=compModern(10))
-        ax.tick_params(which='major', length=4)
-        ax.tick_params(which='minor', length=2)
+        if useticklabels == False:
+            plt.setp(ax.get_xticklabels(), visible=False)
+            plt.setp(ax.get_yticklabels(), visible=False)
+        # else:
+        #     ax.set_xlabel('RA Offset (")')#, fontproperties=compModern(14))
+        #     tickFont(ax, 'x', fontproperties=compModern(10))
+        # tickFont(ax, 'y', fontproperties=compModern(10))
+        ax.tick_params(which='major', length=4, color=imtext_col)
+        ax.tick_params(which='minor', length=0, color=imtext_col)
+        for axis in ['top','bottom','left','right']:
+            ax.spines[axis].set_linewidth(2)
 
         for mm, mde in enumerate(submodes):
             focus_slices_sub = (slice(sub_dict[flt][mde]['center_pix'][0] - window_pix, 
@@ -432,27 +497,60 @@ def plot_subimages(imgdirs, subdirs, filts, submodes, numKL,
                                 slice(sub_dict[flt][mde]['center_pix'][1] - window_pix, 
                                       sub_dict[flt][mde]['center_pix'][1] + window_pix))
             for kk, nkl in enumerate(numKL):
+                if nkl == 'max':
+                    nkl = sub_dict[flt][mde]['numbasis'][-1]
                 column = 1 + (len(numKL)*mm + kk)
                 ax = plt.subplot(grid[row, column])
-                ax.imshow(sub_dict[flt][mde]['image'][sub_dict[flt][mde]['numbasis'].index(nkl),:,:][focus_slices_sub], 
+                plotimg = sub_dict[flt][mde]['image'][sub_dict[flt][mde]['numbasis'].index(nkl),:,:][focus_slices_sub]
+                plotimg[np.where(np.isnan(plotimg))] = 0
+                subimg = ax.imshow(plotimg, 
                           extent=plot_extent, cmap=cmaps_list[row], vmin=subVmin[row], vmax=subVmax[row])
+                star = ax.scatter(0.+offset, 0.+offset, marker='*', color='w', s=100)
+                star.set_path_effects([patheffects.withStroke(linewidth=3, foreground='k')])
                 ax.xaxis.set_major_locator(MultipleLocator(1))
                 ax.yaxis.set_major_locator(MultipleLocator(1))
                 plt.setp(ax.get_yticklabels(), visible=False)
-                ax.tick_params(which='major', length=4)
-                ax.tick_params(which='minor', length=2)
+                ax.tick_params(which='major', length=4, color=imtext_col)
+                ax.tick_params(which='minor', length=0, color=imtext_col)        
+                for axis in ['top','bottom','left','right']:
+                    ax.spines[axis].set_linewidth(2)
                 if row != (len(filts)-1):
                     plt.setp(ax.get_xticklabels(), visible=False)
-                else:
-                    #ax.xaxis.set_major_locator(MaxNLocator(nbins=7, min_n_ticks=3, prune='both'))
-                    tickFont(ax, 'x', fontproperties=compModern(10))
-                    ax.set_xlabel('RA offset [arcsec]', fontproperties=compModern(14))
+                if useticklabels == False:
+                    plt.setp(ax.get_xticklabels(), visible=False)
+                    plt.setp(ax.get_yticklabels(), visible=False)
+                # else:
+                #     #ax.xaxis.set_major_locator(MaxNLocator(nbins=7, min_n_ticks=3, prune='both'))
+                #     #tickFont(ax, 'x', fontproperties=compModern(10))
+                #     ax.set_x label('RA Offset (")')#, fontproperties=compModern(14))
                 if row == 0:
-                    ax.set_title('{:s} {:d} modes'.format(mde, nkl), fontproperties=compModern(16))
+                    if showKL:
+                        ax.set_title('{:s}, KL={:d}'.format(mde, nkl), fontweight='bold')#, fontproperties=compModern(16))
+                    else:
+                        temp = ax.text(0.95, 0.88, mde, fontsize=16, transform=plt.gca().transAxes, c='w', fontweight='bold', ha='right')
+                        temp.set_path_effects([patheffects.withStroke(linewidth=2, foreground='k')])
+
+
+        # Plot the scale bar
+        cax = plt.subplot(grid[row,-1])
+        cb = plt.colorbar(mappable=subimg, cax=cax)
+        cb.outline.set_linewidth(2)
+        cax.tick_params(which='both', color='k', labelsize=14, width=2, direction='out')
+        for axis in ['top','bottom','left','right']:
+                cax.spines[axis].set_linewidth(2)
+        if flt != 'F1550C':
+            cax.yaxis.set_major_locator(MaxNLocator(integer=True))
+
+    # Add label for color bars
+    fig.text(cbar_textoff, 0.5, "Counts (MJy/sr)", rotation=270, va='center', fontsize=18)
+
+    if useticklabels != False:
+        fig.text(0.5, labelpos[0], 'RA Offset (")', ha='center', fontsize=18)
+        fig.text(labelpos[1], 0.5, 'Dec Offset (")', va='center', rotation='vertical', fontsize=18)
     fig.tight_layout()
     fig.tight_layout()
     fig.tight_layout()
-    plt.show()
+    #plt.show()
     return fig
 
 
