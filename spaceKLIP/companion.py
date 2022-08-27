@@ -222,30 +222,20 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                     # Negative sign on ra as webbpsf_ext expects in x,y space
                     offsetpsf = offsetpsf_func.gen_psf([-meta.ra_off[j]/1e3,meta.de_off[j]/1e3], do_shift=False, quick=False)
 
-                #offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
-                
-                # kwd
+                    # TODO note that adding offsetpsf_func_input as an argument should be significantly faster, 
+                    # but currently does not work with parallelization for some reason (works if fm.py debug = True)
+                    field_dep_corr = partial(utils.field_dependent_correction, meta=meta)#, offsetpsf_func_input = offsetpsf_func) 
+
                 if meta.offpsf == 'webbpsf':
                     # Generate PSF for initial guess, if very different this could be garbage
                     # Negative sign on ra as webbpsf_ext expects in x,y space
                     offsetpsf = offsetpsf_func.gen_psf([-meta.ra_off[j]/1e3,meta.de_off[j]/1e3], do_shift=False, quick=False)
 
-                    # kwd - make a temporary placeholder that should in principle produce a pos-dep psf
-                    # sx = offsetpsf.shape[1]
-                    # sy = offsetpsf.shape[0]           
-                    # xx = np.arange(sx)-sx//2-(int(guess_dx)+(guess_dx-int(guess_dx))) # just make these the guess
-                    # yy = np.arange(sy)-sy//2+(int(guess_dy)-(guess_dy-int(guess_dy)))
-                    # stamp_dx, stamp_dy = np.meshgrid(xx, yy)
-                    # offsetpsf = utils.field_dependent_correction(offsetpsf, stamp_dx, stamp_dy, meta)  
-
-                    print("Using the partial() function with a slightly different approach -- will it break?")
                     field_dep_corr = partial(utils.field_dependent_correction, meta=meta) 
 
                 
                 offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
-                print("maximum! ", offsetpsf.max())
-                
-                                  
+            
 
                 if meta.blur_images != False:
                     offsetpsf = gaussian_filter(offsetpsf, meta.blur_images)               
@@ -342,7 +332,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                     stamp = ndimage.shift(offsetpsf, (shy, shx), mode='constant', cval=0.)
 
                     if meta.offpsf == 'webbpsf':
-                        # Need to multiply offaxis by coronagraph transmission
+                        # Generate a position-dependent PSF from within field_dependent_correction (accounts for transmission)
                         xx = np.arange(sx)-sx//2-(int(guess_dx)+(fm_centx-int(fm_centx)))
                         yy = np.arange(sy)-sy//2+(int(guess_dy)-(fm_centy-int(fm_centy)))
                         stamp_dx, stamp_dy = np.meshgrid(xx, yy)
