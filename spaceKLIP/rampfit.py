@@ -230,12 +230,17 @@ class Coron1Pipeline(Detector1Pipeline):
         nupper = self.nrow_ref if nupper is None else nupper
         nleft  = self.ncol_ref if nleft  is None else nleft
         nright = self.ncol_ref if nright is None else nright
+        
+        nroff = self.nrow_off
+        nupoff = -nroff if nroff != 0 else None
 
         # Update pixel DQ mask to manually set reference pixels
         log.info(f'Flagging [{nlower}, {nupper}] references rows at [bottom, top] of array')
         log.info(f'Flagging [{nleft}, {nright}] references rows at [left, right] of array')
-        input.pixeldq[0:nlower,:] = input.pixeldq[0:nlower,:] | dqflags.pixel['REFERENCE_PIXEL']
-        input.pixeldq[-nupper:,:] = input.pixeldq[-nupper:,:] | dqflags.pixel['REFERENCE_PIXEL']
+        input.pixeldq[nroff:nroff+nlower,:] = input.pixeldq[nroff:nroff+nlower,:] \
+                                                | dqflags.pixel['REFERENCE_PIXEL']
+        input.pixeldq[-nupper-nroff:nupoff,:] = input.pixeldq[-nupper-nroff:nupoff,:] \
+                                                | dqflags.pixel['REFERENCE_PIXEL']
         input.pixeldq[:,0:nleft]  = input.pixeldq[:,0:nleft]  | dqflags.pixel['REFERENCE_PIXEL']
         input.pixeldq[:,-nright:] = input.pixeldq[:,-nright:] | dqflags.pixel['REFERENCE_PIXEL']
 
@@ -251,8 +256,10 @@ class Coron1Pipeline(Detector1Pipeline):
 
         # Return pixel DQ back to original using bitwise AND of inverted flag
         log.info(f'Removing reference pixel flags')
-        res.pixeldq[0:nlower,:] = res.pixeldq[0:nlower,:] & ~dqflags.pixel['REFERENCE_PIXEL']
-        res.pixeldq[-nupper:,:] = res.pixeldq[-nupper:,:] & ~dqflags.pixel['REFERENCE_PIXEL']
+        res.pixeldq[nroff:nroff+nlower,:] = res.pixeldq[nroff:nroff+nlower,:] \
+                                            & ~dqflags.pixel['REFERENCE_PIXEL']
+        res.pixeldq[-nupper-nroff:nupoff,:] = res.pixeldq[-nupper-nroff:nupoff,:] \
+                                            & ~dqflags.pixel['REFERENCE_PIXEL']
         res.pixeldq[:,0:nleft]  = res.pixeldq[:,0:nleft]  & ~dqflags.pixel['REFERENCE_PIXEL']
         res.pixeldq[:,-nright:] = res.pixeldq[:,-nright:] & ~dqflags.pixel['REFERENCE_PIXEL']
         
@@ -345,12 +352,16 @@ def run_ramp_fitting(meta, idir, osubdir):
             pipeline.ramp_fit.maximum_cores = meta.ramp_fit_max_cores
         if hasattr(meta, 'nrow_ref'):
             pipeline.nrow_ref = meta.nrow_ref
+        if hasattr(meta, 'nrow_off'):
+            pipeline.nrow_off = meta.nrow_off
+        else:
+            pipeline.nrow_off = 0
         if hasattr(meta, 'ncol_ref'):
             pipeline.ncol_ref = meta.ncol_ref
         if hasattr(meta, 'grow_diagonal'):
             pipeline.nrow_ref = meta.grow_diagonal
         if hasattr(meta, 'sat_boundary'):
-            pipeline.saturation.n_pix_grow_sat
+            pipeline.saturation.n_pix_grow_sat = meta.sat_boundary
 
 
         # Run pipeline, raise exception on error, and close log file handler

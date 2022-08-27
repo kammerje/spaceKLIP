@@ -1,7 +1,7 @@
 import glob, os
 
 import matplotlib
-from matplotlib.ticker import MultipleLocator
+from matplotlib.ticker import MultipleLocator, MaxNLocator
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gs
 import matplotlib.patheffects as patheffects
@@ -142,6 +142,8 @@ def plot_injected_locs(meta, data, transmission, seps, pas, pxsc=None, savefile=
     ax[0].set_title('KLIP-subtracted')
 
     p1 = ax[1].imshow(transmission, origin='lower', cmap='viridis', vmin=0., vmax=1., extent=extent_tr)
+    ax[1].text(0.5, 0.9, 'THIS PLOT IS WRONG', fontsize=16, transform=plt.gca().transAxes, 
+                c='k', fontweight='bold', ha='center', va='center')
     c1 = plt.colorbar(p1, ax=ax[1])
     c1.set_label('Transmission', rotation=270, labelpad=20)
     for i in range(len(meta.ra_off)):
@@ -262,7 +264,8 @@ def plot_chains(chain, savefile):
 def plot_subimages(imgdirs, subdirs, filts, submodes, numKL, 
                    window_size=2.5, cmaps_list=['viridis'],
                    imgVmin=[-40], imgVmax=[40], subVmin=[-10], subVmax=[10],
-                   labelpos=[0.04, 0.05], imtext_col='w', showKL=True, useticklabels=True):
+                   labelpos=[0.04, 0.05], imtext_col='w', showKL=True, useticklabels=True, cbar_textoff=1,
+                   hspace=0.05, wspace=0.05):
     '''
     Create a "publication ready" plot of the coronagraphic images, alongside
     the PSF subtracted images. A grid of images will be made. Rows will correspond to 
@@ -355,7 +358,7 @@ def plot_subimages(imgdirs, subdirs, filts, submodes, numKL,
                     psfparam = hdul[0].header['PSFPARAM']
                     center_pix = (int(np.rint(hdul[0].header['PSFCENTY'])), 
                                   int(np.rint(hdul[0].header['PSFCENTX'])))
-                mode = psfparam.split('mode=')[-1].split(',')[0]#ADI/RDI/ADI+RDI
+                mode = psfparam.split('mode=')[-1].split(',')[0].replace("'", '')#ADI/RDI/ADI+RDI
                 if '+' in mode:
                     reverse_mode = mode.split('+')[-1] + '+' + mode.split('+')[0]
                 else:
@@ -387,9 +390,12 @@ def plot_subimages(imgdirs, subdirs, filts, submodes, numKL,
     ydim = len(filts)
     xdim = len(submodes)*len(numKL) + 1
 
+    wratios = [1]*xdim
+    wratios.append(0.015*xdim) 
+
     # Start making the figure
     fig = plt.figure(figsize=[xdim*3, ydim*3])
-    grid = gs.GridSpec(ydim, xdim, figure=fig, wspace=0.05, hspace=0.05)
+    grid = gs.GridSpec(ydim, xdim+1, figure=fig, wspace=wspace, hspace=hspace, width_ratios=wratios, left=0.06, right=0.94, bottom=0.08, top=0.93)
 
     if len(cmaps_list) == 1:
         cmaps_list *= len(filts)
@@ -416,9 +422,11 @@ def plot_subimages(imgdirs, subdirs, filts, submodes, numKL,
             center_pix = (int(np.rint(hdr['CRPIX2']-1)), 
                           int(np.rint(hdr['CRPIX1']-1)))
             window_pix = int(np.rint(window_size / pltscale['NIRCAM'] / 2))
+            offset = (window_pix - window_size / 0.063 / 2) *0.063
         else:
             center_pix = miri_img_centers[flt]
             window_pix = int(np.rint(window_size / pltscale['MIRI'] / 2))
+            offset = (window_pix - window_size / 0.11 / 2) *0.11
 
         # Rotate unsubtracted image so North is up
         x = np.linspace(0, img.shape[0], img.shape[0])
@@ -489,10 +497,16 @@ def plot_subimages(imgdirs, subdirs, filts, submodes, numKL,
                                 slice(sub_dict[flt][mde]['center_pix'][1] - window_pix, 
                                       sub_dict[flt][mde]['center_pix'][1] + window_pix))
             for kk, nkl in enumerate(numKL):
+                if nkl == 'max':
+                    nkl = sub_dict[flt][mde]['numbasis'][-1]
                 column = 1 + (len(numKL)*mm + kk)
                 ax = plt.subplot(grid[row, column])
-                subimg = ax.imshow(sub_dict[flt][mde]['image'][sub_dict[flt][mde]['numbasis'].index(nkl),:,:][focus_slices_sub], 
+                plotimg = sub_dict[flt][mde]['image'][sub_dict[flt][mde]['numbasis'].index(nkl),:,:][focus_slices_sub]
+                plotimg[np.where(np.isnan(plotimg))] = 0
+                subimg = ax.imshow(plotimg, 
                           extent=plot_extent, cmap=cmaps_list[row], vmin=subVmin[row], vmax=subVmax[row])
+                star = ax.scatter(0.+offset, 0.+offset, marker='*', color='w', s=100)
+                star.set_path_effects([patheffects.withStroke(linewidth=3, foreground='k')])
                 ax.xaxis.set_major_locator(MultipleLocator(1))
                 ax.yaxis.set_major_locator(MultipleLocator(1))
                 plt.setp(ax.get_yticklabels(), visible=False)
@@ -515,6 +529,20 @@ def plot_subimages(imgdirs, subdirs, filts, submodes, numKL,
                     else:
                         temp = ax.text(0.95, 0.88, mde, fontsize=16, transform=plt.gca().transAxes, c='w', fontweight='bold', ha='right')
                         temp.set_path_effects([patheffects.withStroke(linewidth=2, foreground='k')])
+
+
+        # Plot the scale bar
+        cax = plt.subplot(grid[row,-1])
+        cb = plt.colorbar(mappable=subimg, cax=cax)
+        cb.outline.set_linewidth(2)
+        cax.tick_params(which='both', color='k', labelsize=14, width=2, direction='out')
+        for axis in ['top','bottom','left','right']:
+                cax.spines[axis].set_linewidth(2)
+        if flt != 'F1550C':
+            cax.yaxis.set_major_locator(MaxNLocator(integer=True))
+
+    # Add label for color bars
+    fig.text(cbar_textoff, 0.5, "Counts (MJy/sr)", rotation=270, va='center', fontsize=18)
 
     if useticklabels != False:
         fig.text(0.5, labelpos[0], 'RA Offset (")', ha='center', fontsize=18)
