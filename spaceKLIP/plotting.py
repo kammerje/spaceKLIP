@@ -448,8 +448,8 @@ def plot_subimages(imgdirs, subdirs, filts, submodes, numKL,
 
         ax.imshow(rot_img[focus_slices_img], extent=plot_extent, cmap=cmaps_list[row], vmin=imgVmin[row], vmax=imgVmax[row])
 
-        # if row == 0:
-        #     unsub = ax.text(0.95, 0.88, 'Unsub', fontsize=16, transform=plt.gca().transAxes, c='w', fontweight='bold', ha='right')
+        if row == 0:
+            unsub = ax.text(0.95, 0.88, 'Unsub', fontsize=16, transform=plt.gca().transAxes, c='w', fontweight='bold', ha='right')
 
         # Plot N-E arrows
         ar_n = ax.arrow(0.9, 0.096, 0.0, 0.1, transform=plt.gca().transAxes, color=imtext_col, width=0.01, \
@@ -466,16 +466,10 @@ def plot_subimages(imgdirs, subdirs, filts, submodes, numKL,
         ax.add_patch(Rectangle((-int(window_size/2), -int(window_size/2)-0.075), 1, 0.15,
                       alpha=1, facecolor='w', edgecolor='k', linewidth=1))
 
-        #ax.set_ylabel(prihdr['FILTER']+'\n\n', fontsize=18)#, fontproperties=compModern(14))
-        # Draw lines around image text etc
-        #ftext = ax.text(0.05, 0.88, prihdr['FILTER'], fontsize=16, transform=plt.gca().transAxes, c='w', fontweight='bold')
-        if prihdr['FILTER'] == 'F1140C':
-            txt = 'MIRI'
-        elif prihdr['FILTER'] == 'F356W':
-            txt = 'NIRCam'
-        ftext = ax.text(0.05, 0.88, txt, fontsize=16, transform=plt.gca().transAxes, c='w', fontweight='bold')
-        #for ti, temp in enumerate([unsub, n, e, ftext, arc1text]):
-        for ti, temp in enumerate([ n, e, ftext, arc1text]):
+        ax.set_ylabel(prihdr['FILTER']+'\n\n', fontsize=18)#, fontproperties=compModern(14))
+        Draw lines around image text etc
+        ftext = ax.text(0.05, 0.88, prihdr['FILTER'], fontsize=16, transform=plt.gca().transAxes, c='w', fontweight='bold')
+        for ti, temp in enumerate([unsub, n, e, ftext, arc1text]):
             temp = temp.set_path_effects([patheffects.withStroke(linewidth=2, foreground='k')])
         # Draw another arrow on top to mask the line
         ax.arrow(0.9, 0.096, 0.0, 0.1, transform=plt.gca().transAxes, color=imtext_col, width=0.01, \
@@ -521,35 +515,35 @@ def plot_subimages(imgdirs, subdirs, filts, submodes, numKL,
 
 
                 # # Plot N-E arrows
-                # ar_n = ax.arrow(0.9, 0.096, 0.0, 0.1, transform=plt.gca().transAxes, color=imtext_col, width=0.01, \
-                #         head_width=0.04, head_length=0.04, path_effects=[patheffects.Stroke(linewidth=3, foreground='k'), patheffects.Normal()])
-                # n = ax.text(0.9, 0.29, 'N', fontsize=16, transform=plt.gca().transAxes, c=imtext_col, \
-                #         va='center', ha='center', fontweight='bold')
-                # ar_e = ax.arrow(0.905, 0.1, -0.1, 0.0, transform=plt.gca().transAxes, color=imtext_col, width=0.01, \
-                #         head_width=0.04, head_length=0.04, path_effects=[patheffects.Stroke(linewidth=3, foreground='k'), patheffects.Normal()])
-                # e = ax.text(0.71, 0.1, 'E', fontsize=16, transform=plt.gca().transAxes, c=imtext_col, \
-                #         va='center', ha='center', fontweight='bold')
-                # # Plot 1" Line
-                # arc1text = ax.text(-int(window_size/2)+0.5, -int(window_size/2)+(window_size/75), '1"', fontsize=16, c=imtext_col, \
-                #         va='bottom', ha='center', fontweight='bold')
-                # ax.add_patch(Rectangle((-int(window_size/2), -int(window_size/2)-0.075), 1, 0.15,
-                #               alpha=1, facecolor='w', edgecolor='k', linewidth=1))
+                ar_n = ax.arrow(0.9, 0.096, 0.0, 0.1, transform=plt.gca().transAxes, color=imtext_col, width=0.01, \
+                        head_width=0.04, head_length=0.04, path_effects=[patheffects.Stroke(linewidth=3, foreground='k'), patheffects.Normal()])
+                n = ax.text(0.9, 0.29, 'N', fontsize=16, transform=plt.gca().transAxes, c=imtext_col, \
+                        va='center', ha='center', fontweight='bold')
+                ar_e = ax.arrow(0.905, 0.1, -0.1, 0.0, transform=plt.gca().transAxes, color=imtext_col, width=0.01, \
+                        head_width=0.04, head_length=0.04, path_effects=[patheffects.Stroke(linewidth=3, foreground='k'), patheffects.Normal()])
+                e = ax.text(0.71, 0.1, 'E', fontsize=16, transform=plt.gca().transAxes, c=imtext_col, \
+                        va='center', ha='center', fontweight='bold')
+                # Plot 1" Line
+                arc1text = ax.text(-int(window_size/2)+0.5, -int(window_size/2)+(window_size/75), '1"', fontsize=16, c=imtext_col, \
+                        va='bottom', ha='center', fontweight='bold')
+                ax.add_patch(Rectangle((-int(window_size/2), -int(window_size/2)-0.075), 1, 0.15,
+                              alpha=1, facecolor='w', edgecolor='k', linewidth=1))
 
-                #ax.set_ylabel(prihdr['FILTER']+'\n\n', fontsize=18)#, fontproperties=compModern(14))
-                # Draw lines around image text etc
-                #ftext = ax.text(0.05, 0.88, prihdr['FILTER'], fontsize=16, transform=plt.gca().transAxes, c='w', fontweight='bold')
-                # if prihdr['FILTER'] == 'F1140C':
-                #     txt = 'MIRI'
-                # elif prihdr['FILTER'] == 'F356W':
-                #     txt = 'NIRCam'
-                # ftext = ax.text(0.05, 0.88, txt, fontsize=16, transform=plt.gca().transAxes, c='w', fontweight='bold')
+                ax.set_ylabel(prihdr['FILTER']+'\n\n', fontsize=18)#, fontproperties=compModern(14))
+                Draw lines around image text etc
+                ftext = ax.text(0.05, 0.88, prihdr['FILTER'], fontsize=16, transform=plt.gca().transAxes, c='w', fontweight='bold')
+                if prihdr['FILTER'] == 'F1140C':
+                    txt = 'MIRI'
+                elif prihdr['FILTER'] == 'F356W':
+                    txt = 'NIRCam'
+                ftext = ax.text(0.05, 0.88, txt, fontsize=16, transform=plt.gca().transAxes, c='w', fontweight='bold')
 
-                #for ti, temp in enumerate([unsub, n, e, ftext, arc1text]):
-                # for ti, temp in enumerate([ n, e, ftext, arc1text]):
-                #     temp = temp.set_path_effects([patheffects.withStroke(linewidth=2, foreground='k')])
-                # # Draw another arrow on top to mask the line
-                # ax.arrow(0.9, 0.096, 0.0, 0.1, transform=plt.gca().transAxes, color=imtext_col, width=0.01, \
-                #         head_width=0.04, head_length=0.04)
+                for ti, temp in enumerate([unsub, n, e, ftext, arc1text]):
+                for ti, temp in enumerate([ n, e, ftext, arc1text]):
+                    temp = temp.set_path_effects([patheffects.withStroke(linewidth=2, foreground='k')])
+                # Draw another arrow on top to mask the line
+                ax.arrow(0.9, 0.096, 0.0, 0.1, transform=plt.gca().transAxes, color=imtext_col, width=0.01, \
+                        head_width=0.04, head_length=0.04)
 
                 for axis in ['top','bottom','left','right']:
                     ax.spines[axis].set_linewidth(2)
@@ -559,15 +553,15 @@ def plot_subimages(imgdirs, subdirs, filts, submodes, numKL,
                     plt.setp(ax.get_xticklabels(), visible=False)
                     plt.setp(ax.get_yticklabels(), visible=False)
                 # else:
-                #     #ax.xaxis.set_major_locator(MaxNLocator(nbins=7, min_n_ticks=3, prune='both'))
-                #     #tickFont(ax, 'x', fontproperties=compModern(10))
-                #     ax.set_x label('RA Offset (")')#, fontproperties=compModern(14))
+                    #ax.xaxis.set_major_locator(MaxNLocator(nbins=7, min_n_ticks=3, prune='both'))
+                    #tickFont(ax, 'x', fontproperties=compModern(10))
+                    # ax.set_x label('RA Offset (")')#, fontproperties=compModern(14))
                 if row == 0:
                     if showKL:
                         ax.set_title('{:s}, KL={:d}'.format(mde, nkl), fontweight='bold')#, fontproperties=compModern(16))
-                    # else:
-                    #     temp = ax.text(0.95, 0.88, mde, fontsize=16, transform=plt.gca().transAxes, c='w', fontweight='bold', ha='right')
-                    #     temp.set_path_effects([patheffects.withStroke(linewidth=2, foreground='k')])
+                    else:
+                        temp = ax.text(0.95, 0.88, mde, fontsize=16, transform=plt.gca().transAxes, c='w', fontweight='bold', ha='right')
+                        temp.set_path_effects([patheffects.withStroke(linewidth=2, foreground='k')])
 
 
         # Plot the scale bar
