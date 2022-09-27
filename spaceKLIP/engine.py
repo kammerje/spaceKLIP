@@ -4,6 +4,7 @@ from __future__ import division
 # =============================================================================
 
 import glob, os, re
+import json
 
 import astropy.io.fits as pyfits
 import matplotlib.pyplot as plt
@@ -20,6 +21,10 @@ from . import subtraction
 from . import contrast
 from . import companion
 
+# Define logging
+import logging
+log = logging.getLogger(__name__)
+log.setLevel(logging.INFO)
 
 # =============================================================================
 # MAIN
@@ -77,10 +82,16 @@ class Pipeline():
         for key in config:
             setattr(self.meta, key, config[key])
 
+        # For required path parameters, expand any environment variables or ~ for user home directory
+        for key in ['idir', 'odir', 'sdir']:
+            setattr(self.meta, key, io.expand_path(getattr(self.meta, key)))
+        if hasattr(self.meta, 'data_dir'):
+            setattr(self.meta, 'data_dir', io.expand_path(getattr(self.meta, 'data_dir')))
+
         # Assign run directories from output folder. These will be overwritten if subtraction if performed.
         if (self.meta.rundirs != None) or (len(self.meta.rundirs) == 0):
             if len(self.meta.rundirs) == 0:
-                print('WARNING: No run directory(ies) specified, looping over all run directories in output directory. Are you sure you want to do this?')
+                log.warning('No run directory(ies) specified, looping over all run directories in output directory. Are you sure you want to do this?')
                 self.meta.rundirs = [i+'/' for i in glob.glob(self.meta.odir+'*run*')]
             else:
                 self.meta.rundirs = [self.meta.odir+rdir.replace('/', '')+'/' for rdir in self.meta.rundirs]
@@ -90,7 +101,7 @@ class Pipeline():
 
 class JWST(Pipeline):
     """
-    JWST-specifc pipeline class.
+    JWST-specific pipeline class.
 
     """
 
@@ -119,8 +130,30 @@ class JWST(Pipeline):
 
         # Get the JWST-specific metadata.
         self.get_jwst_meta()
+        self.meta_checks()
 
         return None
+
+    def sort_files(self, **kwargs):
+        """Sort files into subdirectories like filter_mask (e.g., F300M_MASK335R)"""
+
+        idir = self.meta.idir[:-1] if self.meta.idir[-1]=='/' else self.meta.idir
+        outdir = os.path.dirname(idir)
+
+        if hasattr(self.meta, 'filter') and self.meta.filter.lower()!='none':
+            filter = self.meta.filter
+        else:
+            filter = None
+        if hasattr(self.meta, 'coron_mask') and self.meta.coron_mask.lower()!='none':
+            coron_mask = self.meta.coron_mask
+        else:
+            coron_mask = None
+
+        indir = None if self.meta.data_dir.lower()=='none' else self.meta.data_dir
+
+        io.sort_data_files(self.meta.pid, self.meta.sci_obs, self.meta.ref_obs, outdir, 
+                           indir=indir, expid_sci=self.meta.expid_sci, 
+                           filter=filter, coron_mask=coron_mask, **kwargs)
 
     def get_jwst_meta(self):
         """
@@ -142,27 +175,39 @@ class JWST(Pipeline):
         self.meta.offsetpsfdir = self.meta.ancildir+'offsetpsfs/'
 
         # Get the mean wavelengths and zero points of the NIRCam and the MIRI
-        # filters from the SVO Filter Profile Service. All filters are saved
-        # into the same dictionary. This works as long as the NIRCam and the
-        # MIRI filter names are distinct.
+        # filters. All filters are saved into the same dictionary. This works 
+        # as long as the NIRCam and the MIRI filter names are distinct.
         self.meta.wave = {}
         self.meta.weff = {}
         self.meta.F0 = {}
-        filter_list = SvoFps.get_filter_list(facility='JWST', instrument='NIRCAM')
-        for i in range(len(filter_list)):
-            name = filter_list['filterID'][i]
-            name = name[name.rfind('.')+1:]
-            self.meta.wave[name] = filter_list['WavelengthMean'][i]/1e4*1e-6 # m
-            self.meta.weff[name] = filter_list['WidthEff'][i]/1e4*1e-6 # m
-            self.meta.F0[name] = filter_list['ZeroPoint'][i] # Jy
-        filter_list = SvoFps.get_filter_list(facility='JWST', instrument='MIRI')
-        for i in range(len(filter_list)):
-            name = filter_list['filterID'][i]
-            name = name[name.rfind('.')+1:]
-            self.meta.wave[name] = filter_list['WavelengthMean'][i]/1e4*1e-6 # m
-            self.meta.weff[name] = filter_list['WidthEff'][i]/1e4*1e-6 # m
-            self.meta.F0[name] = filter_list['ZeroPoint'][i] # Jy
-        del filter_list
+        if hasattr(self.meta, 'use_svo'):
+            # From the SVO Filter Profile Service
+            if self.meta.use_svo == True:
+                filter_list = SvoFps.get_filter_list(facility='JWST', instrument='NIRCAM')
+                for i in range(len(filter_list)):
+                    name = filter_list['filterID'][i]
+                    name = name[name.rfind('.')+1:]
+                    self.meta.wave[name] = filter_list['WavelengthMean'][i]/1e4*1e-6 # m
+                    self.meta.weff[name] = filter_list['WidthEff'][i]/1e4*1e-6 # m
+                    self.meta.F0[name] = filter_list['ZeroPoint'][i] # Jy
+                filter_list = SvoFps.get_filter_list(facility='JWST', instrument='MIRI')
+                for i in range(len(filter_list)):
+                    name = filter_list['filterID'][i]
+                    name = name[name.rfind('.')+1:]
+                    self.meta.wave[name] = filter_list['WavelengthMean'][i]/1e4*1e-6 # m
+                    self.meta.weff[name] = filter_list['WidthEff'][i]/1e4*1e-6 # m
+                    self.meta.F0[name] = filter_list['ZeroPoint'][i] # Jy
+                del filter_list
+        else:
+            # From the file in the resources directory (more accurate than SVO)
+            filt_info_str = '/../resources/PCEs/filter_info.json'
+            filt_info_file = os.path.join(os.path.dirname(__file__) + filt_info_str)
+            with open(filt_info_file, 'r') as f:
+                filt_info = json.load(f)
+                for filt in list(filt_info.keys()):
+                    self.meta.wave[filt] = filt_info[filt]['WavelengthMean']/1e4*1e-6 # m
+                    self.meta.weff[filt] = filt_info[filt]['WidthEff']/1e4*1e-6 # m
+                    self.meta.F0[filt] = filt_info[filt]['ZeroPoint'] # Jy 
 
         # Get the PSF reference position with respect to the NRCA5_MASKLWB and
         # the NRCA4_MASKSWB subarrays, respectively, for each NIRCam filter,
@@ -173,6 +218,8 @@ class JWST(Pipeline):
         self.meta.offset_swb = {filt: self.get_bar_offset_from_siaf(filt, channel='SW')
                                 for filt in ['F182M', 'F187N', 'F200W', 'F210M', 'F212N', 'narrow']} # arcsec
         del self.siaf
+
+
 
         return None
 
@@ -207,6 +254,33 @@ class JWST(Pipeline):
         sign = np.sign(self.siaf.apertures[refapername].V2Ref-self.siaf.apertures[apername].V2Ref)
 
         return sign*offset_arcsec
+
+    def meta_checks(self):
+        """Check some consistencies in the meta file"""
+
+        meta = self.meta
+
+        # Check if outlier correction / cleaning requested
+        if hasattr(meta, 'outlier_corr') and ((meta.outlier_corr is not None) or (meta.outlier_corr.lower() != 'none')):
+            outlier_type = meta.outlier_corr
+        else:
+            outlier_type = None
+
+        # Was cleaning requested on existing cal data?
+        do_clean_only = do_clean = False
+        if hasattr(meta, 'outlier_only') and meta.outlier_only:
+            do_clean_only = True
+            do_clean = True  # Must be set to True
+            if outlier_type is None:
+                log.warning('Meta: outlier_only=True but outlier_corr not specified.')
+        if outlier_type is not None:
+            do_clean = True
+
+        if hasattr(meta, 'use_cleaned'):
+            if meta.use_cleaned and not do_clean:
+                log.warning('Meta: use_cleaned=True for KLIP subtraction, but no cleaning options specified.')
+            if not meta.use_cleaned and do_clean:
+                log.warning('Meta: Image cleaning will be performed, but use_cleaned=False for KLIP subtraction.')
 
     def run_all(self, skip_ramp=False, skip_imgproc=False, skip_sub=False,
                 skip_rawcon=False, skip_calcon=False, skip_comps=False):
@@ -251,11 +325,11 @@ class JWST(Pipeline):
 
         """
 
-        # Set the meta flag to True.
-        self.meta.done_rampfit = True
-
         # Run ramp fitting stage.
         ramp = rampfit.stsci_ramp_fitting(self.meta)
+
+        # Set the meta flag to True.
+        self.meta.done_rampfit = True
 
         return None
 
@@ -265,11 +339,11 @@ class JWST(Pipeline):
 
         """
 
-        # Set the meta flag to True.
-        self.meta.done_imgprocess = True
-
         # Run image processing stage.
         img = imgprocess.stsci_image_processing(self.meta)
+
+        # Set the meta flag to True.
+        self.meta.done_imgprocess = True
 
         return None
 
@@ -279,11 +353,11 @@ class JWST(Pipeline):
 
         """
 
-        # Set the meta flag to True.
-        self.meta.done_subtraction = True
-
         # Run KLIP subtraction stage.
         sub = subtraction.perform_subtraction(self.meta)
+
+        # Set the meta flag to True.
+        self.meta.done_subtraction = True
 
         return None
 
@@ -293,11 +367,11 @@ class JWST(Pipeline):
 
         """
 
-        # Set the meta flag to True.
-        self.meta.done_raw_contrast = True
-
         # Run raw contrast estimation stage.
         raw_contrast = contrast.raw_contrast_curve(self.meta)
+
+        # Set the meta flag to True.
+        self.meta.done_raw_contrast = True
 
         return None
 
@@ -307,11 +381,11 @@ class JWST(Pipeline):
 
         """
 
-        # Set the meta flag to True.
-        self.meta.done_cal_contrast = True
-
         # Run calibrated contrast estimation stage.
         cal_contrast = contrast.calibrated_contrast_curve(self.meta)
+
+        # Set the meta flag to True.
+        self.meta.done_cal_contrast = True
 
         return None
 
@@ -321,10 +395,10 @@ class JWST(Pipeline):
 
         """
 
-        # Set the meta flag to True.
-        self.meta.done_companion = True
-
         # Run companion property extraction stage.
         extract_comps = companion.extract_companions(self.meta)
+
+        # Set the meta flag to True.
+        self.meta.done_companion = True
 
         return None

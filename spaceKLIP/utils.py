@@ -13,6 +13,7 @@ import numpy as np
 
 import astropy.units as u
 
+from scipy.ndimage import gaussian_filter
 from scipy.interpolate import RegularGridInterpolator
 from scipy.ndimage import fourier_shift, rotate, shift
 from scipy.optimize import minimize
@@ -21,10 +22,11 @@ from synphot.models import Empirical1D
 from synphot.units import convert_flux
 
 import pyklip.instruments.JWST as JWST
-import webbpsf
-import webbpsf_ext
+import webbpsf, webbpsf_ext
+from webbpsf_ext import robust
 
 from jwst import datamodels
+from jwst.datamodels import dqflags
 from jwst.coron import AlignRefsStep
 
 from . import io
@@ -70,8 +72,8 @@ def fourier_imshift(image, shift, pad=False, cval=0.0):
         # Pad border with zeros
         if pad:
             xshift, yshift = shift
-            padx = np.abs(np.int(xshift)) + 5
-            pady = np.abs(np.int(yshift)) + 5
+            padx = np.abs(int(xshift)) + 5
+            pady = np.abs(int(yshift)) + 5
             pad_vals = ([pady]*2,[padx]*2)
             image = np.pad(image, pad_vals, 'constant', constant_values=cval)
         else:
@@ -83,7 +85,7 @@ def fourier_imshift(image, shift, pad=False, cval=0.0):
 
         # Remove padded border to return to original size
         offset = offset[pady:pady+ny, padx:padx+nx]
-    
+
     elif (image.ndim == 3):
         nslices = image.shape[0]
         shift = np.asanyarray(shift)[:, :2]
@@ -93,10 +95,10 @@ def fourier_imshift(image, shift, pad=False, cval=0.0):
         offset = np.empty_like(image, dtype=float)
         for k in range(nslices):
             offset[k] = fourier_imshift(image[k], shift[k], pad=pad, cval=cval)
-    
+
     else:
         raise ValueError(f'Input image must be either a 2D or a 3D array. Found {image.ndim} dimensions.')
-    
+
     return offset
 
 def shift_invpeak(shift, image):
@@ -214,7 +216,7 @@ def get_offsetpsf(meta, key, recenter_offsetpsf=False, derotate=True,
         totexp = 0. # s
         for i in range(len(ww_sci)):
             totint = meta.obs[key]['NINTS'][ww_sci[i]]*meta.obs[key]['EFFINTTM'][ww_sci[i]] # s
-            totpsf += totint*rotate(offsetpsf.copy(), -meta.obs[key]['ROLL_REF'][ww_sci[i]], reshape=False, mode='constant', cval=0.)
+            totpsf += totint*rotate(offsetpsf.copy(), meta.obs[key]['ROLL_REF'][ww_sci[i]], reshape=False, mode='constant', cval=0.)
             totexp += totint # s
         totpsf /= totexp
     else:
@@ -355,7 +357,7 @@ def get_transmission(meta, key, odir, derotate=False):
     inst = meta.instrume[key]
     mask = meta.coronmsk[key]
     pxsc = meta.pixscale[key] # mas
-
+   
     # NIRCam.
     if (inst == 'NIRCAM'):
         tp = hdul['SCI'].data[1:-1, 1:-1] # crop artifact at the edge
@@ -387,8 +389,7 @@ def get_transmission(meta, key, odir, derotate=False):
     # transmission).
     if (mask in ['MASKALWB', 'MASKASWB']):
         tp = shift(tp, (0., -meta.bar_offset[key]*1000./pxsc), mode='constant', cval=0.)
-
-
+ 
     # Derotate the PSF mask and coadd it weighted by the integration time of
     # the different rolls.
     if (derotate == True):
@@ -414,6 +415,24 @@ def get_transmission(meta, key, odir, derotate=False):
     totmsk[rr > meta.owa] = np.nan
 
     meta.transmission = RegularGridInterpolator((yy[:, 0], xx[0, :]), totmsk)
+    if '335R' in mask:
+        true_cen = [149.9-0.5, 174.4-0.5] #x, y, 0.5 offset
+        shape = [320, 320]
+        offset = [s/2-c for c,s in zip(true_cen, shape)]
+        meta.current_mask_center_offset = offset
+    elif '1140' in mask:
+        true_cen = [119.749-13-0.5, 112.236-7-0.5] #x, y, offsets from pyKLIP
+        shape = np.flip(tp.shape)
+        offset = [s/2-c for c,s in zip(true_cen, shape)]
+        meta.current_mask_center_offset = offset
+    elif '1550' in mask:
+        true_cen = [119.746-13-0.5, 113.289-8-0.5] #x, y, 0.5 offsets from pyKLIP
+        shape = tp.shape
+        offset = [s/2-c for c,s in zip(true_cen, shape)]
+        meta.current_mask_center_offset = offset
+    else:
+        print('WARNING: Center offsets have not yet been determined for this mask!')
+        meta.current_mask_center_offset = [0, 0]
 
     # Plot.
     plt.figure(figsize=(6.4, 4.8))
@@ -440,6 +459,8 @@ def field_dependent_correction(stamp,
                                stamp_dx,
                                stamp_dy,
                                meta,
+                               minx=0,
+                               miny=0,
                                offsetpsf_func_input=None):
     """
     Apply the coronagraphic mask transmission to a PSF stamp.
@@ -488,7 +509,6 @@ def field_dependent_correction(stamp,
         mask = meta.coronmsk[key]
         pxar = meta.pixar_sr[key]
 
-
     offsetpsfdir = meta.offsetpsfdir
 
     # fix date for getting closest OPD - maybe this should not be forced?
@@ -500,6 +520,8 @@ def field_dependent_correction(stamp,
     if (inst == 'NIRCAM'):
         nircam = webbpsf.NIRCam()
         webbpsf_inst = nircam
+        immask = key.split('_')[-1]
+        pxscale = 0.063
     # MIRI.
     elif (inst == 'MIRI'):
         miri = webbpsf.MIRI()
@@ -510,21 +532,19 @@ def field_dependent_correction(stamp,
         # assume offset is applied that the PSF should be relative to 4QPM
         immask = mask.replace('4QPM_', 'FQPM')
         webbpsf_inst = miri 
+        pxscale = 0.1108
     else:
         raise UserWarning('Unknown instrument')
 
-    pxscale = webbpsf_inst.pixelscale
-    
-
     # Get center of input placeholder stamp
     c0 = (stamp.shape[0]-1)/2
-    c1 = (stamp.shape[1]-1)/2
- 
+    c1 = (stamp.shape[1]-1)/2 
 
+    ostamp = stamp.copy()
     # generate stamp of psf at appropriate position relative to mask
-
     # use input offset from within pyklip fmpsf generate_models
-    xyoff = (stamp_dx[int(c0),int(c1)]*pxscale, stamp_dy[int(c0),int(c1)]*pxscale) # convert to arcsec for webbpsf
+    xyoff = (stamp_dx[int(c0),int(c1)]*pxscale - minx*pxscale, \
+            stamp_dy[int(c0),int(c1)]*pxscale - miny*pxscale) # convert to arcsec for webbpsf
     print(f'Injected offset PSF at {xyoff} using the pixel scale of {pxscale} for {inst}')
 
     if meta.offpsf == 'webbpsf':
@@ -548,7 +568,6 @@ def field_dependent_correction(stamp,
         else:
             SED = None
 
-        
         # see if function already generated upstream (faster)
         if offsetpsf_func_input is None:
             offsetpsf_func = psf.JWST_PSF(inst, filt, immask, fov_pix=65,
@@ -566,7 +585,29 @@ def field_dependent_correction(stamp,
 
         # convert to flux
         stamp *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
+    
+    # As the model PSF's are centered on a pixel, need to
+    # shift by the subpixel offset for this particular sep/pa
+    # as provided by pyKLIP
+    stamp = fourier_imshift(stamp, (-minx, -miny))
 
+    # Also need to smooth the PSF if blur images was specified
+    if meta.blur_images != False:
+        stamp = gaussian_filter(stamp, meta.blur_images)
+
+
+    # print(stamp.shape)
+    # print(ostamp.shape)
+    # fig, axs = plt.subplots(nrows=1, ncols=3)
+    # axs[0].imshow(ostamp, vmin=np.nanmin(stamp-ostamp), vmax=np.nanmax(ostamp))
+    # axs[0].set_title('Original')
+    # axs[1].imshow(stamp, vmin=np.nanmin(stamp-ostamp), vmax=np.nanmax(ostamp))
+    # axs[1].set_title('Replaced')
+    # axs[2].set_title('Difference')
+    # axs[2].imshow(stamp-ostamp, vmin=np.nanmin(stamp-ostamp), vmax=np.nanmax(ostamp))
+    # plt.show()
+    # exit()
+    #stamp = ostamp
 
     # Note the following is deprecated by virtue of using the correct position-dependent PSF.
     # -----
@@ -660,6 +701,8 @@ def get_stellar_magnitudes(meta):
         VegaSED = SourceSpectrum.from_vega()
         magnitude = Obs.effstim(flux_unit='vegamag', vegaspec=VegaSED).value
 
+        magnitude = Obs.effstim(flux_unit='Jy', vegaspec=VegaSED).value
+
         # Add magnitude to dictionary
         mstar[filt.upper()] = magnitude
 
@@ -693,9 +736,19 @@ def get_maxnumbasis(meta):
     # Find the maximum numbasis based on the number of available calibrator
     # frames.
     meta.maxnumbasis = {}
+    meta.adimaxnumbasis = {}
+    meta.rdimaxnumbasis = {}
     for key in meta.obs.keys():
-        ww = meta.obs[key]['TYP'] == 'CAL'
-        meta.maxnumbasis[key] = np.sum(meta.obs[key]['NINTS'][ww], dtype=int)
+        # Get all science and calibrator keys
+        ws = meta.obs[key]['TYP'] == 'SCI'
+        wc = meta.obs[key]['TYP'] == 'CAL'
+        # Sum integrations in science (except for 1 as we won't self reference)
+        nbs = np.sum(meta.obs[key]['NINTS'][ws][1:], dtype=int) #
+        # Sum all integrations in calibration (Reference)
+        nbc = np.sum(meta.obs[key]['NINTS'][wc][:], dtype=int)
+        meta.maxnumbasis[key] = nbs + nbc
+        meta.adimaxnumbasis[key] = nbs
+        meta.rdimaxnumbasis[key] = nbc
 
     return meta
 
@@ -726,14 +779,19 @@ def get_psfmasknames(meta):
     meta.psfmask = {}
     for key in meta.obs.keys():
         if '1065' in key:
-            # TODO
-            raise ValueError('Get a 1065 mask!')
+            trstring = '/../resources/transmissions/JWST_MIRI_F1065C_transmission_webbpsf-ext_v2.fits'
+            trfile = os.path.join(os.path.dirname(__file__) + trstring)
+            meta.psfmask[key] = trfile
         elif '1140' in key:
-            trstring = '/../resources/miri_transmissions/JWST_MIRI_F1140C_transmission_webbpsf-ext_v0.fits'
+            trstring = '/../resources/transmissions/JWST_MIRI_F1140C_transmission_webbpsf-ext_v2.fits'
             trfile = os.path.join(os.path.dirname(__file__) + trstring)
             meta.psfmask[key] = trfile
         elif '1550' in key:
-            trstring = '/../resources/miri_transmissions/JWST_MIRI_F1550C_transmission_webbpsf-ext_v0.fits'
+            trstring = '/../resources/transmissions/JWST_MIRI_F1550C_transmission_webbpsf-ext_v2.fits'
+            trfile = os.path.join(os.path.dirname(__file__) + trstring)
+            meta.psfmask[key] = trfile
+        elif 'MASK335R' in key:
+            trstring = '/../resources/transmissions/jwst_nircam_psfmask_mask335r_shift.fits'
             trfile = os.path.join(os.path.dirname(__file__) + trstring)
             meta.psfmask[key] = trfile
         else:
@@ -819,3 +877,207 @@ def prepare_meta(meta, fitsfiles):
     meta.mstar = get_stellar_magnitudes(meta)
 
     return meta
+
+
+def bp_fix(im, sigclip=5, niter=1, pix_shift=1, rows=True, cols=True, 
+           bpmask=None, return_mask=False, verbose=False, in_place=True):
+    """ Find and fix bad pixels in image with median of surrounding values
+
+    Slight modification of routine from pynrc.
+    
+    Paramters
+    ---------
+    im : ndarray
+        Single image
+    sigclip : int
+        How many sigma from mean doe we fix?
+    niter : int
+        How many iterations for sigma clipping? 
+        Ignored if bpmask is set.
+    pix_shift : int
+        We find bad pixels by comparing to neighbors and replacing.
+        E.g., if set to 1, use immediate adjacents neighbors.
+        Replaces with a median of surrounding pixels.
+    rows : bool
+        Compare to row pixels? Setting to False will ignore pixels
+        along rows during comparison. Recommended to increase
+        ``pix_shift`` parameter if using only rows or cols.
+    cols : bool
+        Compare to column pixels? Setting to False will ignore pixels
+        along columns during comparison. Recommended to increase
+        ``pix_shift`` parameter if using only rows or cols.
+    bpmask : boolean array
+        Use a pre-determined bad pixel mask for fixing.
+    return_mask : bool
+        If True, then also return a masked array of bad
+        pixels where a value of 1 is "bad".
+    verbose : bool
+        Print number of fixed pixels per iteration
+    in_place : bool
+        Do in-place corrections of input array.
+        Otherwise, return a copy.
+    """
+
+    def shift_array(im, pix_shift, rows=True, cols=True):
+        '''Create an array of shifted values'''
+
+        ny, nx = im.shape
+
+        # Pad image
+        padx = pady = pix_shift
+        pad_vals = ([pady]*2,[padx]*2)
+        im_pad = np.pad(im, pad_vals, mode='edge')
+
+        shift_arr = []
+        sh_vals = np.arange(pix_shift*2+1) - pix_shift
+        # Set shifting of columns and rows
+        xsh_vals = sh_vals if rows else [0]
+        ysh_vals = sh_vals if cols else [0]
+        for i in xsh_vals:
+            for j in ysh_vals:
+                if (i != 0) or (j != 0):
+                    shift_arr.append(np.roll(im_pad, (j,i), axis=(0,1)))
+        shift_arr = np.asarray(shift_arr)
+        return shift_arr[:,pady:pady+ny,padx:padx+nx]
+    
+    # Only single iteration if bpmask is set
+    if bpmask is not None:
+        niter = 1
+    
+    if in_place:
+        arr_out = im
+    else:
+        arr_out = im.copy()
+    maskout = np.zeros(im.shape, dtype='bool')
+    
+    for ii in range(niter):
+        # Create an array of shifted values
+        shift_arr = shift_array(arr_out, pix_shift, rows=rows, cols=cols)
+    
+        # Take median of shifted values
+        shift_med = np.nanmedian(shift_arr, axis=0)
+        if bpmask is None:
+            # Difference of median and reject outliers
+            diff = arr_out - shift_med
+            shift_std = robust.medabsdev(shift_arr, axis=0)
+
+            indbad = diff > (sigclip*shift_std)
+        else:
+            indbad = bpmask
+
+        # Mark anything that is a NaN
+        indbad[np.isnan(arr_out)] = True
+        
+        # Set output array and mask values 
+        arr_out[indbad] = shift_med[indbad]
+        maskout[indbad] = True
+        
+        if verbose:
+            print(f'Bad Pixels fixed: {indbad.sum()}')
+
+        # No need to iterate if all pixels fixed
+        if indbad.sum()==0:
+            break
+            
+    if return_mask:
+        return arr_out, maskout
+    else:
+        return arr_out
+
+def clean_data(data, dq_masks, sigclip=5, niter=5, in_place=True, **kwargs):
+    """Clean a data cube using bp_fix routine
+    
+    Iterative pixel fixing routine to clean bad pixels flagged in the DQ mask
+    as well as spatial outliers. Replaces bad pixels with median of surrounding
+    unflagged (good) pixels. Assumes anything with values of 0 were previously
+    cleaned by the jwst pipeline and will be replaced with more representative 
+    values.
+
+    Parameters
+    ----------
+    data : ndarray
+        Image cube.
+    dq_masks : ndarray
+        Data quaity array same size as data.
+    sigclip : int
+        How many sigma from mean doe we fix?
+    niter : int
+        How many iterations for sigma clipping? 
+        Ignored if bpmask is set.
+    in_place : bool
+        Do in-place corrections of input array.
+        Otherwise, works on a copy.
+
+    Keyword Args
+    ------------
+    pix_shift : int
+        Size of border pixels to compare to.
+        We find bad pixels by comparing to neighbors and replacing.
+        E.g., if set to 1, use immediate adjacents neighbors.
+        Replaces with a median of surrounding pixels.
+    rows : bool
+        Compare to row pixels? Setting to False will ignore pixels
+        along rows during comparison. Recommended to increase
+        ``pix_shift`` parameter if using only rows or cols.
+    cols : bool
+        Compare to column pixels? Setting to False will ignore pixels
+        along columns during comparison. Recommended to increase
+        ``pix_shift`` parameter if using only rows or cols.
+    verbose : bool
+        Print number of fixed pixels per iteration
+    """
+
+    if not in_place:
+        data = data.copy()
+
+    sh = data.shape
+    ndim_orig = len(sh)
+    if ndim_orig==2:
+        ny, nx = sh
+        nz = 1
+        data = data.reshape([nz,ny,nx])
+    else:
+        nz, ny, nx = sh
+   
+    for i in range(nz):
+
+        im = data[i]
+        # Get average background rate and standard deviation
+        bg_med = np.nanmedian(im)
+        bg_std = robust.medabsdev(im)
+        # Clip bright PSFs for final bg calc
+        bg_ind = im<(bg_med+10*bg_std)
+        bg_med = np.nanmedian(im[bg_ind])
+        bg_std = robust.medabsdev(im[bg_ind])
+
+        # Create initial mask of 0s, NaNs, and large negative values
+        bp_mask = (im==0) | np.isnan(im) | (im<bg_med-sigclip*bg_std)
+        for k in ['DO_NOT_USE']:#, 'SATURATED', 'JUMP_DET']:
+            mask = (dq_masks[i] & dqflags.pixel[k]) > 0
+            bp_mask = bp_mask | mask
+
+        # Flag out-of-family spatial outliers
+        _, bp_mask2 = bp_fix(im, sigclip=sigclip, in_place=False, niter=niter, return_mask=True, **kwargs)
+        bp_mask = bp_mask | bp_mask2
+
+        # Fix only those pixels flagged in the input mask
+        data[i] = bp_fix(im, bpmask=bp_mask, in_place=True, niter=10, **kwargs)
+        # Final pass of additional median clipping
+        data[i] = bp_fix(data[i], sigclip=sigclip, in_place=True, niter=niter, **kwargs)
+        
+    # Return back to 2-dimensional image if that was the input
+    if ndim_orig==2:
+        data = data.reshape([ny,nx])
+
+    return data
+
+def clean_file(file, sigclip=5, niter=5, **kwargs):
+    """Clean the data in a file using bp_fix routine"""
+
+    from astropy.io import fits
+    hdul = fits.open(file)
+    data = clean_data(hdul['SCI'].data, hdul['DQ'].data, sigclip=sigclip, niter=niter, **kwargs)
+    hdul['SCI'].data = data
+    hdul.writeto(file, overwrite=True)
+    hdul.close()
+

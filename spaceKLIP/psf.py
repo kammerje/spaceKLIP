@@ -218,7 +218,24 @@ class JWST_PSF():
         # Perform recentering
         self.psf_on = fourier_imshift(self.psf_on, xoff, yoff, pad=True)
         self.psf_off = fourier_imshift(self.psf_off, xoff, yoff, pad=True)
+        
 
+    def _shift_psfs(self,shifts):
+        """ Shift the on-axis and off-axis psfs by the desired amount
+        
+        Parameters
+        ==========
+
+        shifts : list of floats
+                 The x and y offsets you want to apply [x,y]
+        """
+        xoff,yoff = shifts
+
+        # Perform the shift
+        self.psf_on = fourier_imshift(self.psf_on, xoff, yoff, pad=True)
+        self.psf_off = fourier_imshift(self.psf_off, xoff, yoff, pad=True)
+        self.xoff = xoff
+        self.yoff = yoff
     
     def rth_to_xy(self, r, th, PA_V3=0, frame_out='idl'):
         """ Convert (r,th) location to (x,y) in idl coords
