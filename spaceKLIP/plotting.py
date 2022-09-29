@@ -466,8 +466,8 @@ def plot_subimages(imgdirs, subdirs, filts, submodes, numKL,
         ax.add_patch(Rectangle((-int(window_size/2), -int(window_size/2)-0.075), 1, 0.15,
                       alpha=1, facecolor='w', edgecolor='k', linewidth=1))
 
-        ax.set_ylabel(prihdr['FILTER']+'\n\n', fontsize=18)#, fontproperties=compModern(14))
-        Draw lines around image text etc
+        #ax.set_ylabel(prihdr['FILTER']+'\n\n', fontsize=18)#, fontproperties=compModern(14))
+        #Draw lines around image text etc
         ftext = ax.text(0.05, 0.88, prihdr['FILTER'], fontsize=16, transform=plt.gca().transAxes, c='w', fontweight='bold')
         for ti, temp in enumerate([unsub, n, e, ftext, arc1text]):
             temp = temp.set_path_effects([patheffects.withStroke(linewidth=2, foreground='k')])
@@ -512,38 +512,6 @@ def plot_subimages(imgdirs, subdirs, filts, submodes, numKL,
                 plt.setp(ax.get_yticklabels(), visible=False)
                 ax.tick_params(which='major', length=4, color=imtext_col)
                 ax.tick_params(which='minor', length=0, color=imtext_col) 
-
-
-                # # Plot N-E arrows
-                ar_n = ax.arrow(0.9, 0.096, 0.0, 0.1, transform=plt.gca().transAxes, color=imtext_col, width=0.01, \
-                        head_width=0.04, head_length=0.04, path_effects=[patheffects.Stroke(linewidth=3, foreground='k'), patheffects.Normal()])
-                n = ax.text(0.9, 0.29, 'N', fontsize=16, transform=plt.gca().transAxes, c=imtext_col, \
-                        va='center', ha='center', fontweight='bold')
-                ar_e = ax.arrow(0.905, 0.1, -0.1, 0.0, transform=plt.gca().transAxes, color=imtext_col, width=0.01, \
-                        head_width=0.04, head_length=0.04, path_effects=[patheffects.Stroke(linewidth=3, foreground='k'), patheffects.Normal()])
-                e = ax.text(0.71, 0.1, 'E', fontsize=16, transform=plt.gca().transAxes, c=imtext_col, \
-                        va='center', ha='center', fontweight='bold')
-                # Plot 1" Line
-                arc1text = ax.text(-int(window_size/2)+0.5, -int(window_size/2)+(window_size/75), '1"', fontsize=16, c=imtext_col, \
-                        va='bottom', ha='center', fontweight='bold')
-                ax.add_patch(Rectangle((-int(window_size/2), -int(window_size/2)-0.075), 1, 0.15,
-                              alpha=1, facecolor='w', edgecolor='k', linewidth=1))
-
-                ax.set_ylabel(prihdr['FILTER']+'\n\n', fontsize=18)#, fontproperties=compModern(14))
-                Draw lines around image text etc
-                ftext = ax.text(0.05, 0.88, prihdr['FILTER'], fontsize=16, transform=plt.gca().transAxes, c='w', fontweight='bold')
-                if prihdr['FILTER'] == 'F1140C':
-                    txt = 'MIRI'
-                elif prihdr['FILTER'] == 'F356W':
-                    txt = 'NIRCam'
-                ftext = ax.text(0.05, 0.88, txt, fontsize=16, transform=plt.gca().transAxes, c='w', fontweight='bold')
-
-                for ti, temp in enumerate([unsub, n, e, ftext, arc1text]):
-                for ti, temp in enumerate([ n, e, ftext, arc1text]):
-                    temp = temp.set_path_effects([patheffects.withStroke(linewidth=2, foreground='k')])
-                # Draw another arrow on top to mask the line
-                ax.arrow(0.9, 0.096, 0.0, 0.1, transform=plt.gca().transAxes, color=imtext_col, width=0.01, \
-                        head_width=0.04, head_length=0.04)
 
                 for axis in ['top','bottom','left','right']:
                     ax.spines[axis].set_linewidth(2)
