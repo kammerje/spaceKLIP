@@ -66,14 +66,19 @@ def raw_contrast_curve(meta, fourier=True):
     if (meta.verbose == True):
         print('--> Computing raw contrast curve...')
 
+    if (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
+        sci_ref_dir = 'SCI+REF'
+    else:
+        sci_ref_dir = 'SCI'
+
     # If necessary, extract the metadata of the observations.
     if (not meta.done_subtraction):
         if meta.conc_usefile:
             subdir = 'IMGPROCESS/BGSUB'
         elif meta.use_cleaned:
-            subdir = 'IMGPROCESS/SCI+REF_CLEAN'
+            subdir = f'IMGPROCESS/{sci_ref_dir}_CLEAN'
         else:
-            subdir = 'IMGPROCESS/SCI+REF'
+            subdir = f'IMGPROCESS/{sci_ref_dir}'
         basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir=subdir, search=meta.sub_ext)
         meta = utils.prepare_meta(meta, basefiles)
         meta.done_subtraction = True # set the subtraction flag for the subsequent pipeline stages
@@ -258,15 +263,20 @@ def calibrated_contrast_curve(meta, fourier=False):
         the total flux, however it can introduce Gibbs artefacts for the
         shortest NIRCAM filters as the PSF is undersampled.
     """
+    if (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
+        sci_ref_dir = 'SCI+REF'
+    else:
+        sci_ref_dir = 'SCI'
+
     # If necessary, build the obs dictionary etc
     # If necessary, extract the metadata of the observations.
     if (not meta.done_subtraction):
         if meta.conc_usefile == 'bgsub':
             subdir = 'IMGPROCESS/BGSUB'
         elif meta.use_cleaned:
-            subdir = 'IMGPROCESS/SCI+REF_CLEAN'
+            subdir = f'IMGPROCESS/{sci_ref_dir}_CLEAN'
         else:
-            subdir = 'IMGPROCESS/SCI+REF'
+            subdir = f'IMGPROCESS/{sci_ref_dir}'
         basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir=subdir, search=meta.sub_ext)
         meta = utils.prepare_meta(meta, basefiles)
         meta.done_subtraction = True # set the subtraction flag for the subsequent pipeline stages
