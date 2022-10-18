@@ -5,7 +5,7 @@ readme = "README.rst"
 dynamic = ["version", "dependencies"] # version will come from setuptools.scm
 authors = [
   { name="Jens Kammerer", email="jkammerer@stsci.edu" },
-  { name="Aarynn Carter", email="aarynn.carter@gmail.com" },
+  { name="Aarynn Carter", email="aarynn.carter@ucsc.edu" },
   { name="The JWST Direct Observations of Exoplanetary Systems (ERS-1386) Collaboration"},
 ]
 
