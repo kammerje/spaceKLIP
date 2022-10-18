@@ -23,6 +23,3 @@ write_to = "spaceKLIP/_version.py"
 
 [tool.setuptools.dynamic]
 dependencies = {file = ['requirements.txt']}
-
-[tool.setuptools.packages.find]
-where = ["spaceKLIP"]
