@@ -290,6 +290,7 @@ def leastsq_bg(meta, basefiles, bgfiles, data_start=0, overwrite=True):
         mask_x, mask_y = 119.99, 112.2
     elif filt == 'F1550C':
         mask_x, mask_y = 119.84, 113.33
+        # FIXME: These files do not exist at the specified paths
         mask_str = '/resources/miri_transmissions/jwst_miri_psfmask_1550_jasonrotate.fits'
         maskfile = os.path.join(os.path.dirname(os.path.abspath(__file__)) + mask_str)
         bmask_str = '/resources/miri_transmissions/jwst_miri_psfmask_1550_raw_extract.fits'

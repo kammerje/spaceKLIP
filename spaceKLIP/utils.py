@@ -6,6 +6,7 @@ from __future__ import division
 # =============================================================================
 
 import os
+import importlib
 
 import astropy.io.fits as pyfits
 import matplotlib.pyplot as plt
@@ -548,10 +549,7 @@ def get_stellar_magnitudes(meta):
     mstar = {}
     for filt in filters:
         # Read in the bandpass correctly
-        bpstring = '/resources/PCEs/{}/{}.txt'.format(instrument, filt)
-        bpfile = os.path.join(os.path.dirname(os.path.abspath(__file__)) + bpstring)
-
-        with open(bpfile) as bandpass_file:
+        with importlib.resources.open_text(f'spaceKLIP.resources.PCEs.{instrument}', f'{filt}.txt') as bandpass_file:
             bandpass_data = np.genfromtxt(bandpass_file).transpose()
             bandpass_wave = bandpass_data[0] * 1e4 #Convert from microns to angstrom
             bandpass_throughput = bandpass_data[1]
@@ -638,23 +636,18 @@ def get_psfmasknames(meta):
 
     # Get the correct PSF mask for each concatenation.
     meta.psfmask = {}
+
+    _get_transmission_path = lambda filename: str(importlib.resources.path('spaceKLIP.resources.transmissions', filename))
+
     for key in meta.obs.keys():
         if '1065' in key:
-            trstring = '/resources/transmissions/JWST_MIRI_F1065C_transmission_webbpsf-ext_v2.fits'
-            trfile = os.path.join(os.path.dirname(os.path.abspath(__file__)) + trstring)
-            meta.psfmask[key] = trfile
+            meta.psfmask[key] = _get_transmission_path('JWST_MIRI_F1065C_transmission_webbpsf-ext_v2.fits')
         elif '1140' in key:
-            trstring = '/resources/transmissions/JWST_MIRI_F1140C_transmission_webbpsf-ext_v2.fits'
-            trfile = os.path.join(os.path.dirname(os.path.abspath(__file__)) + trstring)
-            meta.psfmask[key] = trfile
+            meta.psfmask[key] = _get_transmission_path('JWST_MIRI_F1140C_transmission_webbpsf-ext_v2.fits')
         elif '1550' in key:
-            trstring = '/resources/transmissions/JWST_MIRI_F1550C_transmission_webbpsf-ext_v2.fits'
-            trfile = os.path.join(os.path.dirname(os.path.abspath(__file__)) + trstring)
-            meta.psfmask[key] = trfile
+            meta.psfmask[key] = _get_transmission_path('JWST_MIRI_F1065C_transmission_webbpsf-ext_v2.fits')
         elif 'MASK335R' in key:
-            trstring = '/resources/transmissions/jwst_nircam_psfmask_mask335r_shift.fits'
-            trfile = os.path.join(os.path.dirname(os.path.abspath(__file__)) + trstring)
-            meta.psfmask[key] = trfile
+            meta.psfmask[key] = _get_transmission_path('jwst_nircam_psfmask_mask335r_shift.fits')
         else:
             model = datamodels.open(meta.obs[key]['FITSFILE'][0])
             meta.psfmask[key] = step.get_reference_file(model, 'psfmask')
