@@ -1,5 +1,3 @@
-__version__ = "0.0.1"
-
 from . import companion
 from . import contrast
 from . import engine
@@ -10,3 +8,5 @@ from . import psf
 from . import rampfit
 from . import subtraction
 from . import utils
+
+from ._version import *
