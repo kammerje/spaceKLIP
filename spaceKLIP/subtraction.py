@@ -436,11 +436,15 @@ def klip_subtraction(meta, files):
                     psflib_filepaths = np.array(meta.obs[key]['FITSFILE'][ww_cal], dtype=str).tolist()
                     load_file0_center = meta.load_file0_center if hasattr(meta,'load_file0_center')  else False
 
+                    if (meta.use_psfmask == True):
+                        mask = fits.getdata(meta.psfmask[key], 'SCI')
+                    else:
+                        mask = None
                     dataset = JWST.JWSTData(filepaths=filepaths, psflib_filepaths=psflib_filepaths, centering=meta.centering_alg, 
                                             scishiftfile=meta.ancildir+'shifts/scishifts', refshiftfile=meta.ancildir+'shifts/refshifts',
                                             fiducial_point_override=meta.fiducial_point_override, blur=meta.blur_images,
                                             load_file0_center=load_file0_center,save_center_file=meta.ancildir+'shifts/file0_centers',
-                                            spectral_type=meta.spt)
+                                            spectral_type=meta.spt, mask=mask)
                     #Set an OWA if it exists. 
                     if hasattr(meta, 'OWA'): dataset.OWA = meta.OWA
 
