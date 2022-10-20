@@ -208,3 +208,6 @@ spaceKLIP.egg-info
 tests/data/*
 tests/ultranest
 tests/species_*
+
+# setuptools-scm
+spaceKLIP/_version.py

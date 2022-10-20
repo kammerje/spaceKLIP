@@ -5,6 +5,7 @@ from __future__ import division
 
 import glob, os, re
 import json
+import importlib
 
 import astropy.io.fits as pyfits
 import matplotlib.pyplot as plt
@@ -219,9 +220,7 @@ class JWST(Pipeline):
                 del filter_list
         else:
             # From the file in the resources directory (more accurate than SVO)
-            filt_info_str = '/../resources/PCEs/filter_info.json'
-            filt_info_file = os.path.join(os.path.dirname(__file__) + filt_info_str)
-            with open(filt_info_file, 'r') as f:
+            with importlib.resources.open_text('spaceKLIP.resources.PCEs', 'filter_info.json') as f:
                 filt_info = json.load(f)
                 for filt in list(filt_info.keys()):
                     self.meta.wave[filt] = filt_info[filt]['WavelengthMean']/1e4*1e-6 # m
