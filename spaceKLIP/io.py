@@ -18,8 +18,8 @@ import astropy.units as u
 from synphot import SourceSpectrum
 from synphot.models import Empirical1D
 
-import webbpsf
-webbpsf.setup_logging(level='ERROR')
+import webbpsf, webbpsf_ext
+webbpsf_ext.setup_logging(level='ERROR', verbose=False)
 
 rad2mas = 180./np.pi*3600.*1000.
 

@@ -24,9 +24,9 @@ import pyklip.parallelized as parallelized
 from pyklip.klip import nan_gaussian_filter
 from copy import deepcopy
 
-import webbpsf
-webbpsf.setup_logging(level='ERROR')
-import webbpsf_ext
+import webbpsf, webbpsf_ext
+webbpsf_ext.setup_logging(level='ERROR', verbose=False)
+
 
 from . import utils
 from . import io

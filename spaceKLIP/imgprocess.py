@@ -17,7 +17,7 @@ from jwst.outlier_detection.outlier_detection_step import OutlierDetectionStep
 # Define logging
 import logging
 log = logging.getLogger(__name__)
-log.setLevel(logging.INFO)
+log.setLevel(logging.WARN)
 
 from . import utils
 from . import io

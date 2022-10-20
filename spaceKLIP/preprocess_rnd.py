@@ -15,8 +15,9 @@ from scipy.ndimage import fourier_shift, median_filter
 from scipy.ndimage.filters import convolve
 from scipy.optimize import leastsq, minimize
 
-import webbpsf
-webbpsf.setup_logging(level='ERROR')
+import webbpsf, webbpsf_ext
+webbpsf_ext.setup_logging(level='ERROR', verbose=False)
+
 
 
 # =============================================================================
