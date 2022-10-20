@@ -307,8 +307,8 @@ class JWST_PSF():
         return_oversample : bool
             Return the oversampled version of the PSF?
         do_shift : bool
-            If True, will offset PSF by appropriate amount from center. Otherwise,
-            returns PSF in center of image.
+            If True, will return the PSF offset from center. 
+            Otherwise, returns PSF in center of image.
         """
 
         from scipy.interpolate import interp1d
@@ -390,11 +390,8 @@ class JWST_PSF():
 
         Parameters
         ==========
-        r : float or ndarray
-            Radial offst from mask center.
-        th : float or ndarray
-            Position angle (positive angles East of North) in degrees.
-            Can also be an array; must match size of `r`.
+        loc : float or ndarray
+            (x,y) or (r,th) location (in arcsec) offset from center of mask.
         PA_V3 : float
             V3 PA of telescope.
         return_oversample : bool
