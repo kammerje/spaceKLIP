@@ -85,8 +85,8 @@ class JWST_PSF():
 
         # Load date-specific OPD files?
         if date is not None:
-            inst_on.load_wss_opd_by_date(date=date, choice='before', verbose=False, plot=False)
-            inst_off.load_wss_opd_by_date(date=date, choice='before', verbose=False, plot=False)
+            inst_on.load_wss_opd_by_date(date=date, choice='closest', verbose=False, plot=False)
+            inst_off.load_wss_opd_by_date(date=date, choice='closest', verbose=False, plot=False)
         
         # Generating initial PSFs...
         print('Generating initial PSFs...')
