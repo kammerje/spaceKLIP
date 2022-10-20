@@ -136,7 +136,22 @@ class JWST(Pipeline):
         return None
 
     def sort_files(self, **kwargs):
-        """Sort files into subdirectories like filter_mask (e.g., F300M_MASK335R)"""
+        """Sort files into subdirectories like filter_mask (e.g., F300M_MASK335R)
+        
+        Keyword Args
+        ============
+        expid : str
+            Exposure ID associated with first science observation, as opposed
+            to target acquisition and astrometric confirmation images.
+        file_ext : str
+            File extension (default: 'uncal.fits')
+        indir : str or None
+            Location of original files. If not set, then searches for MAST
+            directory location at $JWSTDOWNLOAD_OUTDIR env variable.
+        filename_start : str
+            Initial string at start of filenames. This will generally always be the default 'jw',
+            but can be overridden if necessary, for instance if dealing with simulated data.
+        """
 
         idir = self.meta.idir[:-1] if self.meta.idir[-1]=='/' else self.meta.idir
         outdir = os.path.dirname(idir)
@@ -150,10 +165,14 @@ class JWST(Pipeline):
         else:
             coron_mask = None
 
+        # Input directory
         indir = None if self.meta.data_dir.lower()=='none' else self.meta.data_dir
+        # Exp ID science start (to avoid TA and TACONF images)
+        expid_sci = self.meta.expid_sci if hasattr(self.meta, 'expid_sci') else None
 
+        # Sort data
         io.sort_data_files(self.meta.pid, self.meta.sci_obs, self.meta.ref_obs, outdir, 
-                           indir=indir, expid_sci=self.meta.expid_sci, 
+                           indir=indir, expid_sci=expid_sci, 
                            filter=filter, coron_mask=coron_mask, **kwargs)
 
     def get_jwst_meta(self):

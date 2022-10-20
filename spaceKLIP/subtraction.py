@@ -39,7 +39,13 @@ def perform_subtraction(meta):
     else:
         ext = ''
 
-    files = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS/SCI+REF'+ext, search=meta.sub_ext)
+
+    if (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
+        sci_ref_dir = 'SCI+REF'
+    else:
+        sci_ref_dir = 'SCI'
+
+    files = io.get_working_files(meta, meta.done_imgprocess, subdir=f'IMGPROCESS/{sci_ref_dir}{ext}', search=meta.sub_ext)
     # Run some preparation steps on the meta object
     meta = utils.prepare_meta(meta, files)
 

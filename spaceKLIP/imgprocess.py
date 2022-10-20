@@ -17,7 +17,7 @@ from jwst.outlier_detection.outlier_detection_step import OutlierDetectionStep
 # Define logging
 import logging
 log = logging.getLogger(__name__)
-log.setLevel(logging.INFO)
+log.setLevel(logging.WARN)
 
 from . import utils
 from . import io
@@ -580,8 +580,14 @@ def stsci_image_processing(meta):
     """
     Use the JWST pipeline to process *rateints.fits files to *calints.fits files
     """
+
+    if (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
+        sci_ref_dir = 'SCI+REF'
+    else:
+        sci_ref_dir = 'SCI'
+
     if meta.imgproc_idir:
-        run_image_processing(meta, 'RAMPFIT/SCI+REF', itype='default')
+        run_image_processing(meta, f'RAMPFIT/{sci_ref_dir}', itype='default')
     if meta.imgproc_bgdirs:
         if meta.bg_sci_dir != 'None':
             run_image_processing(meta, 'RAMPFIT/BGSCI', itype='bgsci')
