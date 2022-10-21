@@ -253,7 +253,7 @@ class JWST_PSF():
             Position angle (positive angles East of North) in degrees.
             Can also be an array; must match size of `r`.
         PA_V3 : float
-            V3 PA of telescope.
+            V3 PA of ref point N over E (e.g. 'ROLL_REF').
         frame_out : str
             Coordinate frame of output. Default is 'idl'
 
@@ -393,7 +393,7 @@ class JWST_PSF():
         loc : float or ndarray
             (x,y) or (r,th) location (in arcsec) offset from center of mask.
         PA_V3 : float
-            V3 PA of telescope.
+            V3 PA of ref point N over E (e.g. 'ROLL_REF').
         return_oversample : bool
             Return the oversampled version of the PSF?
         do_shift : bool
