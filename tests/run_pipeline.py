@@ -10,9 +10,9 @@ if __name__ == '__main__':
 	pipe.run_all(skip_ramp=True, 
 				 skip_imgproc=True, 
 				 skip_sub=True,
-				 skip_rawcon=True, 
+				 skip_rawcon=False, 
 				 skip_calcon=True, 
-				 skip_comps=False)
+				 skip_comps=True)
 
 
 # imgdir = '/Users/wbalmer/JWST-HCI/HIP65426/MIRI/F1140C/IMGPROCESS/'

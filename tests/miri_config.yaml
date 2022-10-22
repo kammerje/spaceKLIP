@@ -10,8 +10,8 @@
 
 ##### REQUIRED #####
 # Input Directory
-idir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1140C/SCI+REF/'
-odir: '/Users/acarter/Documents/DIRECT_IMAGING/JWST/ERS/HIP65426/CORONAGRAPHY_PAPER/spaceKLIP/20220828/F1140C/' # Output Directory
+idir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1550C/SCI+REF/'
+odir: '/Users/acarter/Documents/DIRECT_IMAGING/JWST/ERS/HIP65426/CORONAGRAPHY_PAPER/spaceKLIP/20220828/F1550C/' # Output Directory
 sdir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/HIP65426A_sdf_phoenix_m+modbb_disk_r.txt' #VOT table or stellar model file.
 
 ##### OPTIONAL #####rundirs: []  #Specify directory(ies) within odir of existing runs to calculate contrast curve / companion
@@ -66,10 +66,10 @@ custom_file: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/pixm
 ####################################
 sub_ext: 'calints.fits'
 use_cleaned: True   #Use files generated after (True) or before (False) outlier correction
-bgtrim: 'first'  # Trim the first integration in the background, science, and reference (bgsub != 'saved' or 'None')
-bgsub: 'saved'    #Perform background subtraction, 'default' for median, 'pyklip' for klip, 'leastsq' for loci
+bgtrim: 'None'  # Trim the first integration in the background, science, and reference (bgsub != 'saved' or 'None')
+bgsub: 'default'    #Perform background subtraction, 'default' for median, 'pyklip' for klip, 'leastsq' for loci
 bgmed_splits: [12,4]   #12,4  #Peform median background subtraction but split across [Nsci,Nref] ~equal different sections
-bgonly: False    # Only perform the background subtraction
+bgonly: True    # Only perform the background subtraction
 centering_alg: 'zero'    # Algorithm to use for centering "basic", "jwstpipe", "imageregis", or 'savefile'
 mode: ['ADI+RDI']       # list of modes for pyKLIP, will loop through all
 annuli: [1]         # list of number of annuli for pyKLIP, will loop through all
@@ -79,9 +79,9 @@ numbasis: [6] #[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,30,40,50,59,8
 ###################################
 ##### Post-Subtraction Settings #####
 ###################################
-KL: 6 #'max' # Number of KL components for which the calibrated contrast curve and the companion properties shall be computed (must be in subtracted numbasis)
+KL: 'max' #'max' # Number of KL components for which the calibrated contrast curve and the companion properties shall be computed (must be in subtracted numbasis)
 psf_spec_file: '/Users/acarter/Documents/DIRECT_IMAGING/JWST/ERS/HIP65426/hip65426b_bestfit_jansky.txt'
-rundirs: ['2022_08_28_ADI+RDI_annu1_subs1_run2']  #Specify directory(ies) within odir of existing runs to calculate contrast curve / companion
+rundirs: ['2022_08_28_ADI+RDI_annu1_subs1_run2', '2022_08_28_RDI_annu1_subs1_run1', '2022_08_28_ADI_annu1_subs1_run1']  #Specify directory(ies) within odir of existing runs to calculate contrast curve / companion
 ###################################
 ##### Contrast Curve Settings #####
 ###################################
@@ -91,8 +91,8 @@ conc_res: 'default'
 cal_nthreads: 1
 
 fwhm_scale: [1.5, 1.5, 1.5, 0.5, 0.5, 2, 3, 3, 1]    #Scale to mask companions with, integer or list len equal to comps+masks
-ra_off_mask: [6250,7300,-3750,-5600,5800,900,2100,7050] 
-de_off_mask: [8000,6750,7330,6400,-7500,-8800,-8400,500]
+ra_off_mask: [6750,7800,-3050,-5200,5300,400,1800,7050] 
+de_off_mask: [7500,6250,7330,6800,-8000,-8800,-8600,500]
 
 seps_inject_rnd: [2, 3, 4, 5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 25., 30.0, 35.0, 40.0] # pix; list of separations at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
 #seps_inject_rnd: [5.0, 25.0, 40.0] # pix; list
