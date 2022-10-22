@@ -699,7 +699,7 @@ def get_stellar_magnitudes(meta):
         VegaSED = SourceSpectrum.from_vega()
         magnitude = Obs.effstim(flux_unit='vegamag', vegaspec=VegaSED).value
 
-        magnitude = Obs.effstim(flux_unit='Jy', vegaspec=VegaSED).value
+        #magnitude = Obs.effstim(flux_unit='Jy', vegaspec=VegaSED).value
 
         # Add magnitude to dictionary
         mstar[filt.upper()] = magnitude
@@ -784,7 +784,7 @@ def get_psfmasknames(meta):
         elif '1140' in key:
             meta.psfmask[key] = _get_transmission_path('JWST_MIRI_F1140C_transmission_webbpsf-ext_v2.fits')
         elif '1550' in key:
-            meta.psfmask[key] = _get_transmission_path('JWST_MIRI_F1065C_transmission_webbpsf-ext_v2.fits')
+            meta.psfmask[key] = _get_transmission_path('JWST_MIRI_F1550C_transmission_webbpsf-ext_v2.fits')
         elif 'MASK335R' in key:
             meta.psfmask[key] = _get_transmission_path('jwst_nircam_psfmask_mask335r_shift.fits')
         else:

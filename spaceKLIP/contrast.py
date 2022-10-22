@@ -66,8 +66,12 @@ def raw_contrast_curve(meta, fourier=True):
     if (meta.verbose == True):
         print('--> Computing raw contrast curve...')
 
-    if (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
-        sci_ref_dir = 'SCI+REF'
+    if hasattr(meta, "ref_obs"):
+        if (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
+            sci_ref_dir = 'SCI+REF'
+    elif hasattr(meta, 'ref_obs_override'): 
+        if meta.ref_obs_override == True:
+            sci_ref_dir = 'SCI+REF'
     else:
         sci_ref_dir = 'SCI'
 
@@ -186,7 +190,7 @@ def raw_contrast_curve(meta, fourier=True):
                     sep, con = klip.meas_contrast(dat=data_masked[j]/peak, iwa=meta.iwa, owa=meta.owa, resolution=conc_res, center=cent, low_pass_filter=False)
                     seps += [sep*pxsc/1000.] # arcsec
                     cons += [con]
-            except: 
+            except:
                 offsetpsf = utils.get_offsetpsf(meta, key, recenter_offsetpsf=True, derotate=False)
                 Fstar = meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6*np.max(offsetpsf) # MJy; convert the host star brightness from vegamag to MJy
                 Fdata = data_masked*pxar # MJy; convert the data from MJy/sr to MJy
@@ -263,8 +267,12 @@ def calibrated_contrast_curve(meta, fourier=False):
         the total flux, however it can introduce Gibbs artefacts for the
         shortest NIRCAM filters as the PSF is undersampled.
     """
-    if (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
-        sci_ref_dir = 'SCI+REF'
+    if hasattr(meta, "ref_obs"):
+        if (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
+            sci_ref_dir = 'SCI+REF'
+    elif hasattr(meta, 'ref_obs_override'): 
+        if meta.ref_obs_override == True:
+            sci_ref_dir = 'SCI+REF'
     else:
         sci_ref_dir = 'SCI'
 
@@ -761,7 +769,7 @@ def inject_recover(meta,
     # If not finished yet, create a new pyKLIP dataset into which fake
     # companions will be injected.
     raw_dataset = JWST.JWSTData(filepaths=filepaths,
-                        psflib_filepaths=psflib_filepaths, centering=centering_alg, badpix_threshold=meta.badpix_threshold,
+                        psflib_filepaths=psflib_filepaths, centering=centering_alg,
                         scishiftfile=meta.ancildir+'shifts/scishifts', refshiftfile=meta.ancildir+'shifts/refshifts', spectral_type=meta.spt, load_file0_center=load_file0_center,
                         save_center_file=meta.ancildir+'shifts/file0_centers',
                         fiducial_point_override=meta.fiducial_point_override, blur=meta.blur_images)

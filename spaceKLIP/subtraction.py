@@ -39,9 +39,12 @@ def perform_subtraction(meta):
     else:
         ext = ''
 
-
-    if (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
-        sci_ref_dir = 'SCI+REF'
+    if hasattr(meta, "ref_obs"):
+        if (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
+            sci_ref_dir = 'SCI+REF'
+    elif hasattr(meta, 'ref_obs_override'): 
+        if meta.ref_obs_override == True:
+            sci_ref_dir = 'SCI+REF'
     else:
         sci_ref_dir = 'SCI'
 
@@ -443,7 +446,13 @@ def klip_subtraction(meta, files):
                     load_file0_center = meta.load_file0_center if hasattr(meta,'load_file0_center')  else False
 
                     if (meta.use_psfmask == True):
-                        mask = fits.getdata(meta.psfmask[key], 'SCI')
+                        try: 
+                            mask = fits.getdata(meta.psfmask[key], 'SCI') #NIRCam
+                        except:
+                            try:
+                                mask = fits.getdata(meta.psfmask[key], 0) #MIRI
+                            except:
+                                raise FileError('Unable to read psfmask file {}'.format(meta.psfmask[key]))
                     else:
                         mask = None
                     dataset = JWST.JWSTData(filepaths=filepaths, psflib_filepaths=psflib_filepaths, centering=meta.centering_alg, 

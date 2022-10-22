@@ -78,7 +78,7 @@ def plot_contrast_raw(meta, seps, cons, labels='default', savefile='./rawcontras
     if len(cons) == 1:
         if labels == 'default':
             labels == 'contrast'
-        ax.plot(seps, cons, label=labels)
+        ax.plot(seps, np.squeeze(cons), label=labels)
     elif len(cons) > 1:
         if labels == 'default':
             labels = ['contrast_{}'.format(i+1) for i in range(len(seps))]
