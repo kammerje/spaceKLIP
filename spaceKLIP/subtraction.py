@@ -39,7 +39,13 @@ def perform_subtraction(meta):
     else:
         ext = ''
 
-    files = io.get_working_files(meta, meta.done_imgprocess, subdir='IMGPROCESS/SCI+REF'+ext, search=meta.sub_ext)
+
+    if (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
+        sci_ref_dir = 'SCI+REF'
+    else:
+        sci_ref_dir = 'SCI'
+
+    files = io.get_working_files(meta, meta.done_imgprocess, subdir=f'IMGPROCESS/{sci_ref_dir}{ext}', search=meta.sub_ext)
     # Run some preparation steps on the meta object
     meta = utils.prepare_meta(meta, files)
 
@@ -290,10 +296,11 @@ def leastsq_bg(meta, basefiles, bgfiles, data_start=0, overwrite=True):
         mask_x, mask_y = 119.99, 112.2
     elif filt == 'F1550C':
         mask_x, mask_y = 119.84, 113.33
-        mask_str = '/../resources/miri_transmissions/jwst_miri_psfmask_1550_jasonrotate.fits'
-        maskfile = os.path.join(os.path.dirname(__file__) + mask_str)
-        bmask_str = '/../resources/miri_transmissions/jwst_miri_psfmask_1550_raw_extract.fits'
-        bmaskfile = os.path.join(os.path.dirname(__file__) + bmask_str)
+        # FIXME: These files do not exist at the specified paths
+        mask_str = '/resources/miri_transmissions/jwst_miri_psfmask_1550_jasonrotate.fits'
+        maskfile = os.path.join(os.path.dirname(os.path.abspath(__file__)) + mask_str)
+        bmask_str = '/resources/miri_transmissions/jwst_miri_psfmask_1550_raw_extract.fits'
+        bmaskfile = os.path.join(os.path.dirname(os.path.abspath(__file__)) + bmask_str)
 
     # Get mask
     with fits.open(maskfile) as hdu:
@@ -435,11 +442,15 @@ def klip_subtraction(meta, files):
                     psflib_filepaths = np.array(meta.obs[key]['FITSFILE'][ww_cal], dtype=str).tolist()
                     load_file0_center = meta.load_file0_center if hasattr(meta,'load_file0_center')  else False
 
+                    if (meta.use_psfmask == True):
+                        mask = fits.getdata(meta.psfmask[key], 'SCI')
+                    else:
+                        mask = None
                     dataset = JWST.JWSTData(filepaths=filepaths, psflib_filepaths=psflib_filepaths, centering=meta.centering_alg, 
                                             scishiftfile=meta.ancildir+'shifts/scishifts', refshiftfile=meta.ancildir+'shifts/refshifts',
                                             fiducial_point_override=meta.fiducial_point_override, blur=meta.blur_images,
                                             load_file0_center=load_file0_center,save_center_file=meta.ancildir+'shifts/file0_centers',
-                                            spectral_type=meta.spt)
+                                            spectral_type=meta.spt, mask=mask)
                     #Set an OWA if it exists. 
                     if hasattr(meta, 'OWA'): dataset.OWA = meta.OWA
 

@@ -18,11 +18,15 @@ import astropy.units as u
 from synphot import SourceSpectrum
 from synphot.models import Empirical1D
 
-import webbpsf
-webbpsf.setup_logging(level='ERROR')
+import webbpsf, webbpsf_ext
+webbpsf_ext.setup_logging(level='ERROR', verbose=False)
 
 rad2mas = 180./np.pi*3600.*1000.
 
+# Define logging
+import logging
+log = logging.getLogger(__name__)
+log.setLevel(logging.INFO)
 
 # =============================================================================
 # MAIN
@@ -291,7 +295,7 @@ def extract_obs(meta, fitsfiles_all):
             ww_sci = np.where(isref_i == 'False')[0]
             ww_cal = np.where(isref_i == 'True')[0]
         else:
-            print("WARNING: Unable to find IS_PSF keyword.")
+            log.warning("Unable to find IS_PSF keyword.")
 
             # Science and reference PSFs are identified based on their number of
             # dither positions, assuming that there is no dithering for the
@@ -344,9 +348,9 @@ def extract_obs(meta, fitsfiles_all):
         del tab
 
     if (meta.verbose == True):
-        print('--> Identified %.0f concatenation(s)' % len(meta.obs))
+        log.info('--> Identified %.0f concatenation(s)' % len(meta.obs))
         for i, key in enumerate(meta.obs.keys()):
-            print('--> Concatenation %.0f: ' % (i+1)+key)
+            log.info('--> Concatenation %.0f: ' % (i+1)+key)
             print_tab = copy.deepcopy(meta.obs[key])
             print_tab.remove_column('FITSFILE')
             print_tab.pprint(max_lines=100, max_width=1000)
@@ -401,13 +405,13 @@ def get_working_files(meta, runcheck, subdir='RAMPFIT', search='uncal.fits', ity
     if len(files) == 0:
         # Let's look for a subdir
         if os.path.exists(rdir + subdir):
-            print('Located {} folder within input directory.'.format(subdir))
+            log.info('Located {} folder within input directory.'.format(subdir))
             rdir += subdir + '/' + search
             files = glob.glob(rdir)
 
         # If there are still no files, look in output directory
         if (len(files) == 0) and ('/{}/'.format(subdir) not in rdir):
-            print('WARNING: No {} files found in input directory, searching output directory.'.format(search))
+            log.warning('No {} files found in input directory, searching output directory.'.format(search))
             rdir = meta.odir + subdir + '/' + search
             files = glob.glob(rdir)
 
@@ -415,7 +419,7 @@ def get_working_files(meta, runcheck, subdir='RAMPFIT', search='uncal.fits', ity
             raise ValueError('Unable to find any {} files in specified input or output directories.'.format(search))
 
     if meta.verbose:
-        print('--> Found {} file(s) under: {}'.format(len(files), rdir))
+        log.info('--> Found {} file(s) under: {}'.format(len(files), rdir))
 
     return np.sort(files)
 
@@ -470,11 +474,11 @@ def sort_data_files(pid, sci_obs, ref_obs, outdir, expid_sci='03106',
         indir = os.path.join(mast_dir, f'{pid:05d}/')
 
     if verbose:
-            print(f"""Sorting data from program {pid} for {coron_mask}, {filter}
-    Sci Obs: {sci_obs}\tPSF Reference Obs: {ref_obs}
-    Sorting files with extension {file_ext}
-    from input dir {indir}
-    into output dir {outdir}""")
+        log.info(f"""Sorting data from program {pid} for {filter} with {coron_mask} mask, 
+                    Sci Obs: {sci_obs}\tPSF Reference Obs: {ref_obs}
+                    Sorting files with extension {file_ext}
+                    from input dir {indir}
+                    into output dir {outdir}""")
 
     # Find all uncal files
     allfiles = np.sort([f for f in os.listdir(indir) if f.endswith(file_ext)])
@@ -496,7 +500,11 @@ def sort_data_files(pid, sci_obs, ref_obs, outdir, expid_sci='03106',
 
         # Index of where science data starts
         # Assume expid_sci is the first in a sequence of filters
-        istart = np.where(expids_all==expid_sci)[0][0]
+        if( expid_sci is None) or (expid_sci.lower()=='none'):
+            expid_start = expids_all[0]
+        else:
+            expid_start =expid_sci
+        istart = np.where(expids_all==expid_start)[0][0]
         for ii in np.arange(istart, len(expids_all)):
             file_path = os.path.join(indir, files_obs[ii])
             hdr = fits.getheader(file_path)
@@ -525,7 +533,7 @@ def sort_data_files(pid, sci_obs, ref_obs, outdir, expid_sci='03106',
             subdir = os.path.join(outdir, sub_str)
             # Create if it doesn't currently exist
             if not os.path.isdir(subdir):
-                print(f'Creating directory: {subdir}')
+                log.info(f'Creating directory: {subdir}')
                 os.mkdir(subdir)
 
             # Generate symbolic link to new location
@@ -535,24 +543,28 @@ def sort_data_files(pid, sci_obs, ref_obs, outdir, expid_sci='03106',
 
             # Cycle through reference files and find everything
             # with the same filter, exp_type, and apname
-            for obsid_ref in ref_obs:
-                file_start_ref = f'jw{pid:05d}{obsid_ref:03d}'
-                # Get all files in given observation
-                files_ref = np.sort([f for f in allfiles if (file_start_ref in f)])
-                for fref in files_ref:
-                    file_path_ref = os.path.join(indir, fref)
-                    hdr_ref = fits.getheader(file_path_ref)
-                    # Get filter and 
-                    exp_type_ref = hdr_ref.get('EXP_TYPE')
-                    filt_ref = hdr_ref.get('FILTER')
-                    apname_ref = hdr_ref.get('APERNAME')
+            if (ref_obs is not None) and isinstance(ref_obs, (list,np.ndarray)):
+                for obsid_ref in ref_obs:
+                    file_start_ref = f'jw{pid:05d}{obsid_ref:03d}'
+                    # Get all files in given observation
+                    files_ref = np.sort([f for f in allfiles if (file_start_ref in f)])
+                    for fref in files_ref:
+                        file_path_ref = os.path.join(indir, fref)
+                        hdr_ref = fits.getheader(file_path_ref)
+                        # Get filter and 
+                        exp_type_ref = hdr_ref.get('EXP_TYPE')
+                        filt_ref = hdr_ref.get('FILTER')
+                        apname_ref = hdr_ref.get('APERNAME')
 
-                    if (exp_type_ref==exp_type) and (filt==filt_ref) and (apname_ref==apname):
-                        # Generate symbolic link to new location
-                        file_link_path = os.path.join(subdir, fref)
-                        if not os.path.isfile(file_link_path):
-                            os.symlink(file_path_ref, file_link_path)
-    print(f"Sorting complete for {pid} {coron_mask} {filter}")
+                        if (exp_type_ref==exp_type) and (filt==filt_ref) and (apname_ref==apname):
+                            # Generate symbolic link to new location
+                            file_link_path = os.path.join(subdir, fref)
+                            if not os.path.isfile(file_link_path):
+                                os.symlink(file_path_ref, file_link_path)
+            else:
+                log.warning(f'No ref obs specified: meta.ref_obs={ref_obs}')
+
+    log.info(f"Sorting complete for {pid} {coron_mask} {filter}")
 
 def open_new_log_file(fits_file, output_dir, stage_str=None):
     """Create and open a new log file

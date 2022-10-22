@@ -24,9 +24,9 @@ import pyklip.parallelized as parallelized
 from pyklip.klip import nan_gaussian_filter
 from copy import deepcopy
 
-import webbpsf
-webbpsf.setup_logging(level='ERROR')
-import webbpsf_ext
+import webbpsf, webbpsf_ext
+webbpsf_ext.setup_logging(level='ERROR', verbose=False)
+
 
 from . import utils
 from . import io
@@ -66,14 +66,19 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
     if (meta.verbose == True):
         print('--> Extracting companion properties...')
 
+    if (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
+        sci_ref_dir = 'SCI+REF'
+    else:
+        sci_ref_dir = 'SCI'
+
     # If necessary, extract the metadata of the observations.
     if (not meta.done_subtraction):
         if meta.comp_usefile == 'bgsub':
             subdir = 'IMGPROCESS/BGSUB'
         elif meta.use_cleaned:
-            subdir = 'IMGPROCESS/SCI+REF_CLEAN'
+            subdir = f'IMGPROCESS/{sci_ref_dir}_CLEAN'
         else:
-            subdir = 'IMGPROCESS/SCI+REF'
+            subdir = f'IMGPROCESS/{sci_ref_dir}'
         basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir=subdir, search=meta.sub_ext)
 
         meta = utils.prepare_meta(meta, basefiles)
@@ -609,14 +614,20 @@ def inject_fit(meta):
     Initial steps are very similar to extract companions,
 
     '''
+
+    if (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
+        sci_ref_dir = 'SCI+REF'
+    else:
+        sci_ref_dir = 'SCI'
+
     # If necessary, extract the metadata of the observations we're injecting into
     if (not meta.done_subtraction):
         if meta.comp_usefile == 'bgsub':
             subdir = 'IMGPROCESS/BGSUB'
         elif meta.use_cleaned:
-            subdir = 'IMGPROCESS/SCI+REF_CLEAN'
+            subdir = f'IMGPROCESS/{sci_ref_dir}_CLEAN'
         else:
-            subdir = 'IMGPROCESS/SCI+REF'
+            subdir = f'IMGPROCESS/sci_ref_dir'
         basefiles = io.get_working_files(meta, meta.done_imgprocess, subdir=subdir, search=meta.sub_ext)
 
         meta = utils.prepare_meta(meta, basefiles)

@@ -32,6 +32,7 @@ class Coron1Pipeline(Detector1Pipeline):
     spec = """
         nrow_ref           = integer(default=20)    # Number of rows for pseudo-ref amp correction
         ncol_ref           = integer(default=0)     # Number of cols for pseudo-ref 1/f correction
+        nrow_off           = integer(default=0)     # Number of rows to offset from top/bottom
         grow_diagonal      = boolean(default=False) # Grow saturation along diagonal pixels?
         save_intermediates = boolean(default=False) # Save all intermediate step results
     """
@@ -359,7 +360,7 @@ def run_ramp_fitting(meta, idir, osubdir):
         if hasattr(meta, 'ncol_ref'):
             pipeline.ncol_ref = meta.ncol_ref
         if hasattr(meta, 'grow_diagonal'):
-            pipeline.nrow_ref = meta.grow_diagonal
+            pipeline.grow_diagonal = meta.grow_diagonal
         if hasattr(meta, 'sat_boundary'):
             pipeline.saturation.n_pix_grow_sat = meta.sat_boundary
         if hasattr(meta, 'weighting'):
@@ -382,8 +383,14 @@ def stsci_ramp_fitting(meta):
     """
     Use the JWST pipeline to process *uncal.fits files to *rateints.fits files
     """
+
+    if (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
+        sci_ref_dir = 'SCI+REF'
+    else:
+        sci_ref_dir = 'SCI'
+
     if meta.rampfit_idir:
-        run_ramp_fitting(meta, meta.idir, 'RAMPFIT/SCI+REF/')
+        run_ramp_fitting(meta, meta.idir, f'RAMPFIT/{sci_ref_dir}/')
     if meta.rampfit_bgdirs:
         if meta.bg_sci_dir != 'None':
             run_ramp_fitting(meta, meta.bg_sci_dir, 'RAMPFIT/BGSCI/')

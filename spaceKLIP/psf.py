@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.ndimage.interpolation import rotate
 import webbpsf_ext
+webbpsf_ext.setup_logging('WARN', verbose=False)
 
 from webbpsf_ext.webbpsf_ext_core import _transmission_map
 from webbpsf_ext.image_manip import frebin, fourier_imshift
@@ -9,8 +10,6 @@ from webbpsf_ext.coords import rtheta_to_xy
 from webbpsf_ext import NIRCam_ext, MIRI_ext
 
 import pysynphot as S
-
-webbpsf_ext.setup_logging('WARN')
 
 # Progress bar
 from tqdm.auto import trange, tqdm
@@ -41,6 +40,8 @@ class JWST_PSF():
 
         Parameters
         ==========
+        inst : str
+            Instrument name either 'NIRCAM' or 'MIRI'.
         filter : str
             NIRCam filter (e.g., F335M)
         image_mask : str
@@ -82,10 +83,10 @@ class JWST_PSF():
         inst_off = self.inst_ext(filter=filt, image_mask=None, pupil_mask=pupil_mask,
                                   fov_pix=fov_pix, oversample=oversample, **kwargs)
 
-        # Load date-specific OPD files? 
-        if date is not None: # KWD edit - only webbpsf and not webbpsf_ext...?
-            inst_on.load_wss_opd_by_date(date=date, choice='before', verbose=False, plot=False)
-            inst_off.load_wss_opd_by_date(date=date, choice='before', verbose=False, plot=False)
+        # Load date-specific OPD files?
+        if date is not None:
+            inst_on.load_wss_opd_by_date(date=date, choice='closest', verbose=False, plot=False)
+            inst_off.load_wss_opd_by_date(date=date, choice='closest', verbose=False, plot=False)
         
         # Generating initial PSFs...
         print('Generating initial PSFs...')
@@ -137,7 +138,7 @@ class JWST_PSF():
         # Center PSFs
         self._recenter_psfs()
 
-        # Store MIRI classes
+        # Store instrument classes
         self.inst_on  = inst_on
         self.inst_off = inst_off
         
@@ -252,7 +253,7 @@ class JWST_PSF():
             Position angle (positive angles East of North) in degrees.
             Can also be an array; must match size of `r`.
         PA_V3 : float
-            V3 PA of telescope.
+            V3 PA of ref point N over E (e.g. 'ROLL_REF').
         frame_out : str
             Coordinate frame of output. Default is 'idl'
 
@@ -306,8 +307,8 @@ class JWST_PSF():
         return_oversample : bool
             Return the oversampled version of the PSF?
         do_shift : bool
-            If True, will offset PSF by appropriate amount from center. Otherwise,
-            returns PSF in center of image.
+            If True, will return the PSF offset from center. 
+            Otherwise, returns PSF in center of image.
         """
 
         from scipy.interpolate import interp1d
@@ -389,13 +390,10 @@ class JWST_PSF():
 
         Parameters
         ==========
-        r : float or ndarray
-            Radial offst from mask center.
-        th : float or ndarray
-            Position angle (positive angles East of North) in degrees.
-            Can also be an array; must match size of `r`.
+        loc : float or ndarray
+            (x,y) or (r,th) location (in arcsec) offset from center of mask.
         PA_V3 : float
-            V3 PA of telescope.
+            V3 PA of ref point N over E (e.g. 'ROLL_REF').
         return_oversample : bool
             Return the oversampled version of the PSF?
         do_shift : bool
