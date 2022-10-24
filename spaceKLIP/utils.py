@@ -776,15 +776,18 @@ def get_psfmasknames(meta):
     # Get the correct PSF mask for each concatenation.
     meta.psfmask = {}
 
-    _get_transmission_path = lambda filename: str(importlib.resources.path('spaceKLIP.resources.transmissions', filename))
+    _get_transmission_path = lambda filename: importlib.resources.path('spaceKLIP.resources.transmissions', filename)
 
     for key in meta.obs.keys():
         if '1065' in key:
-            meta.psfmask[key] = _get_transmission_path('JWST_MIRI_F1065C_transmission_webbpsf-ext_v2.fits')
+            with _get_transmission_path('JWST_MIRI_F1065C_transmission_webbpsf-ext_v2.fits') as p:
+                meta.psfmask[key] = p
         elif '1140' in key:
-            meta.psfmask[key] = _get_transmission_path('JWST_MIRI_F1140C_transmission_webbpsf-ext_v2.fits')
+            with _get_transmission_path('JWST_MIRI_F1140C_transmission_webbpsf-ext_v2.fits') as p:
+                meta.psfmask[key] = p
         elif '1550' in key:
-            meta.psfmask[key] = _get_transmission_path('JWST_MIRI_F1550C_transmission_webbpsf-ext_v2.fits')
+            with _get_transmission_path('JWST_MIRI_F1550C_transmission_webbpsf-ext_v2.fits') as p:
+                meta.psfmask[key] = p
         elif 'MASK335R' in key:
             meta.psfmask[key] = _get_transmission_path('jwst_nircam_psfmask_mask335r_shift.fits')
         else:
