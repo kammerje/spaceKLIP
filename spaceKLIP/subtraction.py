@@ -452,7 +452,7 @@ def klip_subtraction(meta, files):
                             try:
                                 mask = fits.getdata(meta.psfmask[key], 0) #MIRI
                             except:
-                                raise FileError('Unable to read psfmask file {}'.format(meta.psfmask[key]))
+                                raise FileNotFoundError('Unable to read psfmask file {}'.format(meta.psfmask[key]))
                     else:
                         mask = None
                     dataset = JWST.JWSTData(filepaths=filepaths, psflib_filepaths=psflib_filepaths, centering=meta.centering_alg, 
