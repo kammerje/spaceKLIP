@@ -66,14 +66,13 @@ def raw_contrast_curve(meta, fourier=True):
     if (meta.verbose == True):
         print('--> Computing raw contrast curve...')
 
-    if hasattr(meta, "ref_obs"):
-        if (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
+    if hasattr(meta, "ref_obs") and (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
             sci_ref_dir = 'SCI+REF'
-    elif hasattr(meta, 'ref_obs_override'): 
-        if meta.ref_obs_override == True:
+    elif hasattr(meta, 'ref_obs_override') and meta.ref_obs_override == True:
             sci_ref_dir = 'SCI+REF'
     else:
         sci_ref_dir = 'SCI'
+
 
     # If necessary, extract the metadata of the observations.
     if (not meta.done_subtraction):
@@ -267,11 +266,9 @@ def calibrated_contrast_curve(meta, fourier=False):
         the total flux, however it can introduce Gibbs artefacts for the
         shortest NIRCAM filters as the PSF is undersampled.
     """
-    if hasattr(meta, "ref_obs"):
-        if (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
+    if hasattr(meta, "ref_obs") and (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
             sci_ref_dir = 'SCI+REF'
-    elif hasattr(meta, 'ref_obs_override'): 
-        if meta.ref_obs_override == True:
+    elif hasattr(meta, 'ref_obs_override') and meta.ref_obs_override == True:
             sci_ref_dir = 'SCI+REF'
     else:
         sci_ref_dir = 'SCI'

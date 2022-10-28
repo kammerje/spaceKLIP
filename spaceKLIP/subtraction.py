@@ -39,11 +39,9 @@ def perform_subtraction(meta):
     else:
         ext = ''
 
-    if hasattr(meta, "ref_obs"):
-        if (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
+    if hasattr(meta, "ref_obs") and (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
             sci_ref_dir = 'SCI+REF'
-    elif hasattr(meta, 'ref_obs_override'): 
-        if meta.ref_obs_override == True:
+    elif hasattr(meta, 'ref_obs_override') and meta.ref_obs_override == True:
             sci_ref_dir = 'SCI+REF'
     else:
         sci_ref_dir = 'SCI'
