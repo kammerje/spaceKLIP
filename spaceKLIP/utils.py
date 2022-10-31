@@ -789,7 +789,8 @@ def get_psfmasknames(meta):
             with _get_transmission_path('JWST_MIRI_F1550C_transmission_webbpsf-ext_v2.fits') as p:
                 meta.psfmask[key] = p
         elif 'MASK335R' in key:
-            meta.psfmask[key] = _get_transmission_path('jwst_nircam_psfmask_mask335r_shift.fits')
+            with _get_transmission_path('jwst_nircam_psfmask_mask335r_shift.fits') as p:
+                meta.psfmask[key] = p
         else:
             model = datamodels.open(meta.obs[key]['FITSFILE'][0])
             meta.psfmask[key] = step.get_reference_file(model, 'psfmask')
