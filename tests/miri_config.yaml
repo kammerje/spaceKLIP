@@ -10,12 +10,11 @@
 
 ##### REQUIRED #####
 # Input Directory
-idir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1140C/SCI+REF/'
-odir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/20220801_F1140C/' # Output Directory
+idir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1550C/SCI+REF/'
+odir: '/Users/acarter/Documents/DIRECT_IMAGING/JWST/ERS/HIP65426/CORONAGRAPHY_PAPER/spaceKLIP/20220828/F1550C/' # Output Directory
 sdir: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/HIP65426A_sdf_phoenix_m+modbb_disk_r.txt' #VOT table or stellar model file.
 
-##### OPTIONAL #####
-rundirs: ['2022_08_01_ADI_annu1_subs1_run1', '2022_08_01_RDI_annu1_subs1_run1', 2022_08_01_ADI+RDI_annu1_subs1_run1]  #Specify directory(ies) within odir of existing runs to calculate contrast curve / companion
+##### OPTIONAL #####rundirs: []  #Specify directory(ies) within odir of existing runs to calculate contrast curve / companion
 ancildir: None      # Specify directory to save ancillary files, if None then saved under odir/ANCILLARY/. 
 bg_sci_dir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1140C/BGSCI/' #None if not using
 bg_ref_dir: '/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1140C/BGREF/' #None if not using
@@ -28,14 +27,15 @@ plotting: True    # Produce matplotlib plots
 use_psfmask: True # if true use PSF masks from CRDS, if false use transmission functions
 fiducial_point_override: False # if true uses narrow end of the bar masks, if false use filter dependent position
 overwrite: True   # Will overwrite existing files in a given directory
-badpix_threshold: 1
+ref_obs_override: True
 
 ########################################
 ##### Star / Companion information #####
 ########################################
 spt: 'A2V' # Spectral type of target, only necessary for VOTable
-ra_off: [558]  # mas; RA offset of the known companions
-de_off:  [-651] # mas; DEC offset of the known companions
+starmagerrs: [0.038] #[0.038]
+ra_off: [418]  # mas; RA offset of the known companions
+de_off: [-696] # mas; DEC offset of the known companions
 
 #################################
 ##### Ramp Fitting Settings #####
@@ -51,43 +51,56 @@ ramp_fit_max_cores: 'all' #Options are 'none', 'quarter', 'half', 'all'
 #####################################
 ##### Image Processing Settings #####
 #####################################
+imgproc_idir: True
+imgproc_bgdirs: True
 imgproc_ext: 'rateints.fits'
-outlier_only: False        #Must have already run image processing
+outlier_only: True        #Must have already run image processing
 outlier_corr: 'dqmed+timemed+custom'
+dq_threshold: 1000
 outmed_blur: 3             #Size of median blurring window
 outmed_threshold: 20       #Threshold to detect outliers
-custom_file: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/pixmask_1140.txt'
+custom_file: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/pixmask_1550.txt'
 
 ####################################
 ##### PSF Subtraction Settings #####
 ####################################
 sub_ext: 'calints.fits'
 use_cleaned: True   #Use files generated after (True) or before (False) outlier correction
-bgtrim: 'first'  # Trim the first integration in the background, science, and reference (bgsub != 'saved' or 'None')
-bgsub: 'default'    #Perform background subtraction, 'default' for median, 'pyklip' for klip, 'leastsq' for loci
-bgmed_splits: [8,2]   #12,4  #Peform median background subtraction but split across [Nsci,Nref] ~equal different sections
-bgonly: False     # Only perform the background subtraction
-centering_alg: 'basic'    # Algorithm to use for centering "basic", "jwstpipe", "imageregis", or 'savefile'
-mode: ['ADI+RDI', 'ADI', 'RDI']       # list of modes for pyKLIP, will loop through all
+bgtrim: 'None'  # Trim the first integration in the background, science, and reference (bgsub != 'saved' or 'None')
+bgsub: 'saved'    #Perform background subtraction, 'default' for median, 'pyklip' for klip, 'leastsq' for loci
+bgmed_splits: [12,4]   #12,4  #Peform median background subtraction but split across [Nsci,Nref] ~equal different sections
+bgonly: False    # Only perform the background subtraction
+centering_alg: 'zero'    # Algorithm to use for centering "basic", "jwstpipe", "imageregis", or 'savefile'
+mode: ['ADI+RDI']       # list of modes for pyKLIP, will loop through all
 annuli: [1]         # list of number of annuli for pyKLIP, will loop through all
 subsections: [1]    # list of number of annuli for pyKLIP, will loop through all
-numbasis: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,30,40,50] # list of number of basis vectors for pyKLIP, will loop through all
+numbasis: [6,59,81,103,121,162,221] #[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,30,40,50,59,81,103,121,162,221] # list of number of basis vectors for pyKLIP, will loop through all
 
+###################################
+##### Post-Subtraction Settings #####
+###################################
+KL: 'max' #'max' # Number of KL components for which the calibrated contrast curve and the companion properties shall be computed (must be in subtracted numbasis)
+psf_spec_file: '/Users/acarter/Documents/DIRECT_IMAGING/JWST/ERS/HIP65426/hip65426b_bestfit_jansky.txt'
+rundirs: ['2022_10_22_ADI+RDI_annu1_subs1_run1', '2022_10_22_RDI_annu1_subs1_run1', '2022_10_22_ADI_annu1_subs1_run1']  #Specify directory(ies) within odir of existing runs to calculate contrast curve / companion
 ###################################
 ##### Contrast Curve Settings #####
 ###################################
-conc_usefile: 'bgsub' # Either "bgsub" for background subtracted or False for regular
-fwhm_scale: 1.5      #Scale to mask companions with
-repeatcentering_contrast: 'basic' # False to not repeat, "basic" is not saved and must be repeated
-KL: 15 # Number of KL components for which the calibrated contrast curve and the companion properties shall be computed (must be in subtracted numbasis)
+conc_usefile: 'bgsub' # Either "bgsub" for background subtracted or False for regular 
+repeatcentering_contrast: 'zero' # False to not repeat, "basic" is not saved and must be repeated
+conc_res: 'default'
+cal_nthreads: 1
 
-# TODO: MASK LOCATIONS
+fwhm_scale: [1.5, 1.5, 1.5, 0.5, 0.5, 2, 3, 3, 1]    #Scale to mask companions with, integer or list len equal to comps+masks
+ra_off_mask: [6750,7800,-3050,-5200,5300,400,1800,7050] 
+de_off_mask: [7500,6250,7330,6800,-8000,-8800,-8600,500]
 
-seps_inject_rnd: [5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 25., 30.0, 35.0, 40.0] # pix; list of separations at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
+seps_inject_rnd: [2, 3, 4, 5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 25., 30.0, 35.0, 40.0] # pix; list of separations at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
 #seps_inject_rnd: [5.0, 25.0, 40.0] # pix; list
-pas_inject_rnd: [0., 45., 90., 135., 180., 225., 270., 315.] # deg; list of position angles at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
-pas_inject_fqpm: [40.0, 130.0, 220.0, 310.0]
+pas_inject_rnd: [0., 45., 90., 225., 270., 315.] # deg; list of position angles at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
 
+seps_inject_fqpm: [3.0, 4.0, 5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 25., 30.0, 35.0, 40.0]
+pas_inject_fqpm: [57.5,147.5,237.5,320.5]
+pa_ranges_fqpm: [(20, 185),(0,5),(205,360)]
 
 pa_ranges_bar: [(105, 105), (285, 285)] # deg; list of tuples defining the pizza slices that shall be considered when computing the contrast curves for the bar masks
 seps_inject_bar: [2.0, 4.0, 6.0, 8.0, 10.0, 12.5, 15.0, 17.5, 20.0, 25.0, 30.0] # pix; list of separations at which fake planets shall be injected to compute the calibrated contrast curve for the bar masks
@@ -97,22 +110,24 @@ pas_inject_bar: [45., 135., 225., 315.] # deg; list of position angles at which 
 ##### Companion Photometry / Astrometry Settings ######
 #######################################################
 comp_usefile: 'bgsub'  # Either "bgsub" for background subtracted or False for regular
-repeatcentering_companion: 'basic' # False to not repeat, "basic" is not saved and must be repeated
+repeatcentering_companion: 'zero' # False to not repeat, "basic" is not saved and must be repeated
 offpsf: 'webbpsf_ext'   #'webbpsf' for shifted offaxis, 'webbpsf_ext' for ~at location and time
 psfdate: '2022-07-18T00:00:00'  #Input date for webbpsf_ext model
+flux_percent_error: 15
 
 nested: False
 mcmc: True
-nwalkers:  100   # For EMCEE photometry / astrometry fitting
+nwalkers: 50   # For EMCEE photometry / astrometry fitting
 nburn: 100
 nsteps: 200
-numthreads: 6
+numthreads: 1
 
 x_range: 3. # pix
 y_range: 3. # pix
 flux_range: 10. # mag
-corr_len_range: 3.
+corr_len_range: 1.
 corr_len_guess: 3.
-fitboxsize: 31 # pix
+fitboxsize: 30 # pix
+fitkernel: 'diag'
 dr: 5
 exc_rad: 3

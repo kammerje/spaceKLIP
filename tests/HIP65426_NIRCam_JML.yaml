@@ -1,0 +1,158 @@
+#############################################################
+##### Configuration File for JWST Coronagraphy Pipeline #####
+#############################################################
+
+# TODO: Create readthedocs page that describe each setting in detail.
+
+#######################
+##### Directories #####
+#######################
+
+##### REQUIRED #####
+# Input Directory
+idir: '/data/NIRData/MAST_proc/01386/HIP65426/F300M_MASK335R/'
+odir: '/data/NIRData/MAST_proc/01386/HIP65426/F300M_MASK335R/' # Output Directory
+sdir: '/data/NIRData/MAST_proc/01386/HIP65426.vot' #VOT table or stellar model file.
+
+##### OPTIONAL #####
+
+# File sorting information to create symlinks to uncal files in SpaceKLIP directory structure
+pid: 1386
+filter: 'F300M'
+coron_mask: 'MASK335R'
+sci_obs: [2,3]     # Observations corresponding to science roll positions
+ref_obs: [1]       # Observations for reference sources
+expid_sci: '03106' # Exp ID corresponding to first science exposure. Will depend on whether astrometric conf images were specified.
+data_dir: None     # Input data directory to original uncal files. If not specified, searches MAST directory: $JWSTDOWNLOAD_OUTDIR/01386
+
+rundirs: ['2022_08_02_RDI_annu1_subs1_run1'] #'2022_08_02_ADI+RDI_annu1_subs1_run1', '2022_08_02_RDI_annu1_subs1_run1', '2022_08_02_ADI_annu1_subs1_run1']  #Specify directory(ies) within odir of existing runs to calculate contrast curve / companion
+ancildir: None      # Specify directory to save ancillary files, if None then saved under odir/ANCILLARY/. 
+bg_sci_dir: None #'/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1140C/BGSCI/' #None if not using
+bg_ref_dir: None #'/Users/acarter/Documents/DIRECT_IMAGING/DATA/ERS1386/HIP65426/MIRI/F1140C/BGREF/' #None if not using
+
+############################
+##### General Settings #####
+############################
+verbose: True
+plotting: True    # Produce matplotlib plots
+use_psfmask: True # if true use PSF masks from CRDS, if false use transmission functions
+fiducial_point_override: False # if true uses narrow end of the bar masks, if false use filter dependent position
+overwrite: True   # Will overwrite existing files in a given directory
+badpix_threshold: 1
+
+########################################
+##### Star / Companion information #####
+########################################
+spt: 'A2V' # Spectral type of target, only necessary for VOTable
+ra_off: [418]  # mas; RA offset of the known companions #-5300
+de_off:  [-697] # mas; DEC offset of the known companions #-6950
+starmagerrs: [0.054, 0] #Add 0 for NIRCam because of 335M
+
+#################################
+##### Ramp Fitting Settings #####
+#################################
+rampfit_idir: True       # Toggle if you want to rampfit the sci/ref images
+rampfit_bgdirs: False    # Toggle if you want to rampfit the backgrounds (MIRI)
+ramp_ext: 'uncal.fits'   # Input FITS file extensions
+save_intermediate: False # Save intermediate steps?
+sat_boundary: 0          # Number of pixels to flag around saturated pixels
+grow_diagonal: True      # When flagging additional sat pixels, include diagonal as well as up/down/right/left?
+skip_dark_current: True  # Exclude pipeline's dark current step?
+skip_ipc: False          # Exclude pipeline's IPC correction step?
+skip_jump: False         # Exclude pipeline's jump detection step?
+jump_threshold: 4        # Adjust the jump detection threshold if not skipped
+nrow_ref: 4              # Set number of top/bottom reference rows 
+ncol_ref: 0              # Set number of left/right reference columns
+ramp_fit_max_cores: 'quarter' #Options are 'none', 'quarter', 'half', 'all'
+
+
+#####################################
+##### Image Processing Settings #####
+#####################################
+imgproc_idir: True
+imgproc_ext: 'rateints.fits'
+imgproc_bgdirs: False
+jwst_outlier_detection: True  # Include JWST pipeline outlier detection Step?
+outlier_only: False       # Only perform cleaning. Must have created .calints with outlier_corr='None'. Mainly for testing/debugging. 
+#outlier_corr: 'dqmed+timemed_alt'  # Set to "None" for no cleaning
+outlier_corr: 'bpclean'  # Set to "None" for no cleaning
+bpclean_sigclip : 5      # Pixel sigma clipping for bpclean / bpfix 
+bpclean_niter : 5        # Number of iterations for bpclean / bpfix
+outmed_blur: 5           # Size of median blurring window for outmedian
+outmed_threshold: 1      # Threshold to detect outliers for outmedian
+dq_threshold: 1000       # Threshold for dqmed
+tmed_alt_frac: 0.2       # timemed_alt parameter
+# File containing list pixels to always fix. Values are 1-based (ie. ds9-like).
+# custom_file: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/pixmask_nircam.txt'
+custom_file: ''
+
+####################################
+##### PSF Subtraction Settings #####
+####################################
+sub_ext: 'calints.fits'
+use_cleaned: True   #Use files generated after (True) or before (False) outlier correction
+bgtrim: 0           # Trim the first integration in the background, science, and reference (bgsub != 'saved' or 'None')
+bgsub: 'None'       #Perform background subtraction, 'default' for median, 'pyklip' for klip, 'leastsq' for loci
+bgmed_splits: [8,2] #12,4  #Peform median background subtraction but split across [Nsci,Nref] ~equal different sections
+bgonly: False       # Only perform the background subtraction
+blur_images: False
+load_file0_center: False  # If True then look for and load an ANCILLARY file that contains the star position of the first frame. Else, calculate it and save it
+centering_alg: 'jwstpipe' # Algorithm to use for centering "basic", "jwstpipe", "imageregis", or 'savefile'
+mode: ['ADI', 'RDI', 'ADI+RDI']       # list of modes for pyKLIP, will loop through all
+annuli: [1]         # list of number of annuli for pyKLIP, will loop through all
+subsections: [1]    # list of number of annuli for pyKLIP, will loop through all
+# numbasis: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,30,40,50] # list of number of basis vectors for pyKLIP, will loop through all
+numbasis: [1,5,50] # list of number of basis vectors for pyKLIP, will loop through all
+
+###################################
+##### Post-Subtraction Settings #####
+###################################
+KL: 7 # Number of KL components for which the calibrated contrast curve and the companion properties shall be computed (must be in subtracted numbasis)
+psf_spec_file: '/Users/acarter/Documents/DIRECT_IMAGING/JWST/ERS/HIP65426/hip65426b_bestfit_jansky.txt'
+psf_star_file: '/Users/acarter/Documents/DIRECT_IMAGING/CORONAGRAPHY_PIPELINE/HIP65426A_sdf_phoenix_m+modbb_disk_r.txt'
+
+###################################
+##### Contrast Curve Settings #####
+###################################
+conc_usefile: False # Either "bgsub" for background subtracted or False for regular
+repeatcentering_contrast: False # False to not repeat, "basic" is not saved and must be repeated
+conc_res: 'default' #'default' for 1 lambda/D, or specific value in pixels
+cal_method: 'median'  #Median for interpolation of median inj flux, model for model fit
+
+#fwhm_scale: [5, 10, 10, 10, 10, 7, 25, 8, 4, 4, 4, 4, 4, 10, 2]    #Scale to mask companions with, integer or list len equal to comps+masks
+fwhm_scale: [8, 10, 10, 10, 10, 7, 25, 8, 8, 8, 8, 8, 8, 10, 2] 
+ra_off_mask: [-5300, 1900, -2550, -3200, -5450, -11000, -10000, 0, 900, 1200, 800, -300, -1000,   -7200]
+de_off_mask: [6950, 9250, 8550, 7600, 3850, -6000, 3250, -1500, -1500, -800, -300, -900, 10000,   -2400]
+
+seps_inject_rnd: [11, 12, 12.5, 13, 13.5, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 32, 34, 36, 38, 40, 45, 50] #[7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 22.5, 25., 27.5, 30.0, 35.0, 40.0, 50] # pix; list of separations at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
+#seps_inject_rnd: [5.0, 25.0, 40.0] # pix; list
+pas_inject_rnd: [0., 22.5, 45., 225., 247.5, 270., 295.5, 315., 337.5] # deg; list of position angles at which fake planets shall be injected to compute the calibrated contrast curve for the round masks
+
+pa_ranges_bar: [(105, 105), (285, 285)] # deg; list of tuples defining the pizza slices that shall be considered when computing the contrast curves for the bar masks
+seps_inject_bar: [2.0, 4.0, 6.0, 8.0, 10.0, 12.5, 15.0, 17.5, 20.0, 25.0, 30.0] # pix; list of separations at which fake planets shall be injected to compute the calibrated contrast curve for the bar masks
+pas_inject_bar: [45., 135., 225., 315.] # deg; list of position angles at which fake planets shall be injected to compute the calibrated contrast curve for the bar masks
+
+#######################################################
+##### Companion Photometry / Astrometry Settings ######
+#######################################################
+comp_usefile: False # Either "bgsub" for background subtracted or False for regular
+repeatcentering_companion: False # False to not repeat, "basic" is not saved and must be repeated
+offpsf: 'webbpsf_ext'   #'webbpsf' for shifted offaxis, 'webbpsf_ext' for ~at location and time
+psfdate: '2022-07-30T00:00:00'  #Input date for webbpsf_ext model
+
+nested: False
+mcmc: True
+nwalkers: 50   # For EMCEE photometry / astrometry fitting
+nburn: 100
+nsteps: 200
+numthreads: 4
+
+x_range: 1. # pix
+y_range: 1. # pix
+flux_range: 10. # mag
+corr_len_range: 1.
+corr_len_guess: 1.
+fitboxsize: 30 # pix
+fitkernel: 'diag'
+dr: 5
+exc_rad: 3
