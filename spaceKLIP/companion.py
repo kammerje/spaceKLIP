@@ -174,12 +174,22 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
 
             load_file0_center = meta.load_file0_center if hasattr(meta,'load_file0_center') else False
 
-            dataset = JWST.JWSTData(filepaths=filepaths,
-                                    psflib_filepaths=psflib_filepaths, centering=centering_alg, badpix_threshold=meta.badpix_threshold,
-                                    scishiftfile=meta.ancildir+'shifts/scishifts', refshiftfile=meta.ancildir+'shifts/refshifts',
-                                    load_file0_center=load_file0_center, save_center_file=meta.ancildir+'shifts/file0_centers', 
-                                    fiducial_point_override=meta.fiducial_point_override, blur=meta.blur_images, spectral_type=meta.spt)
+            if (meta.use_psfmask == True):
+                try:
+                    mask = fits.getdata(meta.psfmask[key], 'SCI') #NIRCam
+                except:
+                    try:
+                        mask = fits.getdata(meta.psfmask[key], 0) #MIRI
+                    except:
+                        raise FileNotFoundError('Unable to read psfmask file {}'.format(meta.psfmask[key]))
+            else:
+                mask = None
 
+            dataset = JWST.JWSTData(filepaths=filepaths, psflib_filepaths=psflib_filepaths, centering=meta.centering_alg,
+                                    scishiftfile=meta.ancildir+'shifts/scishifts', refshiftfile=meta.ancildir+'shifts/refshifts',
+                                    fiducial_point_override=meta.fiducial_point_override, blur=meta.blur_images,
+                                    load_file0_center=load_file0_center,save_center_file=meta.ancildir+'shifts/file0_centers',
+                                    spectral_type=meta.spt, mask=mask)
             # Get the coronagraphic mask transmission map.
             utils.get_transmission(meta, key, odir, derotate=False)
 
@@ -200,7 +210,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                     if meta.psf_spec_file != False:
                         SED = io.read_spec_file(meta.psf_spec_file)
                     else:
-                        SED = None                    
+                        SED = None
                 offsetpsf_func = psf.JWST_PSF(inst, filt, immask, fov_pix=65,
                                               sp=SED, use_coeff=True,
                                               date=meta.psfdate)
@@ -244,22 +254,22 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                     # Negative sign on ra as webbpsf_ext expects in x,y space
                     offsetpsf = offsetpsf_func.gen_psf([-meta.ra_off[j]/1e3,meta.de_off[j]/1e3], do_shift=False, quick=False)
 
-                    # TODO note that adding offsetpsf_func_input as an argument should be significantly faster, 
+                    # TODO note that adding offsetpsf_func_input as an argument should be significantly faster,
                     # but currently does not work with parallelization for some reason (works if fm.py debug = True)
-                    field_dep_corr = partial(utils.field_dependent_correction, meta=meta, offsetpsf_func_input=offsetpsf_func) 
+                    field_dep_corr = partial(utils.field_dependent_correction, meta=meta, offsetpsf_func_input=offsetpsf_func)
 
                 if meta.offpsf == 'webbpsf':
                     # Generate PSF for initial guess, if very different this could be garbage
                     # Negative sign on ra as webbpsf_ext expects in x,y space
                     offsetpsf = offsetpsf_func.gen_psf([-meta.ra_off[j]/1e3,meta.de_off[j]/1e3], do_shift=False, quick=False)
 
-                    field_dep_corr = partial(utils.field_dependent_correction, meta=meta) 
+                    field_dep_corr = partial(utils.field_dependent_correction, meta=meta)
 
-                
+
                 offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
-            
+
                 if meta.blur_images != False:
-                    offsetpsf = gaussian_filter(offsetpsf, meta.blur_images)               
+                    offsetpsf = gaussian_filter(offsetpsf, meta.blur_images)
 
                 # Compute the forward-modeled dataset if it does not exist,
                 # yet, or if overwrite is True.
@@ -281,7 +291,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                                                 input_wvs=input_wvs,
                                                 spectrallib=[guess_spec],
                                                 spectrallib_units='contrast',
-                                                field_dependent_correction=field_dep_corr) 
+                                                field_dependent_correction=field_dep_corr)
 
                     # Compute the forward-modeled dataset.
                     annulus = meta.annuli #[[guess_sep-20., guess_sep+20.]] # pix
@@ -473,7 +483,7 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                         res[key][temp]['dpcentmag'] = dpcentmag
                     else:
                         res[key][temp]['dappmag'] = np.sqrt(dstarmag**2+ddeltamag**2)
-                    res[key][temp]['dstarmag'] = dstarmag   
+                    res[key][temp]['dstarmag'] = dstarmag
                     res[key][temp]['ddeltamag'] = ddeltamag
 
                     if (meta.verbose == True):
@@ -498,7 +508,15 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                     # the fortran code here requires a shorter output file than is nominally passed
                     # so try shortening it and then moving the files after
                     tempoutput = './temp-multinest/'
-                    fit = fitpsf.PlanetEvidence(guess_sep, guess_pa, fitboxsize, tempoutput)
+
+                    # check if pymultinest is installed:
+                    # if not, print error message with conda link
+                    # conda install -c conda-forge pymultinest
+                    try:
+                        fit = fitpsf.PlanetEvidence(guess_sep, guess_pa, fitboxsize, tempoutput)
+                    except ModuleNotFoundError:
+                        raise ModuleNotFoundError('Pymultinest is not installed, try \n \"conda install -c conda-forge pymultinest\"')
+
                     print('created PE module')
 
                     # generate FM stamp
@@ -605,12 +623,12 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
 
 def inject_fit(meta):
     '''
-    Function to inject companions of a known flux into images and perform 
-    the PSF fitting. This can allow us to capture the true errors in the 
+    Function to inject companions of a known flux into images and perform
+    the PSF fitting. This can allow us to capture the true errors in the
     photometric measurements that might not be estimated correctl when using
     the diagonal kernel on data with correlated noise. extract_companions()
     must be run first
-    
+
     Initial steps are very similar to extract companions,
 
     '''
@@ -632,7 +650,7 @@ def inject_fit(meta):
 
         meta = utils.prepare_meta(meta, basefiles)
         meta.done_subtraction = True # set the subtraction flag for the subsequent pipeline stages
-    
+
     # Loop through all directories of subtracted images.
     meta.truenumbasis = {}
     for counter, rdir in enumerate(meta.rundirs):
@@ -678,7 +696,7 @@ def inject_fit(meta):
             fwhm = wave/meta.diam*utils.rad2mas/pxsc # pix
 
             if filt in ['F250M']:
-                #Don't use a fourier shift for these. 
+                #Don't use a fourier shift for these.
                 fourier=False
 
             all_numbasis = []
@@ -723,11 +741,11 @@ def inject_fit(meta):
 
             load_file0_center = meta.load_file0_center if hasattr(meta,'load_file0_center') else False
 
-            raw_dataset = JWST.JWSTData(filepaths=filepaths,
-                                    psflib_filepaths=psflib_filepaths, centering=centering_alg, badpix_threshold=meta.badpix_threshold,
+            raw_dataset = JWST.JWSTData(filepaths=filepaths, psflib_filepaths=psflib_filepaths, centering=meta.centering_alg,
                                     scishiftfile=meta.ancildir+'shifts/scishifts', refshiftfile=meta.ancildir+'shifts/refshifts',
-                                    load_file0_center=load_file0_center, save_center_file=meta.ancildir+'shifts/file0_centers', 
-                                    fiducial_point_override=meta.fiducial_point_override, blur=meta.blur_images, spectral_type=meta.spt)
+                                    fiducial_point_override=meta.fiducial_point_override, blur=meta.blur_images,
+                                    load_file0_center=load_file0_center,save_center_file=meta.ancildir+'shifts/file0_centers',
+                                    spectral_type=meta.spt, mask=mask)
 
             # Make the offset PSF
             if pxsc > 100:
@@ -795,7 +813,7 @@ def inject_fit(meta):
                     dataset = deepcopy(raw_dataset)
 
                     # Now run KLIP to get the subtracted image
-                    # Sometimes faster to just use 1 thread. 
+                    # Sometimes faster to just use 1 thread.
                     odir_temp = odir+'INJECTED/'
                     if (not os.path.exists(odir_temp)):
                         os.makedirs(odir_temp)
@@ -1029,11 +1047,9 @@ def inject_fit(meta):
                             compfile = odir_temp+key+'_{}'.format(pa)+'-comp_save.json'
                             with open(compfile, 'w') as sf:
                                 json.dump(res, sf)
-                                            
+
                 ctr+=1
-                   
+
 
 
     return
-
-
