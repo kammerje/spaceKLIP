@@ -781,16 +781,16 @@ def get_psfmasknames(meta):
     for key in meta.obs.keys():
         if '1065' in key:
             with _get_transmission_path('JWST_MIRI_F1065C_transmission_webbpsf-ext_v2.fits') as p:
-                meta.psfmask[key] = p
+                meta.psfmask[key] = str(p)
         elif '1140' in key:
             with _get_transmission_path('JWST_MIRI_F1140C_transmission_webbpsf-ext_v2.fits') as p:
-                meta.psfmask[key] = p
+                meta.psfmask[key] = str(p)
         elif '1550' in key:
             with _get_transmission_path('JWST_MIRI_F1550C_transmission_webbpsf-ext_v2.fits') as p:
-                meta.psfmask[key] = p
+                meta.psfmask[key] = str(p)
         elif 'MASK335R' in key:
             with _get_transmission_path('jwst_nircam_psfmask_mask335r_shift.fits') as p:
-                meta.psfmask[key] = p
+                meta.psfmask[key] = str(p)
         else:
             model = datamodels.open(meta.obs[key]['FITSFILE'][0])
             meta.psfmask[key] = step.get_reference_file(model, 'psfmask')
