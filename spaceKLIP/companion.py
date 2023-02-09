@@ -13,6 +13,7 @@ from functools import partial
 from scipy.integrate import simpson
 from scipy.interpolate import interp1d
 from scipy.ndimage import gaussian_filter
+from scipy.ndimage.interpolation import rotate
 from scipy import ndimage
 
 import pyklip.instruments.JWST as JWST
@@ -66,7 +67,9 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
     if (meta.verbose == True):
         print('--> Extracting companion properties...')
 
-    if (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
+    if hasattr(meta, "ref_obs") and (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
+        sci_ref_dir = 'SCI+REF'
+    elif hasattr(meta, 'ref_obs_override') and meta.ref_obs_override == True:
         sci_ref_dir = 'SCI+REF'
     else:
         sci_ref_dir = 'SCI'
@@ -120,6 +123,10 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
             filepaths = np.array(meta.obs[key]['FITSFILE'][ww_sci], dtype=str).tolist()
             ww_cal = np.where(meta.obs[key]['TYP'] == 'CAL')[0]
             psflib_filepaths = np.array(meta.obs[key]['FITSFILE'][ww_cal], dtype=str).tolist()
+            sci_roll_refs = np.array(meta.obs[key]['ROLL_REF'][ww_sci], dtype=float).tolist()
+            sci_nints = np.array(meta.obs[key]['NINTS'][ww_sci], dtype=int).tolist()
+            sci_inttimes = np.array(meta.obs[key]['EFFINTTM'][ww_sci], dtype=float).tolist()
+
             hdul = pyfits.open(idir+key+'-KLmodes-all.fits')
             filt = meta.filter[key]
             pxsc = meta.pixscale[key] # mas
@@ -176,10 +183,10 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
 
             if (meta.use_psfmask == True):
                 try:
-                    mask = fits.getdata(meta.psfmask[key], 'SCI') #NIRCam
+                    mask = pyfits.getdata(meta.psfmask[key], 'SCI') #NIRCam
                 except:
                     try:
-                        mask = fits.getdata(meta.psfmask[key], 0) #MIRI
+                        mask = pyfits.getdata(meta.psfmask[key], 0) #MIRI
                     except:
                         raise FileNotFoundError('Unable to read psfmask file {}'.format(meta.psfmask[key]))
             else:
@@ -193,51 +200,27 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
             # Get the coronagraphic mask transmission map.
             utils.get_transmission(meta, key, odir, derotate=False)
 
-            # Get an offset PSF that is normalized to the total intensity of
-            # the host star.
-            if meta.offpsf == 'webbpsf':
-                offsetpsf = utils.get_offsetpsf(meta, key,
-                                                recenter_offsetpsf=recenter_offsetpsf,
-                                                derotate=False, fourier=fourier)
-                #kwd - just debugging
-                if pxsc > 100:
-                    inst = 'MIRI'
-                    immask = 'FQPM{}'.format(filt[1:5])
-                else:
-                    inst = 'NIRCAM'
-                    immask = key.split('_')[-1]
-                if hasattr(meta, "psf_spec_file"):
-                    if meta.psf_spec_file != False:
-                        SED = io.read_spec_file(meta.psf_spec_file)
-                    else:
-                        SED = None
-                offsetpsf_func = psf.JWST_PSF(inst, filt, immask, fov_pix=65,
-                                              sp=SED, use_coeff=True,
-                                              date=meta.psfdate)
-            elif meta.offpsf == 'webbpsf_ext':
-                # Define some quantities
-                if pxsc > 100:
-                    inst = 'MIRI'
-                    immask = 'FQPM{}'.format(filt[1:5])
-                else:
-                    inst = 'NIRCAM'
-                    immask = key.split('_')[-1]
-                if hasattr(meta, "psf_spec_file"):
-                    if meta.psf_spec_file != False:
-                        SED = io.read_spec_file(meta.psf_spec_file)
-                    else:
-                        SED = None
+            #### Create a function that can generate model offset PSFs
+            # Define some quantities
+            if pxsc > 100:
+                inst = 'MIRI'
+                immask = 'FQPM{}'.format(filt[1:5])
+            else:
+                inst = 'NIRCAM'
+                immask = key.split('_')[-1]
+            if hasattr(meta, "psf_spec_file"):
+                if meta.psf_spec_file != False:
+                    SED = io.read_spec_file(meta.psf_spec_file)
                 else:
                     SED = None
-                offsetpsf_func = psf.JWST_PSF(inst, filt, immask, fov_pix=65,
-                                              sp=SED, use_coeff=True,
-                                              date=meta.psfdate)
-                field_dep_corr = None #WebbPSF already corrects for transmissions.
-
-            # Loop through all companions.
+            else:
+                SED = None
+            offsetpsf_func = psf.JWST_PSF(inst, filt, immask, fov_pix=65,
+                                          sp=SED, use_coeff=True, date=meta.psfdate)
+            
+            ### Loop through all companions we are fitting
             res[key] = {}
             for j in range(len(meta.ra_off)):
-
                 # Guesses for the fit parameters.
                 guess_dx = meta.ra_off[j]/pxsc # pix
                 guess_dy = meta.de_off[j]/pxsc # pix
@@ -249,27 +232,63 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                     guess_flux = 2.452e-4
                 guess_spec = np.array([1.])
 
-                if meta.offpsf == 'webbpsf_ext':
-                    # Generate PSF for initial guess, if very different this could be garbage
-                    # Negative sign on ra as webbpsf_ext expects in x,y space
-                    offsetpsf = offsetpsf_func.gen_psf([-meta.ra_off[j]/1e3,meta.de_off[j]/1e3], do_shift=False, quick=False)
+                # Want to generate an specific PSF for each roll PA due to how the PSF
+                # may vary due to the different coronagraphic throughput. 
 
-                    # TODO note that adding offsetpsf_func_input as an argument should be significantly faster,
-                    # but currently does not work with parallelization for some reason (works if fm.py debug = True)
-                    field_dep_corr = partial(utils.field_dependent_correction, meta=meta, offsetpsf_func_input=offsetpsf_func)
+                # For this method, we won't be using a field dependent correction
+                # in pyKLIP as this correction will already be accounted for. 
+                field_dep_corr = None
 
-                if meta.offpsf == 'webbpsf':
-                    # Generate PSF for initial guess, if very different this could be garbage
-                    # Negative sign on ra as webbpsf_ext expects in x,y space
-                    offsetpsf = offsetpsf_func.gen_psf([-meta.ra_off[j]/1e3,meta.de_off[j]/1e3], do_shift=False, quick=False)
+                # Know the approximate RA / Dec position of companion
+                offsep = guess_sep * pxsc * 1e-3 #Convert to arcsec
+                offpa = guess_pa
 
-                    field_dep_corr = partial(utils.field_dependent_correction, meta=meta)
+                # Define some arrays to save things to
+                rot_offsetpsfs = []
+                all_offsetpsfs = []
+                all_psf_pas = []
 
+                # Grab the PSF that isn't affected by the coronagraphic mask (but does have Lyot throughput)
+                psf_nocoromask = offsetpsf_func.psf_off
 
-                offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
+                # Loop over all of the roll angles
+                for roll_ref, nints in zip(sci_roll_refs, sci_nints):
+                    # Ensure data types are correct
+                    roll_ref = float(roll_ref) 
+                    nints = int(nints)
 
-                if meta.blur_images != False:
-                    offsetpsf = gaussian_filter(offsetpsf, meta.blur_images)
+                    # Generate PSF for this roll angle PA, do not add the V3Yidl as this is done already
+                    offsetpsf = offsetpsf_func.gen_psf([offsep, offpa], mode='rth', PA_V3=roll_ref, 
+                                                        do_shift=False, quick=False, addV3Yidl=False)
+
+                    # As the throughput of the coronagraphic mask is not incorporated into the flux 
+                    # calibration of the pipeline, the integrated flux from the actual detector pixels
+                    # will be underestimated. Therefore, we will scale the generated PSF so that it 
+                    # is still affected by the coronagraphic throughput (i.e. fainter). Compute
+                    # scale factor by comparing PSF simulation with and without coronagraphic mask. 
+                    scale_factor =  np.sum(offsetpsf) / np.sum(psf_nocoromask)
+
+                    # Normalise PSF to a total integrated flux of 1
+                    offsetpsf /= np.sum(offsetpsf)
+
+                    # Normalise to the flux of the star in this bandpass
+                    offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
+                    
+                    # Apply scaling to apply the throughput of the coronagraphic mask 
+                    offsetpsf *= scale_factor
+
+                    # Blur model offset PSF if requested
+                    if meta.blur_images != False:
+                        offsetpsf = gaussian_filter(offsetpsf, meta.blur_images)
+
+                    # Also want a rotated PSF if we don't end up using the forward modelling
+                    rot_offsetpsf = rotate(offsetpsf, -roll_ref, reshape=False, mode='constant', cval=0)
+                    rot_offsetpsfs.extend([rot_offsetpsf]) #Don't duplicate
+
+                    # Duplicate PSFs and PAs for the number of integrations
+                    all_offsetpsfs.extend([offsetpsf for ni in range(nints)])
+                    all_psf_pas.extend([roll_ref for ni in range(nints)])
+                    
 
                 # Compute the forward-modeled dataset if it does not exist,
                 # yet, or if overwrite is True.
@@ -287,11 +306,12 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                                                 sep=guess_sep,
                                                 pa=guess_pa,
                                                 dflux=guess_flux,
-                                                input_psfs=np.array([offsetpsf]),
+                                                input_psfs=np.array(all_offsetpsfs),
                                                 input_wvs=input_wvs,
                                                 spectrallib=[guess_spec],
                                                 spectrallib_units='contrast',
-                                                field_dependent_correction=field_dep_corr)
+                                                field_dependent_correction=field_dep_corr,
+                                                input_psfs_pas=all_psf_pas)
 
                     # Compute the forward-modeled dataset.
                     annulus = meta.annuli #[[guess_sep-20., guess_sep+20.]] # pix
@@ -320,7 +340,6 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                                     mute_progression=True)
 
                 # Open the forward-modeled dataset.
-                from pyklip.klip import nan_gaussian_filter
                 with pyfits.open(fmdataset) as hdul:
                     fm_frame = hdul[0].data[KLindex]
                     try:
@@ -339,40 +358,28 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                     data_centy = hdul[0].header["PSFCENTY"]
 
                 # If use_fm_psf is False, replace the forward-modeled PSF in
-                # the fm_frame with a simple offset PSF from WebbPSF.
+                # the fm_frame with an averaged model offset PSF.
                 if (use_fm_psf == False):
-                    # Get a derotated and integration time weighted average of
-                    # an offset PSF from WebbPSF. Apply the field-dependent
-                    # correction and insert it at the correct companion
-                    # position into the fm_frame.
-                    if meta.offpsf == 'webbpsf_ext':
-                        # Generate PSF for initial guess, if very different this could be garbage
-                        # Negative sign on ra as webbpsf_ext expects in x,y space
-                        offsetpsf = offsetpsf_func.gen_psf([-meta.ra_off[j]/1e3,meta.de_off[j]/1e3], do_shift=False, quick=False)
-                    else:
-                        # Get the coronagraphic mask transmission map.
-                        utils.get_transmission(meta, key, odir, derotate=True)
-                        offsetpsf = utils.get_offsetpsf(meta, key,
-                                                        recenter_offsetpsf=recenter_offsetpsf,
-                                                        derotate=True, fourier=fourier)
+                    # Already have the offset PSFs computed, but we need to average them weighted
+                    # by their integration time. Importantly, these offset PSFs should be
+                    # rotated to the correct orientation. 
+                    av_offsetpsf = np.average(rot_offsetpsfs, weights=sci_inttimes, axis=0)
+                    sx = av_offsetpsf.shape[1]
+                    sy = av_offsetpsf.shape[0]
 
-                    offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
-                    offsetpsf *= guess_flux
-                    sx = offsetpsf.shape[1]
-                    sy = offsetpsf.shape[0]
+                    # Now want to insert this into the forward model PSF
                     if ((sx % 2 != 1) or (sy % 2 != 1)):
                         raise UserWarning('Offset PSF needs to be of odd shape')
+
+                    # Need to shift the PSF 
                     shx = (fm_centx-int(fm_centx))-(guess_dx-int(guess_dx))
                     shy = (fm_centy-int(fm_centy))+(guess_dy-int(guess_dy))
-                    stamp = ndimage.shift(offsetpsf, (shy, shx), mode='constant', cval=0.)
+                    stamp = ndimage.shift(av_offsetpsf, (shy, shx), mode='constant', cval=0.)
 
-                    if meta.offpsf == 'webbpsf':
-                        # Generate a position-dependent PSF from within field_dependent_correction (accounts for transmission)
-                        xx = np.arange(sx)-sx//2-(int(guess_dx)+(fm_centx-int(fm_centx)))
-                        yy = np.arange(sy)-sy//2+(int(guess_dy)-(fm_centy-int(fm_centy)))
-                        stamp_dx, stamp_dy = np.meshgrid(xx, yy)
-                        stamp = utils.field_dependent_correction(stamp, stamp_dx, stamp_dy, meta)
+                    # Also need to scale by the guessed flux
+                    stamp *= guess_flux
 
+                    # Overwrite the FM frame and insert the average offset PSF model
                     fm_frame[:, :] = 0.
                     fm_frame[int(fm_centy)+int(guess_dy)-sy//2:int(fm_centy)+int(guess_dy)+sy//2+1, int(fm_centx)-int(guess_dx)-sx//2:int(fm_centx)-int(guess_dx)+sx//2+1] = stamp
 
@@ -633,7 +640,9 @@ def inject_fit(meta):
 
     '''
 
-    if (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
+    if hasattr(meta, "ref_obs") and (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
+        sci_ref_dir = 'SCI+REF'
+    elif hasattr(meta, 'ref_obs_override') and meta.ref_obs_override == True:
         sci_ref_dir = 'SCI+REF'
     else:
         sci_ref_dir = 'SCI'
@@ -683,10 +692,14 @@ def inject_fit(meta):
         res = {}
         for i, key in enumerate(meta.obs.keys()):
 
+            shortkey = key.replace('_SUB320A335R_NRCA5', '')
             ww_sci = np.where(meta.obs[key]['TYP'] == 'SCI')[0]
             filepaths = np.array(meta.obs[key]['FITSFILE'][ww_sci], dtype=str).tolist()
             ww_cal = np.where(meta.obs[key]['TYP'] == 'CAL')[0]
             psflib_filepaths = np.array(meta.obs[key]['FITSFILE'][ww_cal], dtype=str).tolist()
+            sci_roll_refs = np.array(meta.obs[key]['ROLL_REF'][ww_sci], dtype=float).tolist()
+            sci_nints = np.array(meta.obs[key]['NINTS'][ww_sci], dtype=int).tolist()
+            sci_inttimes = np.array(meta.obs[key]['EFFINTTM'][ww_sci], dtype=float).tolist()
             hdul = pyfits.open(idir+key+'-KLmodes-all.fits')
             filt = meta.filter[key]
             pxsc = meta.pixscale[key] # mas
@@ -741,13 +754,7 @@ def inject_fit(meta):
 
             load_file0_center = meta.load_file0_center if hasattr(meta,'load_file0_center') else False
 
-            raw_dataset = JWST.JWSTData(filepaths=filepaths, psflib_filepaths=psflib_filepaths, centering=meta.centering_alg,
-                                    scishiftfile=meta.ancildir+'shifts/scishifts', refshiftfile=meta.ancildir+'shifts/refshifts',
-                                    fiducial_point_override=meta.fiducial_point_override, blur=meta.blur_images,
-                                    load_file0_center=load_file0_center,save_center_file=meta.ancildir+'shifts/file0_centers',
-                                    spectral_type=meta.spt, mask=mask)
-
-            # Make the offset PSF
+            # Make the offset PSF function
             if pxsc > 100:
                 inst = 'MIRI'
                 immask = 'FQPM{}'.format(filt[1:5])
@@ -765,33 +772,81 @@ def inject_fit(meta):
                                       sp=SED, use_coeff=True,
                                       date=meta.psfdate)
 
+            raw_dataset = JWST.JWSTData(filepaths=filepaths, psflib_filepaths=psflib_filepaths, centering=meta.centering_alg,
+                                    scishiftfile=meta.ancildir+'shifts/scishifts', refshiftfile=meta.ancildir+'shifts/refshifts',
+                                    fiducial_point_override=meta.fiducial_point_override, blur=meta.blur_images,
+                                    load_file0_center=load_file0_center,save_center_file=meta.ancildir+'shifts/file0_centers',
+                                    spectral_type=meta.spt, mask=immask)
+
+            # Won't do field dependent correction
             field_dep_corr = None
+
+            # Grab the PSF that isn't affected by the coronagraphic mask (but does have Lyot throughput)
+            psf_nocoromask = offsetpsf_func.psf_off
 
             # Want to subtract the known companions using the fit from extract_companions()
             all_seps, all_flux = [], []
             with open(odir+key+'-comp_save.json', 'r') as f:
                 compdata = json.load(f)[key]
+                
                 for comp in list(compdata.keys()):
                     # Get companion information
                     ra = compdata[comp]['ra']
                     de = compdata[comp]['de']
-                    flux = compdata[comp]['f'] #Flux relative to star
+                    flux = 0.000368945 #compdata[comp]['f'] #Flux relative to star
 
                     sep = np.sqrt(ra**2+de**2) / pxsc
                     pa = np.rad2deg(np.arctan2(ra, de))
 
-                    offsetpsf = offsetpsf_func.gen_psf([-ra/1e3,de/1e3], do_shift=False, quick=False)
-                    if meta.blur_images != False:
-                        offsetpsf = gaussian_filter(offsetpsf, meta.blur_images)
-                    offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
-                    offsetpsf *= flux #Negative flux as we are subtracting!
+                    # Define some arrays to save things to
+                    rot_offsetpsfs = []
+                    all_offsetpsfs = []
+                    all_psf_pas = []
+
+                    # Loop over all of the roll angles
+                    for roll_ref, nints in zip(sci_roll_refs, sci_nints):
+                        # Ensure data types are correct
+                        roll_ref = float(roll_ref) 
+                        nints = int(nints)
+
+                        # Generate PSF for this roll angle PA, do not add the V3Yidl as this is done already
+                        offsetpsf = offsetpsf_func.gen_psf([sep*pxsc/1e3, pa], mode='rth', PA_V3=roll_ref, 
+                                                            do_shift=False, quick=False, addV3Yidl=False)
+
+                        # As the throughput of the coronagraphic mask is not incorporated into the flux 
+                        # calibration of the pipeline, the integrated flux from the actual detector pixels
+                        # will be underestimated. Therefore, we will scale the generated PSF so that it 
+                        # is still affected by the coronagraphic throughput (i.e. fainter). Compute
+                        # scale factor by comparing PSF simulation with and without coronagraphic mask. 
+                        scale_factor =  np.sum(offsetpsf) / np.sum(psf_nocoromask)
+
+                        # Normalise PSF to a total integrated flux of 1
+                        offsetpsf /= np.sum(offsetpsf)
+
+                        # Normalise to the flux of the star in this bandpass
+                        offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
+                        
+                        # Apply scaling to apply the throughput of the coronagraphic mask 
+                        offsetpsf *= scale_factor
+
+                        # Blur model offset PSF if requested
+                        if meta.blur_images != False:
+                            offsetpsf = gaussian_filter(offsetpsf, meta.blur_images)
+
+                        # Also want a rotated PSF if we don't end up using the forward modelling
+                        rot_offsetpsf = rotate(offsetpsf, -roll_ref, reshape=False, mode='constant', cval=0)
+                        rot_offsetpsfs.extend([rot_offsetpsf]) #Don't duplicate
+
+                        # Duplicate PSFs and PAs for the number of integrations
+                        all_offsetpsfs.extend([offsetpsf for ni in range(nints)])
+                        all_psf_pas.extend([roll_ref for ni in range(nints)])
 
                     # Save some things
                     all_seps.append(sep)
                     all_flux.append(flux)
 
                     # Inject the planet as a negative source!
-                    stamps = np.array([-offsetpsf for k in range(raw_dataset.input.shape[0])])
+                    stamps = np.array([-opsf*flux for opsf in all_offsetpsfs])
                     fakes.inject_planet(frames=raw_dataset.input, centers=raw_dataset.centers, inputflux=stamps, astr_hdrs=raw_dataset.wcs, radius=sep, pa=pa, field_dependent_correction=None)
 
             # Get some information from the original meta file in the run directory
@@ -799,7 +854,6 @@ def inject_fit(meta):
             mode = metasave['used_mode']
             annuli = metasave['used_annuli']
             subsections = metasave['used_subsections']
-
 
             # Inject new planets at the same separations across many datasets
             # Right now only coding things up for 1 planet per image
@@ -818,24 +872,45 @@ def inject_fit(meta):
                     if (not os.path.exists(odir_temp)):
                         os.makedirs(odir_temp)
 
-                    ra = sep*pxsc*np.sin(np.deg2rad(pa)) # mas
-                    de = sep*pxsc*np.cos(np.deg2rad(pa)) # mas
+                    # ra = sep*pxsc*np.sin(np.deg2rad(pa)) # mas
+                    # de = sep*pxsc*np.cos(np.deg2rad(pa)) # mas
 
-                    # Need to make a new offsetpsf but can use old function
-                    offsetpsf = offsetpsf_func.gen_psf([-ra/1e3,de/1e3], do_shift=False, quick=False)
-                    if meta.blur_images != False:
-                        offsetpsf = gaussian_filter(offsetpsf, meta.blur_images)
-                    offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
+                    all_offsetpsfs = []
+                    all_psf_pas = []
+                    # Loop over all of the roll angles
+                    for roll_ref, nints in zip(sci_roll_refs, sci_nints):
+                        # Ensure data types are correct
+                        roll_ref = float(roll_ref) 
+                        nints = int(nints)
+                        # Generate PSF for this roll angle PA, do not add the V3Yidl as this is done already
+                        offsetpsf = offsetpsf_func.gen_psf([sep*pxsc/1e3, pa], mode='rth', PA_V3=roll_ref, 
+                                                        do_shift=False, quick=False, addV3Yidl=False)
+                        # Scale as above
+                        scale_factor =  np.sum(offsetpsf) / np.sum(psf_nocoromask)
+                        # Normalise PSF to a total integrated flux of 1
+                        offsetpsf /= np.sum(offsetpsf)
+                        # Normalise to the flux of the star in this bandpass
+                        offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
+                        # Apply scaling to apply the throughput of the coronagraphic mask 
+                        offsetpsf *= scale_factor
+
+                        # Blur model offset PSF if requested
+                        if meta.blur_images != False:
+                            offsetpsf = gaussian_filter(offsetpsf, meta.blur_images)
+
+                        # Duplicate PSFs and PAs for the number of integrations
+                        all_offsetpsfs.extend([offsetpsf for ni in range(nints)])
+                        all_psf_pas.extend([roll_ref for ni in range(nints)])
 
                     # Inject new source at desired PA
-                    stamps = np.array([offsetpsf*flux for k in range(dataset.input.shape[0])])
+                    stamps = np.array([offpsf*flux for offpsf in all_offsetpsfs])
                     fakes.inject_planet(frames=dataset.input, centers=dataset.centers, inputflux=stamps, astr_hdrs=dataset.wcs, radius=sep, pa=pa, field_dependent_correction=None)
 
                     # KLIP the dataset
                     parallelized.klip_dataset(dataset=dataset,
                                               mode=mode,
                                               outputdir=odir_temp,
-                                              fileprefix='FAKE_%04.0f_' % ctr+key,
+                                              fileprefix='FAKE_%04.0f_' % ctr+shortkey,
                                               annuli=annuli,
                                               subsections=subsections,
                                               movement=1,
@@ -860,10 +935,59 @@ def inject_fit(meta):
                             guess_flux = 2.452e-4
                         guess_spec = np.array([1.])
 
+
+                        field_dep_corr = None
+
+                        # Know the approximate RA / Dec position of companion
+                        offsep = guess_sep * pxsc * 1e-3 #Convert to arcsec
+                        offpa = guess_pa
+
+                        # Define some arrays to save things to
+                        rot_offsetpsfs = []
+                        all_offsetpsfs = []
+                        all_psf_pas = []
+
+                        # Grab the PSF that isn't affected by the coronagraphic mask (but does have Lyot throughput)
+                        psf_nocoromask = offsetpsf_func.psf_off
+
+                        # Loop over all of the roll angles
+                        for roll_ref, nints in zip(sci_roll_refs, sci_nints):
+                            # Ensure data types are correct
+                            roll_ref = float(roll_ref) 
+                            nints = int(nints)
+
+                            # Generate PSF for this roll angle PA, do not add the V3Yidl as this is done already
+                            offsetpsf = offsetpsf_func.gen_psf([offsep, offpa], mode='rth', PA_V3=roll_ref, 
+                                                                do_shift=False, quick=False, addV3Yidl=False)
+
+                            # As the throughput of the coronagraphic mask is not incorporated into the flux 
+                            # calibration of the pipeline, the integrated flux from the actual detector pixels
+                            # will be underestimated. Therefore, we will scale the generated PSF so that it 
+                            # is still affected by the coronagraphic throughput (i.e. fainter). Compute
+                            # scale factor by comparing PSF simulation with and without coronagraphic mask. 
+                            scale_factor =  np.sum(offsetpsf) / np.sum(psf_nocoromask)
+
+                            # Normalise PSF to a total integrated flux of 1
+                            offsetpsf /= np.sum(offsetpsf)
+
+                            # Normalise to the flux of the star in this bandpass
+                            offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
+                            
+                            # Apply scaling to apply the throughput of the coronagraphic mask 
+                            offsetpsf *= scale_factor
+
+                            # Blur model offset PSF if requested
+                            if meta.blur_images != False:
+                                offsetpsf = gaussian_filter(offsetpsf, meta.blur_images)
+
+                            # Duplicate PSFs and PAs for the number of integrations
+                            all_offsetpsfs.extend([offsetpsf for ni in range(nints)])
+                            all_psf_pas.extend([roll_ref for ni in range(nints)])
+
                         # Compute the forward-modeled dataset if it does not exist,
                         # yet, or if overwrite is True.
-                        fmdataset = odir_temp+'FM_{}'.format(pa)+'-c%.0f-' % (j+1)+key+'-fmpsf-KLmodes-all.fits'
-                        klipdataset = odir_temp+'FM_{}'.format(pa)+'-c%.0f-' % (j+1)+key+'-klipped-KLmodes-all.fits'
+                        fmdataset = odir_temp+'FM_{}'.format(pa)+'-c%.0f-' % (j+1)+shortkey+'-fmpsf-KLmodes-all.fits'
+                        klipdataset = odir_temp+'FM_{}'.format(pa)+'-c%.0f-' % (j+1)+shortkey+'-klipped-KLmodes-all.fits'
                         if ((meta.overwrite == True) or (not os.path.exists(fmdataset) or not os.path.exists(klipdataset))):
 
                             # Initialize the forward modeling pyKLIP class.
@@ -875,11 +999,12 @@ def inject_fit(meta):
                                                          sep=guess_sep,
                                                          pa=guess_pa,
                                                          dflux=guess_flux,
-                                                         input_psfs=np.array([offsetpsf]),
+                                                         input_psfs=np.array(all_offsetpsfs),
                                                          input_wvs=input_wvs,
                                                          spectrallib=[guess_spec],
                                                          spectrallib_units='contrast',
-                                                         field_dependent_correction=field_dep_corr)
+                                                         field_dependent_correction=field_dep_corr,
+                                                         input_psfs_pas=all_psf_pas)
 
                             # Compute the forward-modeled dataset.
                             annulus = meta.annuli #[[guess_sep-20., guess_sep+20.]] # pix
@@ -895,7 +1020,7 @@ def inject_fit(meta):
                                             fm_class=fm_class,
                                             mode=mode,
                                             outputdir=odir_temp,
-                                            fileprefix='FM_{}'.format(pa)+'-c%.0f-' % (j+1)+key,
+                                            fileprefix='FM_{}'.format(pa)+'-c%.0f-' % (j+1)+shortkey,
                                             annuli=annulus,
                                             subsections=subsection,
                                             movement=1,
@@ -926,7 +1051,7 @@ def inject_fit(meta):
                                 data_centy = hdul[0].header["PSFCENTY"]
 
                             if (meta.plotting == True):
-                                savefile = odir_temp+key+'-fmpsf_{}'.format(pa)+'c%.0f' % (j+1)+'.pdf'
+                                savefile = odir_temp+shortkey+'-fmpsf_{}'.format(pa)+'c%.0f' % (j+1)+'.pdf'
                                 plotting.plot_fm_psf(meta, fm_frame, data_frame, guess_flux, pxsc=pxsc, j=j, savefile=savefile)
 
                             # Fit the forward-modeled PSF to the KLIP-subtracted data.
@@ -989,22 +1114,22 @@ def inject_fit(meta):
                                 fma.noise_map[fma.noise_map == 0.] = noise_map_max
 
                                 # Run the MCMC fit.
-                                fma.fit_astrometry(nwalkers=meta.nwalkers, nburn=meta.nburn, nsteps=meta.nsteps, numthreads=meta.numthreads, chain_output=odir_temp+key+'-bka_chain_{}'.format(pa)+'c%.0f' % (j+1)+'.pkl')
+                                fma.fit_astrometry(nwalkers=meta.nwalkers, nburn=meta.nburn, nsteps=meta.nsteps, numthreads=meta.numthreads, chain_output=odir_temp+shortkey+'-bka_chain_{}'.format(pa)+'c%.0f' % (j+1)+'.pkl')
                                 fma.sampler.chain[:, :, 0] *= pxsc
                                 fma.sampler.chain[:, :, 1] *= pxsc
                                 fma.sampler.chain[:, :, 2] *= guess_flux
                                 if (meta.plotting == True):
-                                    savefile = odir_temp+key+'-chains_{}'.format(pa)+'c%.0f' % (j+1)+'.pdf'
+                                    savefile = odir_temp+shortkey+'-chains_{}'.format(pa)+'c%.0f' % (j+1)+'.pdf'
                                     plotting.plot_chains(fma.sampler.chain, savefile)
                                     fma.make_corner_plot()
-                                    plt.savefig(odir_temp+key+'-corner_{}'.format(pa)+'%.0f' % (j+1)+'.pdf')
+                                    plt.savefig(odir_temp+shortkey+'-corner_{}'.format(pa)+'%.0f' % (j+1)+'.pdf')
                                     plt.close()
                                     fma.best_fit_and_residuals()
-                                    plt.savefig(odir_temp+key+'-model_{}'.format(pa)+'c%.0f' % (j+1)+'.pdf')
+                                    plt.savefig(odir_temp+shortkey+'-model_{}'.format(pa)+'c%.0f' % (j+1)+'.pdf')
                                     plt.close()
 
                                 # Write the images to a file for future plotting
-                                io.save_fitpsf_images(odir_temp+key+'_{}'.format(pa)+'-fitpsf.fits', fma)
+                                io.save_fitpsf_images(odir_temp+shortkey+'_{}'.format(pa)+'-fitpsf.fits', fma)
 
                                 # Write the best fit values into the results dictionary.
                                 temp = 'c%.0f' % (j+1)
@@ -1044,7 +1169,7 @@ def inject_fit(meta):
                                     print('   APPMAG = %.2e+/-%.2e' % (res[key][temp]['appmag'], res[key][temp]['dappmag']))
 
                             # Save the results
-                            compfile = odir_temp+key+'_{}'.format(pa)+'-comp_save.json'
+                            compfile = odir_temp+shortkey+'_{}'.format(pa)+'-comp_save.json'
                             with open(compfile, 'w') as sf:
                                 json.dump(res, sf)
 
@@ -1068,7 +1193,9 @@ def planet_killer(meta, small_planet=None, recenter_offsetpsf=False,
 
     '''
 
-    if (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
+    if hasattr(meta, "ref_obs") and (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
+        sci_ref_dir = 'SCI+REF'
+    elif hasattr(meta, 'ref_obs_override') and meta.ref_obs_override == True:
         sci_ref_dir = 'SCI+REF'
     else:
         sci_ref_dir = 'SCI'
@@ -1178,10 +1305,10 @@ def planet_killer(meta, small_planet=None, recenter_offsetpsf=False,
 
             if (meta.use_psfmask == True):
                 try:
-                    mask = fits.getdata(meta.psfmask[key], 'SCI') #NIRCam
+                    mask = pyfits.getdata(meta.psfmask[key], 'SCI') #NIRCam
                 except:
                     try:
-                        mask = fits.getdata(meta.psfmask[key], 0) #MIRI
+                        mask = pyfits.getdata(meta.psfmask[key], 0) #MIRI
                     except:
                         raise FileNotFoundError('Unable to read psfmask file {}'.format(meta.psfmask[key]))
             else:
