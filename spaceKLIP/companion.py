@@ -615,13 +615,13 @@ def extract_companions(meta, recenter_offsetpsf=False, use_fm_psf=True,
                         print('   lnZ/Z0 = %.2f' % (res[key][temp]['evidence_ratio']))
 
         # Save the results
-        compfile = odir+key+'-comp_save.json'
+        compfile = odir+key+'-comp_save_fakes.json'
         with open(compfile, 'w') as sf:
             json.dump(res, sf)
 
     return res
 
-def inject_fit(meta):
+def inject_fit(meta, distance=None, brightness=None):
     '''
     Function to inject companions of a known flux into images and perform
     the PSF fitting. This can allow us to capture the true errors in the
@@ -740,7 +740,16 @@ def inject_fit(meta):
                 meta.blur_images = False
 
             load_file0_center = meta.load_file0_center if hasattr(meta,'load_file0_center') else False
-
+            if (meta.use_psfmask == True):
+                try:
+                    mask = fits.getdata(meta.psfmask[key], 'SCI') #NIRCam
+                except:
+                    try:
+                        mask = fits.getdata(meta.psfmask[key], 0) #MIRI
+                    except:
+                        raise FileNotFoundError('Unable to read psfmask file {}'.format(meta.psfmask[key]))
+            else:
+                mask = None
             raw_dataset = JWST.JWSTData(filepaths=filepaths, psflib_filepaths=psflib_filepaths, centering=meta.centering_alg,
                                     scishiftfile=meta.ancildir+'shifts/scishifts', refshiftfile=meta.ancildir+'shifts/refshifts',
                                     fiducial_point_override=meta.fiducial_point_override, blur=meta.blur_images,
@@ -804,6 +813,12 @@ def inject_fit(meta):
             # Inject new planets at the same separations across many datasets
             # Right now only coding things up for 1 planet per image
             ctr = 0 #Keep count of injections
+            if distance is not None:
+                all_seps = [distance]
+                if brightness is not None:
+                    all_flux = [brightness]
+                else:
+                    all_flux = 2.452e-4
             for sep in all_seps:
                 flux = all_flux[all_seps.index(sep)]
                 # Loop over 8 different PAs

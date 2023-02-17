@@ -453,13 +453,22 @@ def klip_subtraction(meta, files):
                                 raise FileNotFoundError('Unable to read psfmask file {}'.format(meta.psfmask[key]))
                     else:
                         mask = None
-                    dataset = JWST.JWSTData(filepaths=filepaths, psflib_filepaths=psflib_filepaths, centering=meta.centering_alg, 
+                    dataset = JWST.JWSTData(filepaths=filepaths, psflib_filepaths=psflib_filepaths, centering=meta.centering_alg,
                                             scishiftfile=meta.ancildir+'shifts/scishifts', refshiftfile=meta.ancildir+'shifts/refshifts',
                                             fiducial_point_override=meta.fiducial_point_override, blur=meta.blur_images,
                                             load_file0_center=load_file0_center,save_center_file=meta.ancildir+'shifts/file0_centers',
                                             spectral_type=meta.spt, mask=mask)
-                    #Set an OWA if it exists. 
+                    #Set an OWA if it exists.
                     if hasattr(meta, 'OWA'): dataset.OWA = meta.OWA
+                    # set a highpass if it exists
+                    if hasattr(meta, 'highpass'):
+                        highpass = meta.highpass
+                    else:
+                        highpass = False
+                    if hasattr(meta, 'movement'):
+                        mvmt = meta.movement
+                    else:
+                        mvmt = 1
 
                     #If algo is not set assume klip
                     algo = meta.algorithm if hasattr(meta, 'algorithm') else 'klip'
@@ -469,12 +478,12 @@ def klip_subtraction(meta, files):
                                               fileprefix=key,
                                               annuli=annuli,
                                               subsections=subsections,
-                                              movement=1,
+                                              movement=mvmt,
                                               numbasis=meta.truenumbasis[key],
                                               calibrate_flux=False,
                                               maxnumbasis=meta.maxnumbasis[key],
                                               psf_library=dataset.psflib,
-                                              highpass=False,
+                                              highpass=highpass,
                                               verbose=meta.verbose,
                                               algo=algo)
 
