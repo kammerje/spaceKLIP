@@ -581,8 +581,10 @@ def stsci_image_processing(meta):
     Use the JWST pipeline to process *rateints.fits files to *calints.fits files
     """
 
-    if (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
-        sci_ref_dir = 'SCI+REF'
+    if hasattr(meta, "ref_obs") and (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
+            sci_ref_dir = 'SCI+REF'
+    elif hasattr(meta, 'ref_obs_override') and meta.ref_obs_override == True:
+            sci_ref_dir = 'SCI+REF'
     else:
         sci_ref_dir = 'SCI'
 

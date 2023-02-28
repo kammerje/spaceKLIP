@@ -69,7 +69,7 @@ class Coron1Pipeline(Detector1Pipeline):
             # input = self.persistence(input)
 
         else:
-
+            
             # process Near-IR exposures
             log.debug('Processing a Near-IR exposure')
 
@@ -384,8 +384,10 @@ def stsci_ramp_fitting(meta):
     Use the JWST pipeline to process *uncal.fits files to *rateints.fits files
     """
 
-    if (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
-        sci_ref_dir = 'SCI+REF'
+    if hasattr(meta, "ref_obs") and (meta.ref_obs is not None) and isinstance(meta.ref_obs, (list,np.ndarray)):
+            sci_ref_dir = 'SCI+REF'
+    elif hasattr(meta, 'ref_obs_override') and meta.ref_obs_override == True:
+            sci_ref_dir = 'SCI+REF'
     else:
         sci_ref_dir = 'SCI'
 

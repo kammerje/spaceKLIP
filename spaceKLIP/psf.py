@@ -238,7 +238,7 @@ class JWST_PSF():
         self.xoff = xoff
         self.yoff = yoff
     
-    def rth_to_xy(self, r, th, PA_V3=0, frame_out='idl'):
+    def rth_to_xy(self, r, th, PA_V3=0, frame_out='idl', addV3Yidl=True):
         """ Convert (r,th) location to (x,y) in idl coords
 
         Assume (r,th) in coordinate system with North up East to the left.
@@ -264,7 +264,10 @@ class JWST_PSF():
         """
 
         # Convert to aperture PA
-        PA_ap = PA_V3 + self.inst_on.siaf_ap.V3IdlYAngle
+        if addV3Yidl == True:
+            PA_ap = PA_V3 + self.inst_on.siaf_ap.V3IdlYAngle
+        else:
+            PA_ap = PA_V3
         # Get theta relative to detector orientation (idl frame)
         th_fin = th - PA_ap
         # Return (x,y) in idl frame
@@ -323,7 +326,6 @@ class JWST_PSF():
             sp = sp.renorm(1, 'counts', self.bandpass)
         
         if quick:
-
             t_temp, cx_idl, cy_idl = _transmission_map(self.inst_on, coord_vals, coord_frame)
             trans = t_temp**2
 
@@ -383,7 +385,7 @@ class JWST_PSF():
         return psfs.squeeze()
 
 
-    def gen_psf(self, loc, mode='xy', PA_V3=0, return_oversample=False, do_shift=True, **kwargs):
+    def gen_psf(self, loc, mode='xy', PA_V3=0, return_oversample=False, do_shift=True, addV3Yidl=True, normalize=False, **kwargs):
         """ Generate offset PSF rotated by PA to N-E orientation
 
         Generate a PSF for some (x,y) detector position in N-E sky orientation.
@@ -420,7 +422,7 @@ class JWST_PSF():
         # Locations in aperture ideal frame to produce PSFs
         if mode == 'rth':
             r, th = loc
-            xidl, yidl = self.rth_to_xy(r, th, PA_V3=PA_V3, frame_out='idl')
+            xidl, yidl = self.rth_to_xy(r, th, PA_V3=PA_V3, frame_out='idl', addV3Yidl=addV3Yidl)
         elif mode == 'xy':
             xidl, yidl = loc
 
@@ -441,6 +443,7 @@ class JWST_PSF():
 
         # Normalize to 1
         psf = psf.squeeze()
-        psf = psf / np.sum(psf)
+        if normalize == True:
+            psf = psf / np.sum(psf)
 
         return psf

@@ -65,7 +65,6 @@ def fourier_imshift(image, shift, pad=False, cval=0.0):
         Shifted image.
 
     """
-
     if (image.ndim == 2):
 
         ny, nx = image.shape
@@ -305,7 +304,7 @@ def gen_offsetpsf(meta, offsetpsfdir, inst, filt, mask, xyoff=None, source=None,
         webbpsf_inst.load_wss_opd_by_date(date=date, choice='before', verbose=False, plot=False)
 
     # Compute the offset PSF:
-    hdul = webbpsf_inst.calc_psf(oversample=1, fov_pixels = 65, normalize='last', source=SED) # kwd - hardcode fov pix?
+    hdul = webbpsf_inst.calc_psf(oversample=1, fov_pixels=65, normalize='last', source=SED) # kwd - hardcode fov pix?
 
     # Save the offset PSF.
     if (not os.path.exists(offsetpsfdir)):
@@ -456,6 +455,46 @@ def get_transmission(meta, key, odir, derotate=False):
 
     return totmsk
 
+def field_dependent_correction_simple(stamp,
+                                      stamp_dx,
+                                      stamp_dy,
+                                      meta,
+                                      minx=0,
+                                      miny=0):
+    # print(stamp.shape)
+    # print(ostamp.shape)
+    # fig, axs = plt.subplots(nrows=1, ncols=3)
+    # axs[0].imshow(ostamp, vmin=np.nanmin(stamp-ostamp), vmax=np.nanmax(ostamp))
+    # axs[0].set_title('Original')
+    # axs[1].imshow(stamp, vmin=np.nanmin(stamp-ostamp), vmax=np.nanmax(ostamp))
+    # axs[1].set_title('Replaced')
+    # axs[2].set_title('Difference')
+    # axs[2].imshow(stamp-ostamp, vmin=np.nanmin(stamp-ostamp), vmax=np.nanmax(ostamp))
+    # plt.show()
+    # exit()
+    # stamp = ostamp
+
+    # Note the following is deprecated by virtue of using the correct position-dependent PSF.
+    # -----
+    #Apply coronagraphic mask transmission.
+    #need to check this relative to the input coordinates!
+    xy = np.vstack((stamp_dy.flatten(), stamp_dx.flatten())).T
+    transmission = meta.transmission(xy)
+    transmission = transmission.reshape(stamp.shape)
+
+    # Get center of stamp
+    c0 = (stamp.shape[0]-1)/2
+    c1 = (stamp.shape[1]-1)/2
+
+    #Get transmission at this point
+    transmission_at_center = transmission[int(c0),int(c1)]
+
+    # Old way use peak of flux
+    peak_index = np.unravel_index(stamp.argmax(), stamp.shape)
+    transmission_at_center =  transmission[peak_index[1],peak_index[0]]
+    
+    return stamp * transmission_at_center
+
 def field_dependent_correction(stamp,
                                stamp_dx,
                                stamp_dy,
@@ -582,7 +621,7 @@ def field_dependent_correction(stamp,
         stamp = offsetpsf_func.gen_psf_idl([xyoff[0], xyoff[1]], do_shift=False, quick=False)
 
         # normalize stamp to sum to 1.0, a la regular webbpsf
-        stamp /= np.sum(stamp)
+        stamp /= np.sum(stamp) 
 
         # convert to flux
         stamp *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr

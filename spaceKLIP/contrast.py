@@ -28,6 +28,7 @@ import webbpsf_ext
 from . import io
 from . import utils
 from . import plotting
+from . import psf
 
 from copy import deepcopy
 
@@ -789,6 +790,45 @@ def inject_recover(meta,
                     # Convert to RA/Dec
                     ra = seps_inject[i]*pxsc*np.sin(np.deg2rad(pas_inject[j])) # mas
                     de = seps_inject[i]*pxsc*np.cos(np.deg2rad(pas_inject[j])) # mas
+
+                    #TESTING 
+
+                    # if len(meta.obs.keys()) == 1:
+                    #     key = list(meta.obs.keys())[0]
+                    #     inst = meta.instrume[key] 
+                    #     filt = meta.filter[key]
+                    #     immask = meta.coronmsk[key]
+                    #     pxar = meta.pixar_sr[key]
+
+                    # if inst == 'NIRCAM':
+                    #     immask = key.split('_')[-1]
+                    # elif inst == 'MIRI':
+                    #     immask = mask.replace('4QPM', 'FQPM')
+                    #     immask += filt[1:-1]
+
+                    # # generate stamp with appropriate position-dep PSF
+                    # if hasattr(meta, "psf_spec_file"):
+                    #     if meta.psf_spec_file != False:
+                    #         SED = io.read_spec_file(meta.psf_spec_file)
+                    #     else:
+                    #         SED = None
+                    # else:
+                    #     SED = None
+
+                    # xyoff = (ra*1e-3, de*1e-3) # convert to arcsec for webbpsf
+
+                    # offsetpsf_func = psf.JWST_PSF(inst, filt, immask, fov_pix=65,
+                    #                                       sp=SED, use_coeff=True,
+                    #                                       date=meta.psfdate)
+
+                    # stamp = offsetpsf_func.gen_psf_idl([xyoff[0], xyoff[1]], do_shift=False, quick=False)
+
+                    # print(xyoff)
+                    # plt.imshow(stamp)
+                    # plt.show()
+                    # exit()
+
+                    ### END TESTING
                     flag = True # Flag for injection
                     # Compare RA/Dec to already injected objects
                     for k in range(len(injected)):
@@ -813,7 +853,7 @@ def inject_recover(meta,
                             # pyKLIP can't shift an undersampled PSF without artifacts, so there isn't currently
                             # a method to use the instrumental PSF. 
                             stamp = np.array([flux_inject[i] for k in range(dataset.input.shape[0])]) # MJy/sr
-                        fakes.inject_planet(frames=dataset.input, centers=dataset.centers, inputflux=stamp, astr_hdrs=dataset.wcs, radius=seps_inject[i], pa=pas_inject[j], field_dependent_correction=partial(utils.field_dependent_correction, meta=meta))
+                        fakes.inject_planet(frames=dataset.input, centers=dataset.centers, inputflux=stamp, astr_hdrs=dataset.wcs, radius=seps_inject[i], pa=pas_inject[j], field_dependent_correction=partial(utils.field_dependent_correction_simple, meta=meta), stampsize=65)
                         flux_all += [flux_inject[i]] # MJy/sr
                         seps_all += [seps_inject[i]] # pix
                         pas_all += [pas_inject[j]] # deg
