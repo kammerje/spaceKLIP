@@ -1360,24 +1360,49 @@ def planet_killer(meta, small_planet=None, recenter_offsetpsf=False,
                                       date=meta.psfdate)
 
             field_dep_corr = None
+            psf_nocoromask = offsetpsf_func.psf_off
 
             # Want to subtract the known companions using the fit from extract_companions()
             all_seps, all_flux = [], []
-            with open(odir+key+'-comp_save.json', 'r') as f:
+            # find the json file with the companions
+            import glob
+            try:
+                compjson = glob.glob(odir+key+'-comp_save_fakes.json')[0]
+            except:
+                compjson = glob.glob(odir+key+'*.json')[0]
+            with open(compjson, 'r') as f:
                 compdata = json.load(f)[key]
                 for comp in list(compdata.keys()):
                     # Get companion information
                     ra = compdata[comp]['ra']
                     de = compdata[comp]['de']
-                    flux = compdata[comp]['f'] #Flux relative to star
-
+                    try:
+                        guess_flux = meta.contrast_guess
+                    except:
+                        guess_flux = 2.452e-4
+                    flux = compdata[comp]['f'] #/guess_flux #Flux relative to star
+                    print('flux is ',str(flux))
                     sep = np.sqrt(ra**2+de**2) / pxsc
                     pa = np.rad2deg(np.arctan2(ra, de))
 
                     offsetpsf = offsetpsf_func.gen_psf([-ra/1e3,de/1e3], do_shift=False, quick=False)
                     if meta.blur_images != False:
                         offsetpsf = gaussian_filter(offsetpsf, meta.blur_images)
+                    # As the throughput of the coronagraphic mask is not incorporated into the flux
+                    # calibration of the pipeline, the integrated flux from the actual detector pixels
+                    # will be underestimated. Therefore, we will scale the generated PSF so that it
+                    # is still affected by the coronagraphic throughput (i.e. fainter). Compute
+                    # scale factor by comparing PSF simulation with and without coronagraphic mask.
+                    scale_factor =  np.sum(offsetpsf) / np.sum(psf_nocoromask)
+
+                    # Normalise PSF to a total integrated flux of 1
+                    offsetpsf /= np.sum(offsetpsf)
+
+                    # Normalise to the flux of the star in this bandpass
                     offsetpsf *= meta.F0[filt]/10.**(meta.mstar[filt]/2.5)/1e6/pxar # MJy/sr
+
+                    # Apply scaling to apply the throughput of the coronagraphic mask
+                    offsetpsf *= scale_factor
                     offsetpsf *= flux #Negative flux as we are subtracting!
 
                     # Save some things
