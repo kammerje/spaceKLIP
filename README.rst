@@ -1,17 +1,15 @@
 ###############
-spaceKLIP 2 🚀🪐
+SpaceKLIP 2 🚀🪐
 ###############
 
-SpaceKLIP is a data reduction pipeline for JWST high-contrast imaging. All code is currently under heavy development
-and typically expected features may not be available. 
+SpaceKLIP is a data reduction pipeline for JWST high-contrast imaging. All code is currently under heavy development and typically expected features may not be available. 
 
 Compatible test data: `here <https://stsci.box.com/s/0oteh8smujl3pup07hyut6hr4ag1i2el>`_ 
 
 Code status
 ***********
 
-The current release of spaceKLIP is not stable enough for a straightforward install with conda / pip. At this stage
-it is recommended that you clone the git repository directory for installation:
+The current capabilities of the code are summarized below.
 
 ::
 
