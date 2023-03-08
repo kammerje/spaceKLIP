@@ -447,10 +447,11 @@ class ImageTools():
     
     def fix_bad_pixels(self,
                        method='timemed+dqmed+medfilt',
+                       bpclean_kwargs={},
+                       custom_kwargs={},
                        timemed_kwargs={},
                        dqmed_kwargs={},
                        medfilt_kwargs={},
-                       bpclean_kwargs={},
                        types=['SCI', 'SCI_TA', 'SCI_BG', 'REF', 'REF_TA', 'REF_BG'],
                        subdir='bpcleaned'):
         
@@ -483,7 +484,13 @@ class ImageTools():
                     method_split = method.split('+')
                     for k in range(len(method_split)):
                         head, tail = os.path.split(fitsfile)
-                        if method_split[k] == 'timemed':
+                        if method_split[k] == 'bpclean':
+                            log.info('  --> Method ' + method_split[k] + ': ' + tail)
+                            self.find_bad_pixels_bpclean(data, erro, pxdq_temp, pxdq & 512 == 512, bpclean_kwargs)
+                        elif method_split[k] == 'custom':
+                            log.info('  --> Method ' + method_split[k] + ': ' + tail)
+                            self.find_bad_pixels_custom(data, erro, pxdq_temp, key, custom_kwargs)
+                        elif method_split[k] == 'timemed':
                             log.info('  --> Method ' + method_split[k] + ': ' + tail)
                             self.fix_bad_pixels_timemed(data, erro, pxdq_temp, timemed_kwargs)
                         elif method_split[k] == 'dqmed':
@@ -492,9 +499,6 @@ class ImageTools():
                         elif method_split[k] == 'medfilt':
                             log.info('  --> Method ' + method_split[k] + ': ' + tail)
                             self.fix_bad_pixels_medfilt(data, erro, pxdq_temp, medfilt_kwargs)
-                        elif method_split[k] == 'bpclean':
-                            log.info('  --> Method ' + method_split[k] + ': ' + tail)
-                            self.fix_bad_pixels_bpclean(data, erro, pxdq_temp, pxdq & 512 == 512, bpclean_kwargs)
                         else:
                             log.info('  --> Unknown method ' + method_split[k] + ': skipped')
                     # if self.Database.obs[key]['TELESCOP'][j] == 'JWST' and self.Database.obs[key]['INSTRUME'][j] == 'NIRCAM':
@@ -507,6 +511,111 @@ class ImageTools():
                 
                 # Update spaceKLIP database.
                 self.Database.update_obs(key, j, fitsfile)
+        
+        pass
+    
+    def find_bad_pixels_bpclean(self,
+                                data,
+                                erro,
+                                pxdq,
+                                NON_SCIENCE,
+                                bpclean_kwargs={}):
+        
+        # Check input.
+        if 'sigclip' not in bpclean_kwargs.keys():
+            bpclean_kwargs['sigclip'] = 5
+        if 'shift_x' not in bpclean_kwargs.keys():
+            bpclean_kwargs['shift_x'] = [-1, 0, 1]
+        if 'shift_y' not in bpclean_kwargs.keys():
+            bpclean_kwargs['shift_y'] = [-1, 0, 1]
+        if 0 not in bpclean_kwargs['shift_x']:
+            bpclean_kwargs['shift_x'] += [0]
+        if 0 not in bpclean_kwargs['shift_y']:
+            bpclean_kwargs['shift_y'] += [0]
+        
+        # Pad data.
+        pad_left = np.abs(np.min(bpclean_kwargs['shift_x']))
+        pad_right = np.abs(np.max(bpclean_kwargs['shift_x']))
+        if pad_right == 0:
+            right = None
+        else:
+            right = -pad_right
+        pad_bottom = np.abs(np.min(bpclean_kwargs['shift_y']))
+        pad_top = np.abs(np.max(bpclean_kwargs['shift_y']))
+        if pad_top == 0:
+            top = None
+        else:
+            top = -pad_top
+        pad_vals = ((pad_bottom, pad_top), (pad_left, pad_right))
+        
+        # Find bad pixels using median of neighbors.
+        pxdq_orig = pxdq.copy()
+        ww = pxdq != 0
+        data_temp = data.copy()
+        data_temp[ww] = np.nan
+        erro_temp = erro.copy()
+        erro_temp[ww] = np.nan
+        for i in range(ww.shape[0]):
+            
+            # Get median background and standard deviation.
+            bg_med = np.nanmedian(data_temp[i])
+            bg_std = robust.medabsdev(data_temp[i])
+            bg_ind = data[i] < (bg_med + 10. * bg_std) # clip bright PSFs for final calculation
+            bg_med = np.nanmedian(data_temp[i][bg_ind])
+            bg_std = robust.medabsdev(data_temp[i][bg_ind])
+            
+            # Create initial mask of large negative values.
+            ww[i] = ww[i] | (data[i] < bg_med - bpclean_kwargs['sigclip'] * bg_std)
+            
+            # Loop through max 10 iterations.
+            for it in range(10):
+                data_temp[i][ww[i]] = np.nan
+                erro_temp[i][ww[i]] = np.nan
+                
+                # Shift data. 
+                pad_data = np.pad(data_temp[i], pad_vals, mode='edge')
+                pad_erro = np.pad(erro_temp[i], pad_vals, mode='edge')
+                data_arr = []
+                erro_arr = []
+                for ix in bpclean_kwargs['shift_x']:
+                    for iy in bpclean_kwargs['shift_y']:
+                        if ix != 0 or iy != 0:
+                            data_arr += [np.roll(pad_data, (iy, ix), axis=(0, 1))]
+                            erro_arr += [np.roll(pad_erro, (iy, ix), axis=(0, 1))]
+                data_arr = np.array(data_arr)
+                data_arr = data_arr[:, pad_bottom:top, pad_left:right]
+                data_med = np.nanmedian(data_arr, axis=0)
+                diff = data[i] - data_med
+                data_std = np.nanstd(data_arr, axis=0)
+                # data_std = robust.medabsdev(data_arr, axis=0)
+                mask_new = diff > bpclean_kwargs['sigclip'] * data_std
+                Nmask_new = np.sum(mask_new & np.logical_not(ww[i]))
+                # print('Iteration %.0f: %.0f bad pixels identified, %.0f are new' % (it + 1, np.sum(mask_new), Nmask_new))
+                sys.stdout.write('\rFrame %.0f/%.0f, iteration %.0f' % (i + 1, ww.shape[0], it + 1))
+                sys.stdout.flush()
+                if it > 0 and Nmask_new == 0:
+                    break
+                ww[i] = ww[i] | mask_new
+            ww[i][NON_SCIENCE[i]] = 0
+            pxdq[i][ww[i]] = 1
+        print('')
+        log.info('  --> Method bpclean: identified %.0f additional bad pixel(s) -- %.2f%%' % (np.sum(pxdq) - np.sum(pxdq_orig), 100. * (np.sum(pxdq) - np.sum(pxdq_orig)) / np.prod(pxdq.shape)))
+        
+        pass
+    
+    def find_bad_pixels_custom(self,
+                               data,
+                               erro,
+                               pxdq,
+                               key,
+                               custom_kwargs={}):
+        
+        # Find bad pixels using median of neighbors.
+        pxdq_orig = pxdq.copy()
+        pxdq_custom = custom_kwargs[key] != 0
+        pxdq_custom = np.array([pxdq_custom] * pxdq.shape[0])
+        pxdq[pxdq_custom] = 1
+        log.info('  --> Method custom: flagged %.0f additional bad pixel(s) -- %.2f%%' % (np.sum(pxdq) - np.sum(pxdq_orig), 100. * (np.sum(pxdq) - np.sum(pxdq_orig)) / np.prod(pxdq.shape)))
         
         pass
     
@@ -611,95 +720,6 @@ class ImageTools():
             data[i][ww[i]] = median_filter(data_temp[i], **medfilt_kwargs)[ww[i]]
             erro[i][ww[i]] = median_filter(erro_temp[i], **medfilt_kwargs)[ww[i]]
             pxdq[i][ww[i]] = 0
-        
-        pass
-    
-    def fix_bad_pixels_bpclean(self,
-                               data,
-                               erro,
-                               pxdq,
-                               NON_SCIENCE,
-                               bpclean_kwargs={}):
-        
-        # Check input.
-        if 'sigclip' not in bpclean_kwargs.keys():
-            bpclean_kwargs['sigclip'] = 5
-        if 'shift_x' not in bpclean_kwargs.keys():
-            bpclean_kwargs['shift_x'] = [-1, 0, 1]
-        if 'shift_y' not in bpclean_kwargs.keys():
-            bpclean_kwargs['shift_y'] = [-1, 0, 1]
-        if 0 not in bpclean_kwargs['shift_x']:
-            bpclean_kwargs['shift_x'] += [0]
-        if 0 not in bpclean_kwargs['shift_y']:
-            bpclean_kwargs['shift_y'] += [0]
-        
-        # Pad data.
-        pad_left = np.abs(np.min(bpclean_kwargs['shift_x']))
-        pad_right = np.abs(np.max(bpclean_kwargs['shift_x']))
-        if pad_right == 0:
-            right = None
-        else:
-            right = -pad_right
-        pad_bottom = np.abs(np.min(bpclean_kwargs['shift_y']))
-        pad_top = np.abs(np.max(bpclean_kwargs['shift_y']))
-        if pad_top == 0:
-            top = None
-        else:
-            top = -pad_top
-        pad_vals = ((pad_bottom, pad_top), (pad_left, pad_right))
-        
-        # Find bad pixels using median of neighbors.
-        pxdq_orig = pxdq.copy()
-        ww = pxdq != 0
-        data_temp = data.copy()
-        data_temp[ww] = np.nan
-        erro_temp = erro.copy()
-        erro_temp[ww] = np.nan
-        for i in range(ww.shape[0]):
-            
-            # Get median background and standard deviation.
-            bg_med = np.nanmedian(data_temp[i])
-            bg_std = robust.medabsdev(data_temp[i])
-            bg_ind = data[i] < (bg_med + 10. * bg_std) # clip bright PSFs for final calculation
-            bg_med = np.nanmedian(data_temp[i][bg_ind])
-            bg_std = robust.medabsdev(data_temp[i][bg_ind])
-            
-            # Create initial mask of large negative values.
-            ww[i] = ww[i] | (data[i] < bg_med - bpclean_kwargs['sigclip'] * bg_std)
-            
-            # Loop through max 10 iterations.
-            for it in range(10):
-                data_temp[i][ww[i]] = np.nan
-                erro_temp[i][ww[i]] = np.nan
-                
-                # Shift data. 
-                pad_data = np.pad(data_temp[i], pad_vals, mode='edge')
-                pad_erro = np.pad(erro_temp[i], pad_vals, mode='edge')
-                data_arr = []
-                erro_arr = []
-                for ix in bpclean_kwargs['shift_x']:
-                    for iy in bpclean_kwargs['shift_y']:
-                        if ix != 0 or iy != 0:
-                            data_arr += [np.roll(pad_data, (iy, ix), axis=(0, 1))]
-                            erro_arr += [np.roll(pad_erro, (iy, ix), axis=(0, 1))]
-                data_arr = np.array(data_arr)
-                data_arr = data_arr[:, pad_bottom:top, pad_left:right]
-                data_med = np.nanmedian(data_arr, axis=0)
-                diff = data[i] - data_med
-                data_std = np.nanstd(data_arr, axis=0)
-                # data_std = robust.medabsdev(data_arr, axis=0)
-                mask_new = diff > bpclean_kwargs['sigclip'] * data_std
-                Nmask_new = np.sum(mask_new & np.logical_not(ww[i]))
-                # print('Iteration %.0f: %.0f bad pixels identified, %.0f are new' % (it + 1, np.sum(mask_new), Nmask_new))
-                sys.stdout.write('\rFrame %.0f/%.0f, iteration %.0f' % (i + 1, ww.shape[0], it + 1))
-                sys.stdout.flush()
-                if it > 0 and Nmask_new == 0:
-                    break
-                ww[i] = ww[i] | mask_new
-            ww[i][NON_SCIENCE[i]] = 0
-            pxdq[i][ww[i]] = 1
-        print('')
-        log.info('  --> Method bpclean: identified %.0f bad pixel(s) -- %.2f%%' % (np.sum(pxdq) - np.sum(pxdq_orig), 100. * (np.sum(pxdq) - np.sum(pxdq_orig)) / np.prod(pxdq.shape)))
         
         pass
     
