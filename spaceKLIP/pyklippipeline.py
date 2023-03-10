@@ -51,7 +51,7 @@ class SpaceTelescope(Data):
         
         # Read science and reference files.
         self.readdata(obs, filepaths)
-        if psflib_filepaths is not None:
+        if psflib_filepaths is not None and len(psflib_filepaths) != 0:
             self.readpsflib(obs, psflib_filepaths)
         else:
             self._psflib = None
@@ -431,7 +431,7 @@ def run_obs(Database,
         # Initialize pyKLIP dataset.
         dataset = SpaceTelescope(Database.obs[key], filepaths, psflib_filepaths)
         kwargs_temp['dataset'] = dataset
-        kwargs_temp['aligned_center'] = dataset.psflib.aligned_center
+        kwargs_temp['aligned_center'] = dataset._centers[0]
         kwargs_temp['psf_library'] = dataset.psflib
         
         # Run KLIP subtraction.
