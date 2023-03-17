@@ -16,7 +16,6 @@ import astropy.io.fits as pyfits
 import matplotlib.pyplot as plt
 import numpy as np
 
-sys.path.append('/Users/jkammerer/Documents/Code/spaceKLIP_new')
 from spaceKLIP import database, coron1pipeline, coron2pipeline, coron3pipeline, pyklippipeline, imagetools, contrast
 
 

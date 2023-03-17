@@ -16,7 +16,6 @@ import astropy.io.fits as pyfits
 import matplotlib.pyplot as plt
 import numpy as np
 
-sys.path.append('/Users/jkammerer/Documents/Code/spaceKLIP_new')
 from spaceKLIP import database, coron1pipeline, coron2pipeline, coron3pipeline, pyklippipeline, imagetools, contrast
 
 
@@ -28,7 +27,7 @@ if __name__ == "__main__":
     
     # Set the input and output directories and grab the input FITS files.
     input_dir = '../examples/NIRCam_sky_1386/uncal/'
-    output_dir = '../examples/NIRCam_sky_1386/spaceklip/'
+    output_dir = '../examples/NIRCam_sky_1386/spaceklip_test/'
     fitsfiles = sorted([input_dir + f for f in os.listdir(input_dir) if f.endswith('.fits')])
     
     # Initialize the spaceKLIP database and read the input FITS files.

@@ -101,31 +101,31 @@ def run_obs(Database,
             # Compute median science.
             data = np.nanmedian(data, axis=0)
             
-            # test = []
-            # for k in np.logspace(-0.5, 0.5, 100):
+            test = []
+            for k in np.logspace(-2, 2, 100):
             # for k in np.linspace(0.03, 0.05, 100):
-            #     temp = data - k * ref_data
-            #     temp = temp - gaussian_filter(temp, 3)
-            #     test += [temp]
-            # test = np.array(test)
-            # hdu0 = pyfits.PrimaryHDU(test)
-            # hdul = pyfits.HDUList([hdu0])
-            # hdul.writeto(os.path.join(output_dir, key + '_test.fits'), output_verify='fix', overwrite=True)
-            # hdul.close()
+                temp = data - k * ref_data
+                # temp = temp - gaussian_filter(temp, 3)
+                test += [temp]
+            test = np.array(test)
+            hdu0 = pyfits.PrimaryHDU(test)
+            hdul = pyfits.HDUList([hdu0])
+            hdul.writeto(os.path.join(output_dir, key + '_test.fits'), output_verify='fix', overwrite=True)
+            hdul.close()
             
-            # if i == 0:
-            #     mask = np.zeros_like(data)
-            #     mask[60:90, 20:60] = 1
-            #     mask[140:170, 185:225] = 1
-            #     mask = mask > 0.5
-            #     p0 = np.array([1.])
-            #     pp = leastsq(subtractlsq,
-            #                   p0,
-            #                   args=(data, ref_data, mask))[0]
-            #     pps += [pp]
-            # else:
-            #     pp = np.mean(pps)
-            pp = np.linspace(0.03, 0.05, 100)[79]
+            if i == 0:
+                mask = np.zeros_like(data)
+                mask[60:90, 20:60] = 1
+                mask[140:170, 185:225] = 1
+                mask = mask > 0.5
+                p0 = np.array([1.])
+                pp = leastsq(subtractlsq,
+                              p0,
+                              args=(data, ref_data, mask))[0]
+                pps += [pp]
+            else:
+                pp = np.mean(pps)
+            # pp = np.linspace(0.03, 0.05, 100)[79]
             print(pp)
             
             # if i == 0:

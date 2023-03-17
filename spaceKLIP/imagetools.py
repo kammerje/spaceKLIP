@@ -27,7 +27,6 @@ import logging
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
 
-sys.path.append("/Users/jkammerer/Documents/Code/webbpsf_ext")
 from webbpsf_ext import robust
 
 
