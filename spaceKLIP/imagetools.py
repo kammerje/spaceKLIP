@@ -800,15 +800,15 @@ class ImageTools():
                 shifts = []
                 mask = None
                 for k in range(data.shape[0]):
-                    p0 = np.array([0., 0., 1.])
                     if j == ww_sci[0] and k == 0:
                         ref_image = data[k].copy()
-                        pp = p0.copy()
+                        pp = np.array([0., 0., 1.])
                         xoffset = self.Database.obs[key]['XOFFSET'][j]
                         yoffset = self.Database.obs[key]['YOFFSET'][j]
                         crpix1 = self.Database.obs[key]['CRPIX1'][j]
                         crpix2 = self.Database.obs[key]['CRPIX2'][j]
                     else:
+                        p0 = np.array([((crpix1 + xoffset) - (self.Database.obs[key]['CRPIX1'][j] + self.Database.obs[key]['XOFFSET'][j])) / self.Database.obs[key]['PIXSCALE'][j], ((crpix2 + yoffset) - (self.Database.obs[key]['CRPIX2'][j] + self.Database.obs[key]['YOFFSET'][j])) / self.Database.obs[key]['PIXSCALE'][j], 1.])
                         pp = leastsq(self.alignlsq,
                                      p0,
                                      args=(data[k], ref_image, mask, method, kwargs))[0]

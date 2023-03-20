@@ -16,7 +16,7 @@ import astropy.io.fits as pyfits
 import matplotlib.pyplot as plt
 import numpy as np
 
-from spaceKLIP import database, coron1pipeline, coron2pipeline, coron3pipeline, pyklippipeline, imagetools, contrast
+from spaceKLIP import database, imagetools, coron1pipeline, coron2pipeline, coron3pipeline, pyklippipeline, contrast
 
 
 # =============================================================================
@@ -26,14 +26,14 @@ from spaceKLIP import database, coron1pipeline, coron2pipeline, coron3pipeline, 
 if __name__ == "__main__":
     
     # Set the input and output directories and grab the input FITS files.
-    input_dir = '../examples/NIRCam_sky_1386/uncal/'
-    output_dir = '../examples/NIRCam_sky_1386/spaceklip/'
+    input_dir = '../examples/NIRISS_sky_1093/uncal/'
+    output_dir = '../examples/NIRISS_sky_1093/spaceklip/'
     fitsfiles = sorted([input_dir + f for f in os.listdir(input_dir) if f.endswith('.fits')])
     
     # Initialize the spaceKLIP database and read the input FITS files.
     Database = database.Database(output_dir=output_dir)
-    Database.read_jwst_s012_data(datapaths=fitsfiles,
-                                 psflibpaths=None,
+    Database.read_jwst_s012_data(datapaths=fitsfiles[:2],
+                                 psflibpaths=fitsfiles[2:],
                                  bgpaths=None)
     
     # Run the Coron1Pipeline, the Coron2Pipeline, and the Coron3Pipeline.
@@ -43,12 +43,13 @@ if __name__ == "__main__":
     coron1pipeline.run_obs(Database=Database,
                            steps={'saturation': {'n_pix_grow_sat': 1,
                                                  'grow_diagonal': False},
+                                  'ipc': {'skip': True},
                                   'refpix': {'odd_even_columns': True,
                                              'odd_even_rows': True,
-                                             'nlower': 4,
-                                             'nupper': 4,
-                                             'nleft': 4,
-                                             'nright': 4,
+                                             'nlower': 0,
+                                             'nupper': 0,
+                                             'nleft': 0,
+                                             'nright': 0,
                                              'nrow_off': 0,
                                              'ncol_off': 0},
                                   'dark_current': {'skip': True},
@@ -58,11 +59,13 @@ if __name__ == "__main__":
                                   'ramp_fit': {'save_calibrated_ramp': False}},
                            subdir='stage1')
     coron2pipeline.run_obs(Database=Database,
-                           steps={'outlier_detection': {'skip': False}},
+                           steps={'photom': {'skip': True},
+                                  'resample': {'skip': True},
+                                  'outlier_detection': {'skip': True}},
                            subdir='stage2')
-    coron3pipeline.run_obs(Database=Database,
-                           steps={'klip': {'truncate': 100}},
-                           subdir='stage3')
+    # coron3pipeline.run_obs(Database=Database,
+    #                        steps={'klip': {'truncate': 100}},
+    #                        subdir='stage3')
     
     # Initialize the spaceKLIP image manipulation tools class.
     ImageTools = imagetools.ImageTools(Database)
@@ -86,23 +89,21 @@ if __name__ == "__main__":
     
     # Fix bad pixels using custom spaceKLIP routines. Multiple routines can be
     # combined in a custom order by joining them with a + sign.
-    # - bpclean: use sigma clipping to find additional bad pixels.
-    # - custom: use custom map to find additional bad pixels.
     # - timemed: replace pixels which are only bad in some frames with their
     #            median value from the good frames.
     # - dqmed:   replace bad pixels with the median of surrounding good
     #            pixels.
     # - medfilt: replace bad pixels with an image plane median filter.
-    ImageTools.fix_bad_pixels(method='bpclean+timemed+dqmed+medfilt',
-                              bpclean_kwargs={'sigclip': 3,
-                                              'shift_x': [-1, 0, 1],
-                                              'shift_y': [-1, 0, 1]},
-                              custom_kwargs={},
-                              timemed_kwargs={},
-                              dqmed_kwargs={'shift_x': [-1, 0, 1],
-                                            'shift_y': [-1, 0, 1]},
-                              medfilt_kwargs={'size': 4},
-                              subdir='bpcleaned')
+    # - bpclean: use sigma clipping to find additional bad pixels.
+    # ImageTools.fix_bad_pixels(method='bpclean+timemed+dqmed+medfilt',
+    #                           timemed_kwargs={},
+    #                           dqmed_kwargs={'shift_x': [-1, 0, 1],
+    #                                         'shift_y': [-1, 0, 1]},
+    #                           medfilt_kwargs={'size': 4},
+    #                           bpclean_kwargs={'sigclip': 5,
+    #                                           'shift_x': [-1, 0, 1],
+    #                                           'shift_y': [-1, 0, 1]},
+    #                           subdir='bpcleaned')
     
     # Perform a background subtraction to remove the MIRI glowstick. Only
     # required for MIRI.
@@ -120,12 +121,12 @@ if __name__ == "__main__":
                             subdir='aligned')
     
     # Coadd frames.
-    # ImageTools.coadd_frames(nframes=10,
-    #                         types=['SCI', 'SCI_BG', 'REF', 'REF_BG'],
-    #                         subdir='coadded')
-    
+    ImageTools.coadd_frames(nframes=10,
+                            types=['SCI', 'SCI_BG', 'REF', 'REF_BG'],
+                            subdir='coadded')
+    pdb.set_trace()
     # Pad all frames.
-    ImageTools.pad_frames(npix=160,
+    ImageTools.pad_frames(npix=48,
                           cval=np.nan,
                           types=['SCI', 'SCI_BG', 'REF', 'REF_BG'],
                           subdir='padded')
@@ -133,8 +134,8 @@ if __name__ == "__main__":
     # Run the pyKLIP pipeline. Additional parameters for the klip_dataset
     # function can be passed using the kwargs parameter.
     pyklippipeline.run_obs(Database=Database,
-                           kwargs={'mode': ['ADI', 'RDI', 'ADI+RDI'],
-                                   'annuli': [1, 5],
+                           kwargs={'mode': ['RDI'],
+                                   'annuli': [1],
                                    'subsections': [1],
                                    'numbasis': [1, 2, 5, 10, 20, 50, 100],
                                    'algo': 'klip'},
