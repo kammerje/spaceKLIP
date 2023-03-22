@@ -42,24 +42,25 @@ def subtractlsq(shift,
     else:
         return res[mask]
 
-def run_obs(Database,
+
+def run_obs(database,
             kwargs={},
             subdir='psfsub'):
     
     # Set output directory.
-    output_dir = os.path.join(Database.output_dir, subdir)
+    output_dir = os.path.join(database.output_dir, subdir)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     
     # Loop through concatenations.
-    for i, key in enumerate(Database.obs.keys()):
+    for i, key in enumerate(database.obs.keys()):
         log.info('--> Concatenation ' + key)
         
         # Find science and reference files.
-        ww_sci = np.where(Database.obs[key]['TYPE'] == 'SCI')[0]
+        ww_sci = np.where(database.obs[key]['TYPE'] == 'SCI')[0]
         if len(ww_sci) == 0:
             raise UserWarning('Could not find any science files')
-        ww_ref = np.where(Database.obs[key]['TYPE'] == 'REF')[0]
+        ww_ref = np.where(database.obs[key]['TYPE'] == 'REF')[0]
         if len(ww_ref) == 0:
             raise UserWarning('Could not find any reference files')
         
@@ -70,7 +71,7 @@ def run_obs(Database,
         for j in ww_ref:
             
             # Read reference file.
-            fitsfile = Database.obs[key]['FITSFILE'][j]
+            fitsfile = database.obs[key]['FITSFILE'][j]
             data, erro, pxdq, head_pri, head_sci, is2d = ut.read_obs(fitsfile)
             
             # Compute median reference.
@@ -81,9 +82,9 @@ def run_obs(Database,
         ref_erro = np.concatenate(ref_erro)
         ref_pxdq = np.concatenate(ref_pxdq)
         ref_data = np.nanmedian(ref_data, axis=0)
-        Nsample = np.sum(np.logical_not(np.isnan(ref_erro)), axis=0)
-        ref_erro = np.true_divide(np.sqrt(np.nansum(ref_erro**2, axis=0)), Nsample)
-        if Database.obs[key]['TELESCOP'][j] == 'JWST' and Database.obs[key]['INSTRUME'][j] == 'NIRCAM':
+        nsample = np.sum(np.logical_not(np.isnan(ref_erro)), axis=0)
+        ref_erro = np.true_divide(np.sqrt(np.nansum(ref_erro**2, axis=0)), nsample)
+        if database.obs[key]['TELESCOP'][j] == 'JWST' and database.obs[key]['INSTRUME'][j] == 'NIRCAM':
             ref_pxdq = np.sum(ref_pxdq != 0, axis=0) != 0
         else:
             ref_pxdq = np.sum(ref_pxdq & 1 == 1, axis=0) != 0
@@ -95,7 +96,7 @@ def run_obs(Database,
         for j in ww_sci:
             
             # Read science file.
-            fitsfile = Database.obs[key]['FITSFILE'][j]
+            fitsfile = database.obs[key]['FITSFILE'][j]
             data, erro, pxdq, head_pri, head_sci, is2d = ut.read_obs(fitsfile)
             
             # Compute median science.
@@ -103,7 +104,7 @@ def run_obs(Database,
             
             test = []
             for k in np.logspace(-2, 2, 100):
-            # for k in np.linspace(0.03, 0.05, 100):
+                # for k in np.linspace(0.03, 0.05, 100):
                 temp = data - k * ref_data
                 # temp = temp - gaussian_filter(temp, 3)
                 test += [temp]
@@ -120,8 +121,8 @@ def run_obs(Database,
                 mask = mask > 0.5
                 p0 = np.array([1.])
                 pp = leastsq(subtractlsq,
-                              p0,
-                              args=(data, ref_data, mask))[0]
+                             p0,
+                             args=(data, ref_data, mask))[0]
                 pps += [pp]
             else:
                 pp = np.mean(pps)
@@ -134,14 +135,14 @@ def run_obs(Database,
             #     psfmask = pyfits.getdata('/Users/jkammerer/Documents/Code/spaceKLIP/spaceKLIP/resources/transmissions/jwst_miri_psfmask_0009.fits')
             #     psfmask[:, 144 - 5:144 + 6] = 0.
             temp = data - pp * ref_data
-            shift = (temp.shape[1]//2 - Database.obs[key]['CRPIX1'][j] + 1 + Database.obs[key]['XOFFSET'][j] / Database.obs[key]['PIXSCALE'][j], temp.shape[0]//2 - Database.obs[key]['CRPIX2'][j] + 1 + Database.obs[key]['YOFFSET'][j] / Database.obs[key]['PIXSCALE'][j])
+            shift = (temp.shape[1] // 2 - database.obs[key]['CRPIX1'][j] + 1 + database.obs[key]['XOFFSET'][j] / database.obs[key]['PIXSCALE'][j], temp.shape[0] // 2 - database.obs[key]['CRPIX2'][j] + 1 + database.obs[key]['YOFFSET'][j] / database.obs[key]['PIXSCALE'][j])
             temp = spline_shift(temp, shift[::-1])
             # psfmask = spline_shift(psfmask, shift[::-1])
-            temp = rotate(temp, -Database.obs[key]['ROLL_REF'][j], reshape=False)
+            temp = rotate(temp, -database.obs[key]['ROLL_REF'][j], reshape=False)
             # if i == 0:
-            #     psfmask = rotate(psfmask, -Database.obs[key]['ROLL_REF'][j], reshape=False)
+            #     psfmask = rotate(psfmask, -database.obs[key]['ROLL_REF'][j], reshape=False)
             # else:
-            #     psfmask = rotate(psfmask, -Database.obs[key]['ROLL_REF'][j] + 4.7, reshape=False)
+            #     psfmask = rotate(psfmask, -database.obs[key]['ROLL_REF'][j] + 4.7, reshape=False)
             # temp[psfmask < 0.6] = np.nan
             sci_data += [temp]
         sci_data = np.array(sci_data)

@@ -46,6 +46,7 @@ def read_obs(fitsfile):
     
     return data, erro, pxdq, head_pri, head_sci, is2d
 
+
 def write_obs(fitsfile,
               output_dir,
               data,
@@ -72,6 +73,7 @@ def write_obs(fitsfile,
     hdul.close()
     
     return fitsfile
+
 
 def read_red(fitsfile):
     

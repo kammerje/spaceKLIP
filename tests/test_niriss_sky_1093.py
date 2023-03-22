@@ -40,7 +40,7 @@ if __name__ == "__main__":
     # Additional step parameters can be passed using the steps parameter as
     # outlined here:
     # https://jwst-pipeline.readthedocs.io/en/latest/jwst/user_documentation/running_pipeline_python.html#configuring-a-pipeline-step-in-python
-    coron1pipeline.run_obs(Database=Database,
+    coron1pipeline.run_obs(database=Database,
                            steps={'saturation': {'n_pix_grow_sat': 1,
                                                  'grow_diagonal': False},
                                   'ipc': {'skip': True},
@@ -58,12 +58,12 @@ if __name__ == "__main__":
                                            'four_group_rejection_threshold': 4.},
                                   'ramp_fit': {'save_calibrated_ramp': False}},
                            subdir='stage1')
-    coron2pipeline.run_obs(Database=Database,
+    coron2pipeline.run_obs(database=Database,
                            steps={'photom': {'skip': True},
                                   'resample': {'skip': True},
                                   'outlier_detection': {'skip': True}},
                            subdir='stage2')
-    # coron3pipeline.run_obs(Database=Database,
+    # coron3pipeline.run_obs(database=database,
     #                        steps={'klip': {'truncate': 100}},
     #                        subdir='stage3')
     
@@ -133,7 +133,7 @@ if __name__ == "__main__":
     
     # Run the pyKLIP pipeline. Additional parameters for the klip_dataset
     # function can be passed using the kwargs parameter.
-    pyklippipeline.run_obs(Database=Database,
+    pyklippipeline.run_obs(database=Database,
                            kwargs={'mode': ['RDI'],
                                    'annuli': [1],
                                    'subsections': [1],

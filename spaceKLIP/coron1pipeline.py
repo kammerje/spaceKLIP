@@ -195,15 +195,15 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         is_full_frame = 'FULL' in input.meta.subarray.name.upper()
         
         # Get number of custom reference pixel rows & columns.
-        Nlower = self.refpix.nlower
-        Nupper = self.refpix.nupper
-        Nleft = self.refpix.nleft
-        Nright = self.refpix.nright
-        Nall = Nlower + Nupper + Nleft + Nright
+        nlower = self.refpix.nlower
+        nupper = self.refpix.nupper
+        nleft = self.refpix.nleft
+        nright = self.refpix.nright
+        nall = nlower + nupper + nleft + nright
         
         # Run step with default settings if full frame exposure, otherwise run
         # step with custom reference pixel rows & columns.
-        if is_full_frame or Nall == 0:
+        if is_full_frame or nall == 0:
             return self.run_step(self.refpix, input, **kwargs)
         else:
             return self.do_pseudo_refpix(input, **kwargs)
@@ -213,26 +213,26 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
                          **kwargs):
         
         # Get number of custom reference pixel rows & columns.
-        Nlower = self.refpix.nlower
-        Nupper = self.refpix.nupper
-        Nleft = self.refpix.nleft
-        Nright = self.refpix.nright
-        Nrow_off = self.refpix.nrow_off
-        Ncol_off = self.refpix.ncol_off
-        Nupper_off = -Nrow_off if Nrow_off != 0 else None
-        Nright_off = -Ncol_off if Ncol_off != 0 else None
+        nlower = self.refpix.nlower
+        nupper = self.refpix.nupper
+        nleft = self.refpix.nleft
+        nright = self.refpix.nright
+        nrow_off = self.refpix.nrow_off
+        ncol_off = self.refpix.ncol_off
+        nupper_off = -nrow_off if nrow_off != 0 else None
+        nright_off = -ncol_off if ncol_off != 0 else None
         
         # Flag custom reference pixel rows & columns.
-        self.refpix.log.info(f'Flagging [{Nlower}, {Nupper}] references rows at [bottom, top] of array')
-        self.refpix.log.info(f'Flagging [{Nleft}, {Nright}] references columns at [left, right] of array')
-        input.pixeldq[Nrow_off:Nrow_off + Nlower, Ncol_off:Nright_off] = input.pixeldq[Nrow_off:Nrow_off + Nlower, Ncol_off:Nright_off] | dqflags.pixel['REFERENCE_PIXEL']
-        input.pixeldq[-Nrow_off - Nupper:Nupper_off, Ncol_off:Nright_off] = input.pixeldq[-Nrow_off - Nupper:Nupper_off, Ncol_off:Nright_off] | dqflags.pixel['REFERENCE_PIXEL']
-        input.pixeldq[Nrow_off:Nupper_off, Ncol_off:Ncol_off + Nleft]  = input.pixeldq[Nrow_off:Nupper_off, Ncol_off:Ncol_off + Nleft] | dqflags.pixel['REFERENCE_PIXEL']
-        input.pixeldq[Nrow_off:Nupper_off, -Ncol_off - Nright:Nright_off] = input.pixeldq[Nrow_off:Nupper_off, -Ncol_off - Nright:Nright_off] | dqflags.pixel['REFERENCE_PIXEL']
+        self.refpix.log.info(f'Flagging [{nlower}, {nupper}] references rows at [bottom, top] of array')
+        self.refpix.log.info(f'Flagging [{nleft}, {nright}] references columns at [left, right] of array')
+        input.pixeldq[nrow_off:nrow_off + nlower, ncol_off:nright_off] = input.pixeldq[nrow_off:nrow_off + nlower, ncol_off:nright_off] | dqflags.pixel['REFERENCE_PIXEL']
+        input.pixeldq[-nrow_off - nupper:nupper_off, ncol_off:nright_off] = input.pixeldq[-nrow_off - nupper:nupper_off, ncol_off:nright_off] | dqflags.pixel['REFERENCE_PIXEL']
+        input.pixeldq[nrow_off:nupper_off, ncol_off:ncol_off + nleft] = input.pixeldq[nrow_off:nupper_off, ncol_off:ncol_off + nleft] | dqflags.pixel['REFERENCE_PIXEL']
+        input.pixeldq[nrow_off:nupper_off, -ncol_off - nright:nright_off] = input.pixeldq[nrow_off:nupper_off, -ncol_off - nright:nright_off] | dqflags.pixel['REFERENCE_PIXEL']
         
         # Save original step parameter.
         use_side_orig = self.refpix.use_side_ref_pixels
-        if Nleft + Nright == 0:
+        if nleft + nright == 0:
             self.refpix.use_side_ref_pixels = False
         else:
             self.refpix.use_side_ref_pixels = True
@@ -245,33 +245,34 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         
         # Unflag custom reference pixel rows & columns.
         self.refpix.log.info('Removing custom reference pixel flags')
-        res.pixeldq[Nrow_off:Nrow_off + Nlower, Ncol_off:Nright_off] = res.pixeldq[Nrow_off:Nrow_off + Nlower, Ncol_off:Nright_off] & ~dqflags.pixel['REFERENCE_PIXEL']
-        res.pixeldq[-Nrow_off - Nupper:Nupper_off, Ncol_off:Nright_off] = res.pixeldq[-Nrow_off - Nupper:Nupper_off, Ncol_off:Nright_off] & ~dqflags.pixel['REFERENCE_PIXEL']
-        res.pixeldq[Nrow_off:Nupper_off, Ncol_off:Ncol_off + Nleft] = res.pixeldq[Nrow_off:Nupper_off, Ncol_off:Ncol_off + Nleft] & ~dqflags.pixel['REFERENCE_PIXEL']
-        res.pixeldq[Nrow_off:Nupper_off, -Ncol_off - Nright:Nright_off] = res.pixeldq[Nrow_off:Nupper_off, -Ncol_off - Nright:Nright_off] & ~dqflags.pixel['REFERENCE_PIXEL']
+        res.pixeldq[nrow_off:nrow_off + nlower, ncol_off:nright_off] = res.pixeldq[nrow_off:nrow_off + nlower, ncol_off:nright_off] & ~dqflags.pixel['REFERENCE_PIXEL']
+        res.pixeldq[-nrow_off - nupper:nupper_off, ncol_off:nright_off] = res.pixeldq[-nrow_off - nupper:nupper_off, ncol_off:nright_off] & ~dqflags.pixel['REFERENCE_PIXEL']
+        res.pixeldq[nrow_off:nupper_off, ncol_off:ncol_off + nleft] = res.pixeldq[nrow_off:nupper_off, ncol_off:ncol_off + nleft] & ~dqflags.pixel['REFERENCE_PIXEL']
+        res.pixeldq[nrow_off:nupper_off, -ncol_off - nright:nright_off] = res.pixeldq[nrow_off:nupper_off, -ncol_off - nright:nright_off] & ~dqflags.pixel['REFERENCE_PIXEL']
         
         return res
 
-def run_obs(Database,
+
+def run_obs(database,
             steps={},
             subdir='stage1'):
     
     # Set output directory.
-    output_dir = os.path.join(Database.output_dir, subdir)
+    output_dir = os.path.join(database.output_dir, subdir)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     
     # Loop through concatenations.
-    for i, key in enumerate(Database.obs.keys()):
+    for i, key in enumerate(database.obs.keys()):
         log.info('--> Concatenation ' + key)
         
         # Loop through FITS files.
-        Nfitsfiles = len(Database.obs[key])
-        for j in range(Nfitsfiles):
+        nfitsfiles = len(database.obs[key])
+        for j in range(nfitsfiles):
             
             # Skip non-stage 0 files.
-            head, tail = os.path.split(Database.obs[key]['FITSFILE'][j])
-            if Database.obs[key]['DATAMODL'][j] != 'STAGE0':
+            head, tail = os.path.split(database.obs[key]['FITSFILE'][j])
+            if database.obs[key]['DATAMODL'][j] != 'STAGE0':
                 log.info('  --> Coron1Pipeline: skipping non-stage 0 file ' + tail)
                 continue
             log.info('  --> Coron1Pipeline: processing ' + tail)
@@ -286,7 +287,7 @@ def run_obs(Database,
                     setattr(getattr(pipeline, key1), key2, steps[key1][key2])
             
             # Run Coron1Pipeline.
-            fitspath = os.path.abspath(Database.obs[key]['FITSFILE'][j])
+            fitspath = os.path.abspath(database.obs[key]['FITSFILE'][j])
             res = pipeline.run(fitspath)
             if isinstance(res, list):
                 res = res[0]
@@ -296,6 +297,6 @@ def run_obs(Database,
             if fitsfile.endswith('rate.fits'):
                 if os.path.isfile(fitsfile.replace('rate.fits', 'rateints.fits')):
                     fitsfile = fitsfile.replace('rate.fits', 'rateints.fits')
-            Database.update_obs(key, j, fitsfile)
+            database.update_obs(key, j, fitsfile)
     
     pass

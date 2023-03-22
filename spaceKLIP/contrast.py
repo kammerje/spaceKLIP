@@ -34,10 +34,10 @@ class Contrast():
     """
     
     def __init__(self,
-                 Database):
+                 database):
         
         # Make an internal alias of the spaceKLIP database class.
-        self.Database = Database
+        self.database = database
         
         pass
     
@@ -45,20 +45,20 @@ class Contrast():
                      subdir='rawcon'):
         
         # Set output directory.
-        output_dir = os.path.join(self.Database.output_dir, subdir)
+        output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         
         # Loop through concatenations.
-        for i, key in enumerate(self.Database.red.keys()):
+        for i, key in enumerate(self.database.red.keys()):
             log.info('--> Concatenation ' + key)
             
             # Loop through FITS files.
-            Nfitsfiles = len(self.Database.red[key])
-            for j in range(Nfitsfiles):
+            nfitsfiles = len(self.database.red[key])
+            for j in range(nfitsfiles):
                 
                 # Read FITS file.
-                fitsfile = self.Database.red[key]['FITSFILE'][j]
+                fitsfile = self.database.red[key]['FITSFILE'][j]
                 data, head_pri, head_sci, is2d = ut.read_red(fitsfile)
                 
                 # Compute raw contrast.
@@ -66,18 +66,18 @@ class Contrast():
                 cons = []
                 iwa = 1
                 owa = data.shape[1] // 2
-                pxsc_rad = self.Database.red[key]['PIXSCALE'][j] / 1000. / 3600. / 180. * np.pi
-                resolution = 1e-6 * self.Database.red[key]['CWAVEL'][j] / 6. / pxsc_rad
+                pxsc_rad = self.database.red[key]['PIXSCALE'][j] / 1000. / 3600. / 180. * np.pi
+                resolution = 1e-6 * self.database.red[key]['CWAVEL'][j] / 6. / pxsc_rad
                 center = (head_pri['PSFCENTX'], head_pri['PSFCENTY'])
                 for k in range(data.shape[0]):
                     sep, con = klip.meas_contrast(dat=data[k], iwa=iwa, owa=owa, resolution=resolution, center=center, low_pass_filter=False)
-                    seps += [sep * self.Database.red[key]['PIXSCALE'][j] / 1000.] # arcsec
+                    seps += [sep * self.database.red[key]['PIXSCALE'][j] / 1000.]   # arcsec
                     cons += [con]
                 seps = np.array(seps)
                 cons = np.array(cons)
                 
                 # Plot raw contrast.
-                klmodes = self.Database.red[key]['KLMODES'][j].split(',')
+                klmodes = self.database.red[key]['KLMODES'][j].split(',')
                 fitsfile = os.path.join(output_dir, os.path.split(fitsfile)[1])
                 f = plt.figure(figsize=(6.4, 4.8))
                 ax = plt.gca()

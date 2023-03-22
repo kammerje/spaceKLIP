@@ -148,12 +148,12 @@ class SpaceTelescope(Data):
         
         # Loop through science files.
         input_all = []
-        centers_all = [] # pix
+        centers_all = []  # pix
         filenames_all = []
-        PAs_all = [] # deg
-        wvs_all = [] # m
+        PAs_all = []  # deg
+        wvs_all = []  # m
         wcs_all = []
-        PIXSCALE = [] # mas
+        PIXSCALE = []  # mas
         for i, filepath in enumerate(filepaths):
             
             # Read science file.
@@ -199,9 +199,9 @@ class SpaceTelescope(Data):
         if len(PIXSCALE) != 1:
             raise UserWarning('Some science files do not have matching pixel scales')
         if TELESCOP == 'JWST' and obs['EXP_TYPE'][ww] in ['NRC_CORON', 'MIR_4QPM', 'MIR_LYOT']:
-            iwa_all = np.min(wvs_all) / 6.5 * 180. / np.pi * 3600. * 1000. / PIXSCALE[0] # pix
+            iwa_all = np.min(wvs_all) / 6.5 * 180. / np.pi * 3600. * 1000. / PIXSCALE[0]  # pix
         else:
-            iwa_all = 1. # pix
+            iwa_all = 1.  # pix
         
         # Recenter science images.
         new_center = np.array(data.shape[1:]) / 2.
@@ -235,7 +235,7 @@ class SpaceTelescope(Data):
         
         # Loop through reference files.
         psflib_data_all = []
-        psflib_centers_all = [] # pix
+        psflib_centers_all = []  # pix
         psflib_filenames_all = []
         for i, filepath in enumerate(psflib_filepaths):
             
@@ -366,7 +366,8 @@ class SpaceTelescope(Data):
         
         pass
 
-def run_obs(Database,
+
+def run_obs(database,
             kwargs={},
             subdir='klipsub'):
     
@@ -392,17 +393,17 @@ def run_obs(Database,
         kwargs_temp['movement'] = 1.
     kwargs_temp['calibrate_flux'] = False
     if 'verbose' not in kwargs_temp.keys():
-        kwargs_temp['verbose'] = Database.verbose
+        kwargs_temp['verbose'] = database.verbose
     
     # Set output directory.
-    output_dir = os.path.join(Database.output_dir, subdir)
+    output_dir = os.path.join(database.output_dir, subdir)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     kwargs_temp['outputdir'] = output_dir
     
     # Loop through concatenations.
     datapaths = []
-    for i, key in enumerate(Database.obs.keys()):
+    for i, key in enumerate(database.obs.keys()):
         log.info('--> Concatenation ' + key)
         
         # Find science and reference files.
@@ -410,17 +411,17 @@ def run_obs(Database,
         psflib_filepaths = []
         first_sci = True
         nints = []
-        Nfitsfiles = len(Database.obs[key])
+        Nfitsfiles = len(database.obs[key])
         for j in range(Nfitsfiles):
-            if Database.obs[key]['TYPE'][j] == 'SCI':
-                filepaths += [Database.obs[key]['FITSFILE'][j]]
+            if database.obs[key]['TYPE'][j] == 'SCI':
+                filepaths += [database.obs[key]['FITSFILE'][j]]
                 if first_sci:
                     first_sci = False
                 else:
-                    nints += [Database.obs[key]['NINTS'][j]]
-            elif Database.obs[key]['TYPE'][j] == 'REF':
-                psflib_filepaths += [Database.obs[key]['FITSFILE'][j]]
-                nints += [Database.obs[key]['NINTS'][j]]
+                    nints += [database.obs[key]['NINTS'][j]]
+            elif database.obs[key]['TYPE'][j] == 'REF':
+                psflib_filepaths += [database.obs[key]['FITSFILE'][j]]
+                nints += [database.obs[key]['NINTS'][j]]
         filepaths = np.array(filepaths)
         psflib_filepaths = np.array(psflib_filepaths)
         nints = np.array(nints)
@@ -429,7 +430,7 @@ def run_obs(Database,
             kwargs_temp['maxnumbasis'] = maxnumbasis
         
         # Initialize pyKLIP dataset.
-        dataset = SpaceTelescope(Database.obs[key], filepaths, psflib_filepaths)
+        dataset = SpaceTelescope(database.obs[key], filepaths, psflib_filepaths)
         kwargs_temp['dataset'] = dataset
         kwargs_temp['aligned_center'] = dataset._centers[0]
         kwargs_temp['psf_library'] = dataset.psflib
@@ -451,34 +452,34 @@ def run_obs(Database,
                     datapaths += [datapath]
                     
                     # Update reduction header.
-                    ww_sci = np.where(Database.obs[key]['TYPE'] == 'SCI')[0]
+                    ww_sci = np.where(database.obs[key]['TYPE'] == 'SCI')[0]
                     hdul = pyfits.open(datapath)
-                    hdul[0].header['TELESCOP'] = Database.obs[key]['TELESCOP'][ww_sci[0]]
-                    hdul[0].header['TARGPROP'] = Database.obs[key]['TARGPROP'][ww_sci[0]]
-                    hdul[0].header['TARG_RA'] = Database.obs[key]['TARG_RA'][ww_sci[0]]
-                    hdul[0].header['TARG_DEC'] = Database.obs[key]['TARG_DEC'][ww_sci[0]]
-                    hdul[0].header['INSTRUME'] = Database.obs[key]['INSTRUME'][ww_sci[0]]
-                    hdul[0].header['DETECTOR'] = Database.obs[key]['DETECTOR'][ww_sci[0]]
-                    hdul[0].header['FILTER'] = Database.obs[key]['FILTER'][ww_sci[0]]
-                    hdul[0].header['CWAVEL'] = Database.obs[key]['CWAVEL'][ww_sci[0]]
-                    hdul[0].header['DWAVEL'] = Database.obs[key]['DWAVEL'][ww_sci[0]]
-                    hdul[0].header['PUPIL'] = Database.obs[key]['PUPIL'][ww_sci[0]]
-                    hdul[0].header['CORONMSK'] = Database.obs[key]['CORONMSK'][ww_sci[0]]
-                    hdul[0].header['EXP_TYPE'] = Database.obs[key]['EXP_TYPE'][ww_sci[0]]
-                    hdul[0].header['EXPSTART'] = np.min(Database.obs[key]['EXPSTART'][ww_sci])
-                    hdul[0].header['NINTS'] = np.sum(Database.obs[key]['NINTS'][ww_sci])
-                    hdul[0].header['EFFINTTM'] = Database.obs[key]['EFFINTTM'][ww_sci[0]]
-                    hdul[0].header['SUBARRAY'] = Database.obs[key]['SUBARRAY'][ww_sci[0]]
-                    hdul[0].header['APERNAME'] = Database.obs[key]['APERNAME'][ww_sci[0]]
-                    hdul[0].header['PIXSCALE'] = Database.obs[key]['PIXSCALE'][ww_sci[0]]
+                    hdul[0].header['TELESCOP'] = database.obs[key]['TELESCOP'][ww_sci[0]]
+                    hdul[0].header['TARGPROP'] = database.obs[key]['TARGPROP'][ww_sci[0]]
+                    hdul[0].header['TARG_RA'] = database.obs[key]['TARG_RA'][ww_sci[0]]
+                    hdul[0].header['TARG_DEC'] = database.obs[key]['TARG_DEC'][ww_sci[0]]
+                    hdul[0].header['INSTRUME'] = database.obs[key]['INSTRUME'][ww_sci[0]]
+                    hdul[0].header['DETECTOR'] = database.obs[key]['DETECTOR'][ww_sci[0]]
+                    hdul[0].header['FILTER'] = database.obs[key]['FILTER'][ww_sci[0]]
+                    hdul[0].header['CWAVEL'] = database.obs[key]['CWAVEL'][ww_sci[0]]
+                    hdul[0].header['DWAVEL'] = database.obs[key]['DWAVEL'][ww_sci[0]]
+                    hdul[0].header['PUPIL'] = database.obs[key]['PUPIL'][ww_sci[0]]
+                    hdul[0].header['CORONMSK'] = database.obs[key]['CORONMSK'][ww_sci[0]]
+                    hdul[0].header['EXP_TYPE'] = database.obs[key]['EXP_TYPE'][ww_sci[0]]
+                    hdul[0].header['EXPSTART'] = np.min(database.obs[key]['EXPSTART'][ww_sci])
+                    hdul[0].header['NINTS'] = np.sum(database.obs[key]['NINTS'][ww_sci])
+                    hdul[0].header['EFFINTTM'] = database.obs[key]['EFFINTTM'][ww_sci[0]]
+                    hdul[0].header['SUBARRAY'] = database.obs[key]['SUBARRAY'][ww_sci[0]]
+                    hdul[0].header['APERNAME'] = database.obs[key]['APERNAME'][ww_sci[0]]
+                    hdul[0].header['PIXSCALE'] = database.obs[key]['PIXSCALE'][ww_sci[0]]
                     hdul[0].header['MODE'] = mode
                     hdul[0].header['ANNULI'] = annu
                     hdul[0].header['SUBSECTS'] = subs
-                    hdul[0].header['BUNIT'] = Database.obs[key]['BUNIT'][ww_sci[0]]
+                    hdul[0].header['BUNIT'] = database.obs[key]['BUNIT'][ww_sci[0]]
                     hdul.writeto(datapath, output_verify='fix', overwrite=True)
                     hdul.close()
     
     # Read reductions into database.
-    Database.read_jwst_s3_data(datapaths)
+    database.read_jwst_s3_data(datapaths)
     
     pass
