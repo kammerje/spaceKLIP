@@ -210,7 +210,7 @@ class ImageTools():
         pass
     
     def coadd_frames(self,
-                     nframes=10,
+                     nframes=None,
                      types=['SCI', 'SCI_BG', 'REF', 'REF_BG'],
                      subdir='coadded'):
         
@@ -218,6 +218,9 @@ class ImageTools():
         output_dir = os.path.join(self.Database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
+
+        #The starting value
+        nframes0 = nframes
         
         # Loop through concatenations.
         for i, key in enumerate(self.Database.obs.keys()):
@@ -232,6 +235,10 @@ class ImageTools():
                 data, erro, pxdq, head_pri, head_sci, is2d = ut.read_obs(fitsfile)
                 nints = self.Database.obs[key]['NINTS'][j]
                 effinttm = self.Database.obs[key]['EFFINTTM'][j]
+                
+                #If nframes is not provided, collapse everything
+                if nframes0 is None:
+                    nframes = nints
                 
                 # Skip file types that are not in the list of types.
                 if self.Database.obs[key]['TYPE'][j] in types:
