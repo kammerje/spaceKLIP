@@ -241,7 +241,12 @@ class ImageTools():
                     log.info('  --> Frame coadding: ' + tail)
                     Ncoadds = data.shape[0] // nframes
                     data = np.nanmedian(data[:nframes * Ncoadds].reshape((nframes, Ncoadds, data.shape[-2], data.shape[-1])), axis=0)
-                    erro = np.nanmedian(erro[:nframes * Ncoadds].reshape((nframes, Ncoadds, erro.shape[-2], erro.shape[-1])), axis=0)
+
+                    #Add the errors in quadrature
+                    erro_reshape = erro[:nframes * Ncoadds].reshape((nframes, Ncoadds, erro.shape[-2], erro.shape[-1]))
+                    Nsample = np.sum(np.logical_not(np.isnan(erro_reshape)), axis=0)
+                    erro = np.true_divide(np.sqrt(np.nansum(erro_reshape**2, axis=0)), Nsample)
+
                     pxdq_temp = pxdq[:nframes * Ncoadds].reshape((nframes, Ncoadds, pxdq.shape[-2], pxdq.shape[-1]))
                     pxdq = pxdq_temp[0]
                     for k in range(1, nframes):
