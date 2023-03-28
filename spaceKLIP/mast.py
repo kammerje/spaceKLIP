@@ -16,7 +16,8 @@ import astropy.io.fits as pyfits
 import matplotlib.pyplot as plt
 import numpy as np
 
-import astropy, astroquery
+import astropy
+import astroquery
 from astroquery.mast import Mast
 
 import logging
@@ -31,7 +32,8 @@ log.setLevel(logging.INFO)
 def set_params(parameters):
     """Utility function for making dicts used in MAST queries"""
     
-    return [{'paramName':p, 'values':v} for p, v in parameters.items()]
+    return [{'paramName': p, 'values': v} for p, v in parameters.items()]
+
 
 def query_coron_datasets(inst,
                          filt,
@@ -67,7 +69,7 @@ def query_coron_datasets(inst,
     # filter/occulter.
     if inst.upper() == 'MIRI':
         service = 'Mast.Jwst.Filtered.Miri'
-        template ='MIRI Coronagraphic Imaging'
+        template = 'MIRI Coronagraphic Imaging'
     else:
         service = 'Mast.Jwst.Filtered.NIRCam'
         template = 'NIRCam Coronagraphic Imaging'
@@ -81,7 +83,7 @@ def query_coron_datasets(inst,
     if mask is not None:
         keywords['coronmsk'] = [mask]
     if ignore_cal:
-        keywords['category'] = ['COM','ERS', 'GTO', 'GO'] # but not CAL
+        keywords['category'] = ['COM', 'ERS', 'GTO', 'GO']  # but not CAL
     
     # Optional, restrict to one kind of coronagraphic data
     if kind == 'SCI':
@@ -94,20 +96,20 @@ def query_coron_datasets(inst,
         keywords['is_psf'] = ['f']
         keywords['bkgdtarg'] = ['t']
     
-	# Method note: we query MAST for much more than we actually need/want, and
+    # Method note: we query MAST for much more than we actually need/want, and
     # then filter down afterwards. This is not entirely necessary, but leaves
     # room for future expansion to add options for more verbose output, etc.
     # Currently this works by retrieving all level2b (i.e., cal/calints)
     # files, including all dithers etc., and then trimming to one unique row
     # per observation.
     collist = 'filename, productLevel, bkgdtarg, bstrtime, duration, effexptm, effinttm, exp_type, filter, coronmsk, is_psf, nexposur, nframes, nints, numdthpt, obs_id, obslabel, pi_name, program, subarray, targname, template, title, visit_id, visitsta, vststart_mjd, isRestricted'
-    all_columns=False
+    all_columns = False
     
     parameters = {'columns': '*' if all_columns else collist,
                   'filters': set_params(keywords)}
     
     response = Mast.service_request(service, parameters)
-    response.sort(keys = 'bstrtime')
+    response.sort(keys='bstrtime')
     
     # Summarize the distinct observations conveniently.
     cols_to_keep = ['visit_id', 'filter', 'coronmsk', 'targname', 'obslabel',
@@ -124,7 +126,7 @@ def query_coron_datasets(inst,
     
     # Add a summary for which kind of observation each is.
     kind = np.zeros(len(response), dtype='a3')
-    kind[:] = 'SCI' # by default assume SCI, then check for REF and BKG
+    kind[:] = 'SCI'  # by default assume SCI, then check for REF and BKG
     kind[response.columns['is_psf'] == 't'] = 'REF'
     kind[response.columns['bkgdtarg'] == 't'] = 'BKG'
     kind[kind == ''] = 'SCI'

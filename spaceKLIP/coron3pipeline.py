@@ -32,23 +32,24 @@ class Coron3Pipeline_spaceKLIP(Coron3Pipeline):
     The spaceKLIP JWST stage 3 pipeline class.
     """
 
-def run_obs(Database,
+
+def run_obs(database,
             steps={},
             subdir='stage3'):
     
     # Set output directory.
-    output_dir = os.path.join(Database.output_dir, subdir)
+    output_dir = os.path.join(database.output_dir, subdir)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     
     # Loop through concatenations.
     datapaths = []
-    for i, key in enumerate(Database.obs.keys()):
+    for i, key in enumerate(database.obs.keys()):
         log.info('--> Concatenation ' + key)
         
         # Make ASN file.
         log.info('  --> Coron3Pipeline: processing ' + key)
-        asnpath = make_asn_file(Database, output_dir, key)
+        asnpath = make_asn_file(database, output_dir, key)
         
         # Initialize Coron1Pipeline.
         pipeline = Coron3Pipeline_spaceKLIP(output_dir=output_dir)
@@ -73,19 +74,20 @@ def run_obs(Database,
         hdul.close()
     
     # Read reductions into database.
-    Database.read_jwst_s3_data(datapaths)
+    database.read_jwst_s3_data(datapaths)
     
     pass
 
-def make_asn_file(Database,
+
+def make_asn_file(database,
                   output_dir,
                   key):
     
     # Find science and reference files.
-    ww_sci = np.where(Database.obs[key]['TYPE'] == 'SCI')[0]
+    ww_sci = np.where(database.obs[key]['TYPE'] == 'SCI')[0]
     if len(ww_sci) == 0:
         raise UserWarning('Concatenation ' + key + ' has no science files')
-    ww_ref = np.where(Database.obs[key]['TYPE'] == 'REF')[0]
+    ww_ref = np.where(database.obs[key]['TYPE'] == 'REF')[0]
     if len(ww_ref) == 0:
         raise UserWarning('Concatenation ' + key + ' has no reference files')
     
@@ -110,12 +112,12 @@ def make_asn_file(Database,
     f.write('            "members": [\n')
     for i in ww_sci:
         f.write('                {\n')
-        f.write('                    "expname": "' + os.path.abspath(Database.obs[key]['FITSFILE'][i]) + '",\n')
+        f.write('                    "expname": "' + os.path.abspath(database.obs[key]['FITSFILE'][i]) + '",\n')
         f.write('                    "exptype": "science"\n')
         f.write('                },\n')
     for i in ww_ref:
         f.write('                {\n')
-        f.write('                    "expname": "' + os.path.abspath(Database.obs[key]['FITSFILE'][i]) + '",\n')
+        f.write('                    "expname": "' + os.path.abspath(database.obs[key]['FITSFILE'][i]) + '",\n')
         f.write('                    "exptype": "psf"\n')
         f.write('                },\n')
     f.write('            ]\n')

@@ -85,26 +85,27 @@ class Coron2Pipeline_spaceKLIP(Image2Pipeline):
         
         return all_res
 
-def run_obs(Database,
+
+def run_obs(database,
             steps={},
             subdir='stage2'):
     
     # Set output directory.
-    output_dir = os.path.join(Database.output_dir, subdir)
+    output_dir = os.path.join(database.output_dir, subdir)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     
     # Loop through concatenations.
-    for i, key in enumerate(Database.obs.keys()):
+    for i, key in enumerate(database.obs.keys()):
         log.info('--> Concatenation ' + key)
         
         # Loop through FITS files.
-        Nfitsfiles = len(Database.obs[key])
-        for j in range(Nfitsfiles):
+        nfitsfiles = len(database.obs[key])
+        for j in range(nfitsfiles):
             
             # Skip non-stage 1 files.
-            head, tail = os.path.split(Database.obs[key]['FITSFILE'][j])
-            if Database.obs[key]['DATAMODL'][j] != 'STAGE1':
+            head, tail = os.path.split(database.obs[key]['FITSFILE'][j])
+            if database.obs[key]['DATAMODL'][j] != 'STAGE1':
                 log.info('  --> Coron2Pipeline: skipping non-stage 1 file ' + tail)
                 continue
             log.info('  --> Coron2Pipeline: processing ' + tail)
@@ -119,7 +120,7 @@ def run_obs(Database,
                     setattr(getattr(pipeline, key1), key2, steps[key1][key2])
             
             # Run Coron2Pipeline.
-            fitspath = os.path.abspath(Database.obs[key]['FITSFILE'][j])
+            fitspath = os.path.abspath(database.obs[key]['FITSFILE'][j])
             res = pipeline.run(fitspath)
             if isinstance(res, list):
                 res = res[0]
@@ -129,6 +130,6 @@ def run_obs(Database,
             if fitsfile.endswith('cal.fits'):
                 if os.path.isfile(fitsfile.replace('cal.fits', 'calints.fits')):
                     fitsfile = fitsfile.replace('cal.fits', 'calints.fits')
-            Database.update_obs(key, j, fitsfile)
+            database.update_obs(key, j, fitsfile)
     
     pass

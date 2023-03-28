@@ -40,27 +40,28 @@ filter_list = SvoFps.get_filter_list(facility='JWST', instrument='NIRCAM')
 for i in range(len(filter_list)):
     name = filter_list['filterID'][i]
     name = name[name.rfind('.') + 1:]
-    wave_nircam[name] = filter_list['WavelengthMean'][i] / 1e4 # micron
-    weff_nircam[name] = filter_list['WidthEff'][i] / 1e4 # micron
+    wave_nircam[name] = filter_list['WavelengthMean'][i] / 1e4  # micron
+    weff_nircam[name] = filter_list['WidthEff'][i] / 1e4  # micron
 wave_niriss = {}
 weff_niriss = {}
 filter_list = SvoFps.get_filter_list(facility='JWST', instrument='NIRISS')
 for i in range(len(filter_list)):
     name = filter_list['filterID'][i]
     name = name[name.rfind('.') + 1:]
-    wave_niriss[name] = filter_list['WavelengthMean'][i] / 1e4 # micron
-    weff_niriss[name] = filter_list['WidthEff'][i] / 1e4 # micron
+    wave_niriss[name] = filter_list['WavelengthMean'][i] / 1e4  # micron
+    weff_niriss[name] = filter_list['WidthEff'][i] / 1e4  # micron
 wave_miri = {}
 weff_miri = {}
 filter_list = SvoFps.get_filter_list(facility='JWST', instrument='MIRI')
 for i in range(len(filter_list)):
     name = filter_list['filterID'][i]
     name = name[name.rfind('.') + 1:]
-    wave_miri[name] = filter_list['WavelengthMean'][i] / 1e4 # micron
-    weff_miri[name] = filter_list['WidthEff'][i] / 1e4 # micron
-wave_miri['FND'] = 13. # micron
-weff_miri['FND'] = 10. # micron
+    wave_miri[name] = filter_list['WavelengthMean'][i] / 1e4  # micron
+    weff_miri[name] = filter_list['WidthEff'][i] / 1e4  # micron
+wave_miri['FND'] = 13.  # micron
+weff_miri['FND'] = 10.  # micron
 del filter_list
+
 
 class Database():
     """
@@ -113,35 +114,35 @@ class Database():
         DATAMODL = []
         TELESCOP = []
         TARGPROP = []
-        TARG_RA = [] # deg
-        TARG_DEC = [] # deg
+        TARG_RA = []  # deg
+        TARG_DEC = []  # deg
         INSTRUME = []
         DETECTOR = []
         FILTER = []
-        CWAVEL = [] # micron
-        DWAVEL = [] # micron
+        CWAVEL = []  # micron
+        DWAVEL = []  # micron
         PUPIL = []
         CORONMSK = []
         EXP_TYPE = []
-        EXPSTART = [] # MJD
+        EXPSTART = []  # MJD
         NINTS = []
-        EFFINTTM = [] # s
+        EFFINTTM = []  # s
         IS_PSF = []
         SELFREF = []
         SUBARRAY = []
         NUMDTHPT = []
-        XOFFSET = [] # mas
-        YOFFSET = [] # mas
+        XOFFSET = []  # mas
+        YOFFSET = []  # mas
         APERNAME = []
-        PIXSCALE = [] # mas
+        PIXSCALE = []  # mas
         BUNIT = []
-        CRPIX1 = [] # pix
-        CRPIX2 = [] # pix
+        CRPIX1 = []  # pix
+        CRPIX2 = []  # pix
         VPARITY = []
-        V3I_YANG = [] # deg
-        RA_REF = [] # deg
-        DEC_REF = [] # deg
-        ROLL_REF = [] # deg
+        V3I_YANG = []  # deg
+        RA_REF = []  # deg
+        DEC_REF = []  # deg
+        ROLL_REF = []  # deg
         HASH = []
         if psflibpaths is not None:
             allpaths = np.array(datapaths + psflibpaths)
@@ -487,29 +488,29 @@ class Database():
         DATAMODL = []
         TELESCOP = []
         TARGPROP = []
-        TARG_RA = [] # deg
-        TARG_DEC = [] # deg
+        TARG_RA = []  # deg
+        TARG_DEC = []  # deg
         INSTRUME = []
         DETECTOR = []
         FILTER = []
-        CWAVEL = [] # micron
-        DWAVEL = [] # micron
+        CWAVEL = []  # micron
+        DWAVEL = []  # micron
         PUPIL = []
         CORONMSK = []
         EXP_TYPE = []
-        EXPSTART = [] # MJD
+        EXPSTART = []  # MJD
         NINTS = []
-        EFFINTTM = [] # s
+        EFFINTTM = []  # s
         SUBARRAY = []
         APERNAME = []
-        PIXSCALE = [] # mas
+        PIXSCALE = []  # mas
         MODE = []
         ANNULI = []
         SUBSECTS = []
         KLMODES = []
         BUNIT = []
-        CRPIX1 = [] # pix
-        CRPIX2 = [] # pix
+        CRPIX1 = []  # pix
+        CRPIX2 = []  # pix
         HASH = []
         Ndatapaths = len(datapaths)
         for i in range(Ndatapaths):
@@ -574,7 +575,7 @@ class Database():
                 SUBSECTS += [1]
                 try:
                     KLMODES += [str(head['KLMODE0'])]
-                except:
+                except KeyError:
                     log.warning('  --> Could not find KL mode in header, assuming default value of 50')
                     KLMODES += ['50']
             elif TYPE[-1] == 'PYKLIP':
@@ -586,7 +587,7 @@ class Database():
                 while True:
                     try:
                         klmodes += ',' + str(head['KLMODE{0}'.format(j)])
-                    except:
+                    except KeyError:
                         break
                     j += 1
                 KLMODES += [klmodes]

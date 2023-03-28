@@ -40,10 +40,10 @@ class ImageTools():
     """
     
     def __init__(self,
-                 Database):
+                 database):
         
         # Make an internal alias of the spaceKLIP database class.
-        self.Database = Database
+        self.database = database
         
         pass
     
@@ -58,25 +58,25 @@ class ImageTools():
             index = [index]
         
         # Set output directory.
-        output_dir = os.path.join(self.Database.output_dir, subdir)
+        output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         
         # Loop through concatenations.
-        for i, key in enumerate(self.Database.obs.keys()):
+        for i, key in enumerate(self.database.obs.keys()):
             log.info('--> Concatenation ' + key)
             
             # Loop through FITS files.
-            Nfitsfiles = len(self.Database.obs[key])
-            for j in range(Nfitsfiles):
+            nfitsfiles = len(self.database.obs[key])
+            for j in range(nfitsfiles):
                 
                 # Read FITS file.
-                fitsfile = self.Database.obs[key]['FITSFILE'][j]
+                fitsfile = self.database.obs[key]['FITSFILE'][j]
                 data, erro, pxdq, head_pri, head_sci, is2d = ut.read_obs(fitsfile)
-                nints = self.Database.obs[key]['NINTS'][j]
+                nints = self.database.obs[key]['NINTS'][j]
                 
                 # Skip file types that are not in the list of types.
-                if self.Database.obs[key]['TYPE'][j] in types:
+                if self.database.obs[key]['TYPE'][j] in types:
                     
                     # Remove frames.
                     try:
@@ -96,7 +96,7 @@ class ImageTools():
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d)
                 
                 # Update spaceKLIP database.
-                self.Database.update_obs(key, j, fitsfile, nints=nints)
+                self.database.update_obs(key, j, fitsfile, nints=nints)
         
         pass
     
@@ -107,31 +107,31 @@ class ImageTools():
         
         # Check input.
         if isinstance(npix, int):
-            npix = [npix, npix, npix, npix] # left, right, bottom, top
+            npix = [npix, npix, npix, npix]  # left, right, bottom, top
         if len(npix) != 4:
             raise UserWarning('Parameter npix must either be an int or a list of four int (left, right, bottom, top)')
         
         # Set output directory.
-        output_dir = os.path.join(self.Database.output_dir, subdir)
+        output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         
         # Loop through concatenations.
-        for i, key in enumerate(self.Database.obs.keys()):
+        for i, key in enumerate(self.database.obs.keys()):
             log.info('--> Concatenation ' + key)
             
             # Loop through FITS files.
-            Nfitsfiles = len(self.Database.obs[key])
-            for j in range(Nfitsfiles):
+            nfitsfiles = len(self.database.obs[key])
+            for j in range(nfitsfiles):
                 
                 # Read FITS file.
-                fitsfile = self.Database.obs[key]['FITSFILE'][j]
+                fitsfile = self.database.obs[key]['FITSFILE'][j]
                 data, erro, pxdq, head_pri, head_sci, is2d = ut.read_obs(fitsfile)
-                crpix1 = self.Database.obs[key]['CRPIX1'][j]
-                crpix2 = self.Database.obs[key]['CRPIX2'][j]
+                crpix1 = self.database.obs[key]['CRPIX1'][j]
+                crpix2 = self.database.obs[key]['CRPIX2'][j]
                 
                 # Skip file types that are not in the list of types.
-                if self.Database.obs[key]['TYPE'][j] in types:
+                if self.database.obs[key]['TYPE'][j] in types:
                     
                     # Crop frames.
                     head, tail = os.path.split(fitsfile)
@@ -150,7 +150,7 @@ class ImageTools():
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d)
                 
                 # Update spaceKLIP database.
-                self.Database.update_obs(key, j, fitsfile, crpix1=crpix1, crpix2=crpix2)
+                self.database.update_obs(key, j, fitsfile, crpix1=crpix1, crpix2=crpix2)
         
         pass
     
@@ -162,31 +162,31 @@ class ImageTools():
         
         # Check input.
         if isinstance(npix, int):
-            npix = [npix, npix, npix, npix] # left, right, bottom, top
+            npix = [npix, npix, npix, npix]  # left, right, bottom, top
         if len(npix) != 4:
             raise UserWarning('Parameter npix must either be an int or a list of four int (left, right, bottom, top)')
         
         # Set output directory.
-        output_dir = os.path.join(self.Database.output_dir, subdir)
+        output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         
         # Loop through concatenations.
-        for i, key in enumerate(self.Database.obs.keys()):
+        for i, key in enumerate(self.database.obs.keys()):
             log.info('--> Concatenation ' + key)
             
             # Loop through FITS files.
-            Nfitsfiles = len(self.Database.obs[key])
-            for j in range(Nfitsfiles):
+            nfitsfiles = len(self.database.obs[key])
+            for j in range(nfitsfiles):
                 
                 # Read FITS file.
-                fitsfile = self.Database.obs[key]['FITSFILE'][j]
+                fitsfile = self.database.obs[key]['FITSFILE'][j]
                 data, erro, pxdq, head_pri, head_sci, is2d = ut.read_obs(fitsfile)
-                crpix1 = self.Database.obs[key]['CRPIX1'][j]
-                crpix2 = self.Database.obs[key]['CRPIX2'][j]
+                crpix1 = self.database.obs[key]['CRPIX1'][j]
+                crpix2 = self.database.obs[key]['CRPIX2'][j]
                 
                 # Skip file types that are not in the list of types.
-                if self.Database.obs[key]['TYPE'][j] in types:
+                if self.database.obs[key]['TYPE'][j] in types:
                     
                     # Crop frames.
                     head, tail = os.path.split(fitsfile)
@@ -205,7 +205,7 @@ class ImageTools():
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d)
                 
                 # Update spaceKLIP database.
-                self.Database.update_obs(key, j, fitsfile, crpix1=crpix1, crpix2=crpix2)
+                self.database.update_obs(key, j, fitsfile, crpix1=crpix1, crpix2=crpix2)
         
         pass
     
@@ -215,7 +215,7 @@ class ImageTools():
                      subdir='coadded'):
         
         # Set output directory.
-        output_dir = os.path.join(self.Database.output_dir, subdir)
+        output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
@@ -223,44 +223,42 @@ class ImageTools():
         nframes0 = nframes
         
         # Loop through concatenations.
-        for i, key in enumerate(self.Database.obs.keys()):
+        for i, key in enumerate(self.database.obs.keys()):
             log.info('--> Concatenation ' + key)
             
             # Loop through FITS files.
-            Nfitsfiles = len(self.Database.obs[key])
-            for j in range(Nfitsfiles):
+            nfitsfiles = len(self.database.obs[key])
+            for j in range(nfitsfiles):
                 
                 # Read FITS file.
-                fitsfile = self.Database.obs[key]['FITSFILE'][j]
+                fitsfile = self.database.obs[key]['FITSFILE'][j]
                 data, erro, pxdq, head_pri, head_sci, is2d = ut.read_obs(fitsfile)
-                nints = self.Database.obs[key]['NINTS'][j]
-                effinttm = self.Database.obs[key]['EFFINTTM'][j]
+                nints = self.database.obs[key]['NINTS'][j]
+                effinttm = self.database.obs[key]['EFFINTTM'][j]
                 
                 #If nframes is not provided, collapse everything
                 if nframes0 is None:
                     nframes = nints
                 
                 # Skip file types that are not in the list of types.
-                if self.Database.obs[key]['TYPE'][j] in types:
+                if self.database.obs[key]['TYPE'][j] in types:
                     
                     # Coadd frames.
                     head, tail = os.path.split(fitsfile)
                     log.info('  --> Frame coadding: ' + tail)
-                    Ncoadds = data.shape[0] // nframes
-                    data = np.nanmedian(data[:nframes * Ncoadds].reshape((nframes, Ncoadds, data.shape[-2], data.shape[-1])), axis=0)
-
-                    #Add the errors in quadrature
-                    erro_reshape = erro[:nframes * Ncoadds].reshape((nframes, Ncoadds, erro.shape[-2], erro.shape[-1]))
-                    Nsample = np.sum(np.logical_not(np.isnan(erro_reshape)), axis=0)
-                    erro = np.true_divide(np.sqrt(np.nansum(erro_reshape**2, axis=0)), Nsample)
-
-                    pxdq_temp = pxdq[:nframes * Ncoadds].reshape((nframes, Ncoadds, pxdq.shape[-2], pxdq.shape[-1]))
+                    ncoadds = data.shape[0] // nframes
+                    data = np.nanmedian(data[:nframes * ncoadds].reshape((nframes, ncoadds, data.shape[-2], data.shape[-1])), axis=0)
+                    erro_reshape = erro[:nframes * ncoadds].reshape((nframes, ncoadds, erro.shape[-2], erro.shape[-1]))
+                    nsample = np.sum(np.logical_not(np.isnan(erro_reshape)), axis=0)
+                    erro = np.true_divide(np.sqrt(np.nansum(erro_reshape**2, axis=0)), nsample)
+                    pxdq_temp = pxdq[:nframes * ncoadds].reshape((nframes, ncoadds, pxdq.shape[-2], pxdq.shape[-1]))
+                    
                     pxdq = pxdq_temp[0]
                     for k in range(1, nframes):
                         pxdq = np.bitwise_or(pxdq, pxdq_temp[k])
                     nints = data.shape[0]
                     effinttm *= nframes
-                    log.info('  --> Frame coadding: %.0f coadd(s) of %.0f frame(s)' % (Ncoadds, nframes))
+                    log.info('  --> Frame coadding: %.0f coadd(s) of %.0f frame(s)' % (ncoadds, nframes))
                 
                 # Write FITS file.
                 head_pri['NINTS'] = nints
@@ -268,7 +266,7 @@ class ImageTools():
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d)
                 
                 # Update spaceKLIP database.
-                self.Database.update_obs(key, j, fitsfile, nints=nints, effinttm=effinttm)
+                self.database.update_obs(key, j, fitsfile, nints=nints, effinttm=effinttm)
         
         pass
     
@@ -277,30 +275,30 @@ class ImageTools():
                         subdir='medsub'):
         
         # Set output directory.
-        output_dir = os.path.join(self.Database.output_dir, subdir)
+        output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         
         # Loop through concatenations.
-        for i, key in enumerate(self.Database.obs.keys()):
+        for i, key in enumerate(self.database.obs.keys()):
             log.info('--> Concatenation ' + key)
             
             # Loop through FITS files.
-            Nfitsfiles = len(self.Database.obs[key])
-            for j in range(Nfitsfiles):
+            nfitsfiles = len(self.database.obs[key])
+            for j in range(nfitsfiles):
                 
                 # Read FITS file.
-                fitsfile = self.Database.obs[key]['FITSFILE'][j]
+                fitsfile = self.database.obs[key]['FITSFILE'][j]
                 data, erro, pxdq, head_pri, head_sci, is2d = ut.read_obs(fitsfile)
                 
                 # Skip file types that are not in the list of types.
-                if self.Database.obs[key]['TYPE'][j] in types:
+                if self.database.obs[key]['TYPE'][j] in types:
                     
                     # Subtract median.
                     head, tail = os.path.split(fitsfile)
                     log.info('  --> Median subtraction: ' + tail)
                     data_temp = data.copy()
-                    # if self.Database.obs[key]['TELESCOP'][j] == 'JWST' and self.Database.obs[key]['INSTRUME'][j] == 'NIRCAM':
+                    # if self.database.obs[key]['TELESCOP'][j] == 'JWST' and self.database.obs[key]['INSTRUME'][j] == 'NIRCAM':
                     data_temp[pxdq != 0] = np.nan
                     # else:
                     #     data_temp[pxdq & 1 == 1] = np.nan
@@ -312,25 +310,25 @@ class ImageTools():
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d)
                 
                 # Update spaceKLIP database.
-                self.Database.update_obs(key, j, fitsfile)
+                self.database.update_obs(key, j, fitsfile)
     
     def subtract_background(self,
                             subdir='bgsub'):
         
         # Set output directory.
-        output_dir = os.path.join(self.Database.output_dir, subdir)
+        output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         
         # Loop through concatenations.
-        for i, key in enumerate(self.Database.obs.keys()):
+        for i, key in enumerate(self.database.obs.keys()):
             log.info('--> Concatenation ' + key)
             
             # Find science and reference files.
-            ww_sci = np.where(self.Database.obs[key]['TYPE'] == 'SCI')[0]
-            ww_sci_bg = np.where(self.Database.obs[key]['TYPE'] == 'SCI_BG')[0]
-            ww_ref = np.where(self.Database.obs[key]['TYPE'] == 'REF')[0]
-            ww_ref_bg = np.where(self.Database.obs[key]['TYPE'] == 'REF_BG')[0]
+            ww_sci = np.where(self.database.obs[key]['TYPE'] == 'SCI')[0]
+            ww_sci_bg = np.where(self.database.obs[key]['TYPE'] == 'SCI_BG')[0]
+            ww_ref = np.where(self.database.obs[key]['TYPE'] == 'REF')[0]
+            ww_ref_bg = np.where(self.database.obs[key]['TYPE'] == 'REF_BG')[0]
             
             # Loop through science background files.
             if len(ww_sci_bg) != 0:
@@ -340,7 +338,7 @@ class ImageTools():
                 for j in ww_sci_bg:
                     
                     # Read science background file.
-                    fitsfile = self.Database.obs[key]['FITSFILE'][j]
+                    fitsfile = self.database.obs[key]['FITSFILE'][j]
                     data, erro, pxdq, head_pri, head_sci, is2d = ut.read_obs(fitsfile)
                     
                     # Compute median science background.
@@ -351,9 +349,9 @@ class ImageTools():
                 sci_bg_erro = np.concatenate(sci_bg_erro)
                 sci_bg_pxdq = np.concatenate(sci_bg_pxdq)
                 sci_bg_data = np.nanmedian(sci_bg_data, axis=0)
-                Nsample = np.sum(np.logical_not(np.isnan(sci_bg_erro)), axis=0)
-                sci_bg_erro = np.true_divide(np.sqrt(np.nansum(sci_bg_erro**2, axis=0)), Nsample)
-                # if self.Database.obs[key]['TELESCOP'][j] == 'JWST' and self.Database.obs[key]['INSTRUME'][j] == 'NIRCAM':
+                nsample = np.sum(np.logical_not(np.isnan(sci_bg_erro)), axis=0)
+                sci_bg_erro = np.true_divide(np.sqrt(np.nansum(sci_bg_erro**2, axis=0)), nsample)
+                # if self.database.obs[key]['TELESCOP'][j] == 'JWST' and self.database.obs[key]['INSTRUME'][j] == 'NIRCAM':
                 #     sci_bg_pxdq = np.sum(sci_bg_pxdq != 0, axis=0) != 0
                 # else:
                 sci_bg_pxdq = np.sum(sci_bg_pxdq & 1 == 1, axis=0) != 0
@@ -368,7 +366,7 @@ class ImageTools():
                 for j in ww_ref_bg:
                     
                     # Read reference background file.
-                    fitsfile = self.Database.obs[key]['FITSFILE'][j]
+                    fitsfile = self.database.obs[key]['FITSFILE'][j]
                     data, erro, pxdq, head_pri, head_sci, is2d = ut.read_obs(fitsfile)
                     
                     # Compute median reference background.
@@ -379,9 +377,9 @@ class ImageTools():
                 ref_bg_erro = np.concatenate(ref_bg_erro)
                 ref_bg_pxdq = np.concatenate(ref_bg_pxdq)
                 ref_bg_data = np.nanmedian(ref_bg_data, axis=0)
-                Nsample = np.sum(np.logical_not(np.isnan(ref_bg_erro)), axis=0)
-                ref_bg_erro = np.true_divide(np.sqrt(np.nansum(ref_bg_erro**2, axis=0)), Nsample)
-                # if self.Database.obs[key]['TELESCOP'][j] == 'JWST' and self.Database.obs[key]['INSTRUME'][j] == 'NIRCAM':
+                nsample = np.sum(np.logical_not(np.isnan(ref_bg_erro)), axis=0)
+                ref_bg_erro = np.true_divide(np.sqrt(np.nansum(ref_bg_erro**2, axis=0)), nsample)
+                # if self.database.obs[key]['TELESCOP'][j] == 'JWST' and self.database.obs[key]['INSTRUME'][j] == 'NIRCAM':
                 #     ref_bg_pxdq = np.sum(ref_bg_pxdq != 0, axis=0) != 0
                 # else:
                 ref_bg_pxdq = np.sum(ref_bg_pxdq & 1 == 1, axis=0) != 0
@@ -400,7 +398,7 @@ class ImageTools():
                     sci = False
                 
                 # Read FITS file.
-                fitsfile = self.Database.obs[key]['FITSFILE'][j]
+                fitsfile = self.database.obs[key]['FITSFILE'][j]
                 data, erro, pxdq, head_pri, head_sci, is2d = ut.read_obs(fitsfile)
                 
                 # Subtract background.
@@ -420,7 +418,7 @@ class ImageTools():
                     
                     data = data - sci_bg_data
                     erro = np.sqrt(erro**2 + sci_bg_erro**2)
-                    # if self.Database.obs[key]['TELESCOP'][j] == 'JWST' and self.Database.obs[key]['INSTRUME'][j] == 'NIRCAM':
+                    # if self.database.obs[key]['TELESCOP'][j] == 'JWST' and self.database.obs[key]['INSTRUME'][j] == 'NIRCAM':
                     #     pxdq[(pxdq == 0) & (sci_bg_pxdq != 0)] += 1
                     # else:
                     pxdq[np.logical_not(pxdq & 1 == 1) & (sci_bg_pxdq != 0)] += 1
@@ -428,14 +426,14 @@ class ImageTools():
                     log.warning('  --> Could not find science background, attempting to use reference background')
                     data = data - ref_bg_data
                     erro = np.sqrt(erro**2 + ref_bg_erro**2)
-                    # if self.Database.obs[key]['TELESCOP'][j] == 'JWST' and self.Database.obs[key]['INSTRUME'][j] == 'NIRCAM':
+                    # if self.database.obs[key]['TELESCOP'][j] == 'JWST' and self.database.obs[key]['INSTRUME'][j] == 'NIRCAM':
                     #     pxdq[(pxdq == 0) & (ref_bg_pxdq != 0)] += 1
                     # else:
                     pxdq[np.logical_not(pxdq & 1 == 1) & (ref_bg_pxdq != 0)] += 1
                 elif not sci and ref_bg_data is not None:
                     data = data - ref_bg_data
                     erro = np.sqrt(erro**2 + ref_bg_erro**2)
-                    # if self.Database.obs[key]['TELESCOP'][j] == 'JWST' and self.Database.obs[key]['INSTRUME'][j] == 'NIRCAM':
+                    # if self.database.obs[key]['TELESCOP'][j] == 'JWST' and self.database.obs[key]['INSTRUME'][j] == 'NIRCAM':
                     #     pxdq[(pxdq == 0) & (ref_bg_pxdq != 0)] += 1
                     # else:
                     pxdq[np.logical_not(pxdq & 1 == 1) & (ref_bg_pxdq != 0)] += 1
@@ -443,7 +441,7 @@ class ImageTools():
                     log.warning('  --> Could not find reference background, attempting to use science background')
                     data = data - sci_bg_data
                     erro = np.sqrt(erro**2 + sci_bg_erro**2)
-                    # if self.Database.obs[key]['TELESCOP'][j] == 'JWST' and self.Database.obs[key]['INSTRUME'][j] == 'NIRCAM':
+                    # if self.database.obs[key]['TELESCOP'][j] == 'JWST' and self.database.obs[key]['INSTRUME'][j] == 'NIRCAM':
                     #     pxdq[(pxdq == 0) & (sci_bg_pxdq != 0)] += 1
                     # else:
                     pxdq[np.logical_not(pxdq & 1 == 1) & (sci_bg_pxdq != 0)] += 1
@@ -452,7 +450,7 @@ class ImageTools():
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d)
                 
                 # Update spaceKLIP database.
-                self.Database.update_obs(key, j, fitsfile)
+                self.database.update_obs(key, j, fitsfile)
         
         pass
     
@@ -467,28 +465,28 @@ class ImageTools():
                        subdir='bpcleaned'):
         
         # Set output directory.
-        output_dir = os.path.join(self.Database.output_dir, subdir)
+        output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         
         # Loop through concatenations.
-        for i, key in enumerate(self.Database.obs.keys()):
+        for i, key in enumerate(self.database.obs.keys()):
             log.info('--> Concatenation ' + key)
             
             # Loop through FITS files.
-            Nfitsfiles = len(self.Database.obs[key])
-            for j in range(Nfitsfiles):
+            nfitsfiles = len(self.database.obs[key])
+            for j in range(nfitsfiles):
                 
                 # Read FITS file.
-                fitsfile = self.Database.obs[key]['FITSFILE'][j]
+                fitsfile = self.database.obs[key]['FITSFILE'][j]
                 data, erro, pxdq, head_pri, head_sci, is2d = ut.read_obs(fitsfile)
                 
                 # Skip file types that are not in the list of types.
-                if self.Database.obs[key]['TYPE'][j] in types:
+                if self.database.obs[key]['TYPE'][j] in types:
                     
                     # Call bad pixel cleaning routines.
                     pxdq_temp = pxdq.copy()
-                    # if self.Database.obs[key]['TELESCOP'][j] == 'JWST' and self.Database.obs[key]['INSTRUME'][j] == 'NIRCAM':
+                    # if self.database.obs[key]['TELESCOP'][j] == 'JWST' and self.database.obs[key]['INSTRUME'][j] == 'NIRCAM':
                     #     pxdq_temp = (pxdq_temp != 0) & np.logical_not(pxdq_temp & 512 == 512)
                     # else:
                     pxdq_temp = (np.isnan(data) | (pxdq_temp & 1 == 1)) & np.logical_not(pxdq_temp & 512 == 512)
@@ -512,7 +510,7 @@ class ImageTools():
                             self.fix_bad_pixels_medfilt(data, erro, pxdq_temp, medfilt_kwargs)
                         else:
                             log.info('  --> Unknown method ' + method_split[k] + ': skipped')
-                    # if self.Database.obs[key]['TELESCOP'][j] == 'JWST' and self.Database.obs[key]['INSTRUME'][j] == 'NIRCAM':
+                    # if self.database.obs[key]['TELESCOP'][j] == 'JWST' and self.database.obs[key]['INSTRUME'][j] == 'NIRCAM':
                     #     pxdq[(pxdq != 0) & np.logical_not(pxdq & 512 == 512) & (pxdq_temp == 0)] = 0
                     # else:
                     # pxdq[(pxdq & 1 == 1) & np.logical_not(pxdq & 512 == 512) & (pxdq_temp == 0)] = 0
@@ -521,7 +519,7 @@ class ImageTools():
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d)
                 
                 # Update spaceKLIP database.
-                self.Database.update_obs(key, j, fitsfile)
+                self.database.update_obs(key, j, fitsfile)
         
         pass
     
@@ -571,7 +569,7 @@ class ImageTools():
             # Get median background and standard deviation.
             bg_med = np.nanmedian(data_temp[i])
             bg_std = robust.medabsdev(data_temp[i])
-            bg_ind = data[i] < (bg_med + 10. * bg_std) # clip bright PSFs for final calculation
+            bg_ind = data[i] < (bg_med + 10. * bg_std)  # clip bright PSFs for final calculation
             bg_med = np.nanmedian(data_temp[i][bg_ind])
             bg_std = robust.medabsdev(data_temp[i][bg_ind])
             
@@ -600,11 +598,11 @@ class ImageTools():
                 data_std = np.nanstd(data_arr, axis=0)
                 # data_std = robust.medabsdev(data_arr, axis=0)
                 mask_new = diff > bpclean_kwargs['sigclip'] * data_std
-                Nmask_new = np.sum(mask_new & np.logical_not(ww[i]))
-                # print('Iteration %.0f: %.0f bad pixels identified, %.0f are new' % (it + 1, np.sum(mask_new), Nmask_new))
+                nmask_new = np.sum(mask_new & np.logical_not(ww[i]))
+                # print('Iteration %.0f: %.0f bad pixels identified, %.0f are new' % (it + 1, np.sum(mask_new), nmask_new))
                 sys.stdout.write('\rFrame %.0f/%.0f, iteration %.0f' % (i + 1, ww.shape[0], it + 1))
                 sys.stdout.flush()
-                if it > 0 and Nmask_new == 0:
+                if it > 0 and nmask_new == 0:
                     break
                 ww[i] = ww[i] | mask_new
             ww[i][NON_SCIENCE[i]] = 0
@@ -740,24 +738,24 @@ class ImageTools():
                      subdir='nanreplaced'):
         
         # Set output directory.
-        output_dir = os.path.join(self.Database.output_dir, subdir)
+        output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         
         # Loop through concatenations.
-        for i, key in enumerate(self.Database.obs.keys()):
+        for i, key in enumerate(self.database.obs.keys()):
             log.info('--> Concatenation ' + key)
             
             # Loop through FITS files.
-            Nfitsfiles = len(self.Database.obs[key])
-            for j in range(Nfitsfiles):
+            nfitsfiles = len(self.database.obs[key])
+            for j in range(nfitsfiles):
                 
                 # Read FITS file.
-                fitsfile = self.Database.obs[key]['FITSFILE'][j]
+                fitsfile = self.database.obs[key]['FITSFILE'][j]
                 data, erro, pxdq, head_pri, head_sci, is2d = ut.read_obs(fitsfile)
                 
                 # Skip file types that are not in the list of types.
-                if self.Database.obs[key]['TYPE'][j] in types:
+                if self.database.obs[key]['TYPE'][j] in types:
                     
                     # Replace nans.
                     head, tail = os.path.split(fitsfile)
@@ -770,7 +768,7 @@ class ImageTools():
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d)
                 
                 # Update spaceKLIP database.
-                self.Database.update_obs(key, j, fitsfile)
+                self.database.update_obs(key, j, fitsfile)
         
         pass
     
@@ -780,20 +778,20 @@ class ImageTools():
                      subdir='aligned'):
         
         # Set output directory.
-        output_dir = os.path.join(self.Database.output_dir, subdir)
+        output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         
         # Loop through concatenations.
-        Database_temp = deepcopy(self.Database.obs)
-        for i, key in enumerate(self.Database.obs.keys()):
+        database_temp = deepcopy(self.database.obs)
+        for i, key in enumerate(self.database.obs.keys()):
             log.info('--> Concatenation ' + key)
             
             # Find science and reference files.
-            ww_sci = np.where(self.Database.obs[key]['TYPE'] == 'SCI')[0]
+            ww_sci = np.where(self.database.obs[key]['TYPE'] == 'SCI')[0]
             if len(ww_sci) == 0:
                 raise UserWarning('Could not find any science files')
-            ww_ref = np.where(self.Database.obs[key]['TYPE'] == 'REF')[0]
+            ww_ref = np.where(self.database.obs[key]['TYPE'] == 'REF')[0]
             ww_all = np.append(ww_sci, ww_ref)
             
             # Loop through FITS files.
@@ -801,7 +799,7 @@ class ImageTools():
             for j in ww_all:
                 
                 # Read FITS file.
-                fitsfile = self.Database.obs[key]['FITSFILE'][j]
+                fitsfile = self.database.obs[key]['FITSFILE'][j]
                 data, erro, pxdq, head_pri, head_sci, is2d = ut.read_obs(fitsfile)
                 
                 # Align frames.
@@ -815,12 +813,12 @@ class ImageTools():
                     if j == ww_sci[0] and k == 0:
                         ref_image = data[k].copy()
                         pp = np.array([0., 0., 1.])
-                        xoffset = self.Database.obs[key]['XOFFSET'][j]
-                        yoffset = self.Database.obs[key]['YOFFSET'][j]
-                        crpix1 = self.Database.obs[key]['CRPIX1'][j]
-                        crpix2 = self.Database.obs[key]['CRPIX2'][j]
+                        xoffset = self.database.obs[key]['XOFFSET'][j]
+                        yoffset = self.database.obs[key]['YOFFSET'][j]
+                        crpix1 = self.database.obs[key]['CRPIX1'][j]
+                        crpix2 = self.database.obs[key]['CRPIX2'][j]
                     else:
-                        p0 = np.array([((crpix1 + xoffset) - (self.Database.obs[key]['CRPIX1'][j] + self.Database.obs[key]['XOFFSET'][j])) / self.Database.obs[key]['PIXSCALE'][j], ((crpix2 + yoffset) - (self.Database.obs[key]['CRPIX2'][j] + self.Database.obs[key]['YOFFSET'][j])) / self.Database.obs[key]['PIXSCALE'][j], 1.])
+                        p0 = np.array([((crpix1 + xoffset) - (self.database.obs[key]['CRPIX1'][j] + self.database.obs[key]['XOFFSET'][j])) / self.database.obs[key]['PIXSCALE'][j], ((crpix2 + yoffset) - (self.database.obs[key]['CRPIX2'][j] + self.database.obs[key]['YOFFSET'][j])) / self.database.obs[key]['PIXSCALE'][j], 1.])
                         pp = leastsq(self.alignlsq,
                                      p0,
                                      args=(data[k], ref_image, mask, method, kwargs))[0]
@@ -832,12 +830,12 @@ class ImageTools():
                 shifts_all += [shifts]
                 
                 # Compute shift distances.
-                dist = np.sqrt(np.sum(shifts[:, :2]**2, axis=1)) # pix
-                dist *= self.Database.obs[key]['PIXSCALE'][j] # mas
+                dist = np.sqrt(np.sum(shifts[:, :2]**2, axis=1))  # pix
+                dist *= self.database.obs[key]['PIXSCALE'][j]  # mas
                 if j == ww_sci[0]:
                     dist = dist[1:]
                 log.info('  --> Align frames: median required shift = %.2f mas' % np.median(dist))
-                if self.Database.obs[key]['TELESCOP'][j] == 'JWST':
+                if self.database.obs[key]['TELESCOP'][j] == 'JWST':
                     ww = (dist < 1e-5) | (dist > 100.)
                 else:
                     ww = (dist < 1e-5)
@@ -855,14 +853,14 @@ class ImageTools():
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d)
                 
                 # Update spaceKLIP database.
-                self.Database.update_obs(key, j, fitsfile, xoffset=xoffset, yoffset=yoffset, crpix1=crpix1, crpix2=crpix2)
+                self.database.update_obs(key, j, fitsfile, xoffset=xoffset, yoffset=yoffset, crpix1=crpix1, crpix2=crpix2)
             
             # Plot science frame alignment.
             colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
             f = plt.figure(figsize=(6.4, 4.8))
             ax = plt.gca()
             for index, j in enumerate(ww_sci):
-                ax.scatter(shifts_all[index][:, 0] * self.Database.obs[key]['PIXSCALE'][j], shifts_all[index][:, 1] * self.Database.obs[key]['PIXSCALE'][j], s=5, color=colors[index], marker='o', label='PA = %.0f deg' % self.Database.obs[key]['ROLL_REF'][j])
+                ax.scatter(shifts_all[index][:, 0] * self.database.obs[key]['PIXSCALE'][j], shifts_all[index][:, 1] * self.database.obs[key]['PIXSCALE'][j], s=5, color=colors[index], marker='o', label='PA = %.0f deg' % self.database.obs[key]['ROLL_REF'][j])
             ax.axhline(0., color='gray', lw=1)
             ax.axvline(0., color='gray', lw=1)
             ax.set_aspect('equal')
@@ -893,16 +891,16 @@ class ImageTools():
             syms = ['o', 'v', '^', '<', '>']
             add = len(ww_sci)
             for index, j in enumerate(ww_ref):
-                this = '%.0f_%.0f' % (Database_temp[key]['XOFFSET'][j], Database_temp[key]['YOFFSET'][j])
+                this = '%.0f_%.0f' % (database_temp[key]['XOFFSET'][j], database_temp[key]['YOFFSET'][j])
                 if this not in seen:
-                    ax.scatter(shifts_all[index + add][:, 0] * self.Database.obs[key]['PIXSCALE'][j], shifts_all[index + add][:, 1] * self.Database.obs[key]['PIXSCALE'][j], s=5, color=colors[len(seen)], marker=syms[0], label='dpos %.0f' % (len(seen) + 1))
-                    ax.hlines(-Database_temp[key]['YOFFSET'][j] + yoffset, -Database_temp[key]['XOFFSET'][j] + xoffset - 4., -Database_temp[key]['XOFFSET'][j] + xoffset + 4., color=colors[len(seen)], lw=1)
-                    ax.vlines(-Database_temp[key]['XOFFSET'][j] + xoffset, -Database_temp[key]['YOFFSET'][j] + yoffset - 4., -Database_temp[key]['YOFFSET'][j] + yoffset + 4., color=colors[len(seen)], lw=1)
+                    ax.scatter(shifts_all[index + add][:, 0] * self.database.obs[key]['PIXSCALE'][j], shifts_all[index + add][:, 1] * self.database.obs[key]['PIXSCALE'][j], s=5, color=colors[len(seen)], marker=syms[0], label='dpos %.0f' % (len(seen) + 1))
+                    ax.hlines(-database_temp[key]['YOFFSET'][j] + yoffset, -database_temp[key]['XOFFSET'][j] + xoffset - 4., -database_temp[key]['XOFFSET'][j] + xoffset + 4., color=colors[len(seen)], lw=1)
+                    ax.vlines(-database_temp[key]['XOFFSET'][j] + xoffset, -database_temp[key]['YOFFSET'][j] + yoffset - 4., -database_temp[key]['YOFFSET'][j] + yoffset + 4., color=colors[len(seen)], lw=1)
                     seen += [this]
                     reps += [1]
                 else:
                     ww = np.where(np.array(seen) == this)[0][0]
-                    ax.scatter(shifts_all[index + add][:, 0] * self.Database.obs[key]['PIXSCALE'][j], shifts_all[index + add][:, 1] * self.Database.obs[key]['PIXSCALE'][j], s=5, color=colors[ww], marker=syms[reps[ww]])
+                    ax.scatter(shifts_all[index + add][:, 0] * self.database.obs[key]['PIXSCALE'][j], shifts_all[index + add][:, 1] * self.database.obs[key]['PIXSCALE'][j], s=5, color=colors[ww], marker=syms[reps[ww]])
                     reps[ww] += 1
             ax.set_aspect('equal')
             xlim = ax.get_xlim()
@@ -931,23 +929,23 @@ class ImageTools():
                         subdir='recentered'):
         
         # Set output directory.
-        output_dir = os.path.join(self.Database.output_dir, subdir)
+        output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         
         # Loop through concatenations.
-        for i, key in enumerate(self.Database.obs.keys()):
+        for i, key in enumerate(self.database.obs.keys()):
             log.info('--> Concatenation ' + key)
             
             # Find TA files.
-            ww_ta = np.append(np.where(self.Database.obs[key]['TYPE'] == 'SCI_TA')[0], np.where(self.Database.obs[key]['TYPE'] == 'REF_TA')[0])
+            ww_ta = np.append(np.where(self.database.obs[key]['TYPE'] == 'SCI_TA')[0], np.where(self.database.obs[key]['TYPE'] == 'REF_TA')[0])
             
             # Loop through FITS files.
             shifts_all = []
             for j in ww_ta:
                 
                 # Read FITS file.
-                fitsfile = self.Database.obs[key]['FITSFILE'][j]
+                fitsfile = self.database.obs[key]['FITSFILE'][j]
                 data, erro, pxdq, head_pri, head_sci, is2d = ut.read_obs(fitsfile)
                 
                 # Recenter frames.
@@ -956,10 +954,10 @@ class ImageTools():
                 if np.sum(np.isnan(data)) != 0:
                     raise UserWarning('Please replace nan pixels before attempting to recenter frames')
                 shifts = []
-                xoffset = 0. # mas
-                yoffset = 0. # mas
-                crpix1 = data.shape[-1]//2 + 1 # 1-indexed
-                crpix2 = data.shape[-2]//2 + 1 # 1-indexed
+                xoffset = 0.  # mas
+                yoffset = 0.  # mas
+                crpix1 = data.shape[-1]//2 + 1  # 1-indexed
+                crpix2 = data.shape[-2]//2 + 1  # 1-indexed
                 for k in range(data.shape[0]):
                     p0 = np.array([0., 0.])
                     pp = minimize(self.recenterlsq,
@@ -979,9 +977,9 @@ class ImageTools():
                 shifts_all += [shifts]
                 
                 # Compute shift distances.
-                dist = np.sqrt(np.sum(shifts[:, :2]**2, axis=1)) # pix
-                dist *= self.Database.obs[key]['PIXSCALE'][j] # mas
-                head, tail = os.path.split(self.Database.obs[key]['FITSFILE'][j])
+                dist = np.sqrt(np.sum(shifts[:, :2]**2, axis=1))  # pix
+                dist *= self.database.obs[key]['PIXSCALE'][j]  # mas
+                head, tail = os.path.split(self.database.obs[key]['FITSFILE'][j])
                 log.info('  --> Align frames: ' + tail)
                 log.info('  --> Align frames: median required shift = %.2f mas' % np.median(dist))
                 ww = dist > 300.
@@ -997,7 +995,7 @@ class ImageTools():
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d)
                 
                 # Update spaceKLIP database.
-                self.Database.update_obs(key, j, fitsfile, xoffset=xoffset, yoffset=yoffset, crpix1=crpix1, crpix2=crpix2)
+                self.database.update_obs(key, j, fitsfile, xoffset=xoffset, yoffset=yoffset, crpix1=crpix1, crpix2=crpix2)
         
         pass
     
