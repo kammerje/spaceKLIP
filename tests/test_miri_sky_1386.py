@@ -60,7 +60,7 @@ if __name__ == "__main__":
     coron2pipeline.run_obs(database=Database,
                            steps={'outlier_detection': {'skip': False}},
                            subdir='stage2')
-    # coron3pipeline.run_obs(database=database,
+    # coron3pipeline.run_obs(database=Database,
     #                        steps={'klip': {'truncate': 100}},
     #                        subdir='stage3')
     

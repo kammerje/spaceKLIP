@@ -104,7 +104,7 @@ def run_obs(database,
             
             test = []
             for k in np.logspace(-2, 2, 100):
-                # for k in np.linspace(0.03, 0.05, 100):
+            # for k in np.linspace(0.03, 0.05, 100):
                 temp = data - k * ref_data
                 # temp = temp - gaussian_filter(temp, 3)
                 test += [temp]

@@ -219,7 +219,7 @@ class ImageTools():
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
-        #The starting value
+        # The starting value.
         nframes0 = nframes
         
         # Loop through concatenations.
@@ -236,7 +236,7 @@ class ImageTools():
                 nints = self.database.obs[key]['NINTS'][j]
                 effinttm = self.database.obs[key]['EFFINTTM'][j]
                 
-                #If nframes is not provided, collapse everything
+                # If nframes is not provided, collapse everything.
                 if nframes0 is None:
                     nframes = nints
                 
@@ -252,7 +252,6 @@ class ImageTools():
                     nsample = np.sum(np.logical_not(np.isnan(erro_reshape)), axis=0)
                     erro = np.true_divide(np.sqrt(np.nansum(erro_reshape**2, axis=0)), nsample)
                     pxdq_temp = pxdq[:nframes * ncoadds].reshape((nframes, ncoadds, pxdq.shape[-2], pxdq.shape[-1]))
-                    
                     pxdq = pxdq_temp[0]
                     for k in range(1, nframes):
                         pxdq = np.bitwise_or(pxdq, pxdq_temp[k])
