@@ -210,7 +210,7 @@ class ImageTools():
         pass
     
     def coadd_frames(self,
-                     nframes=10,
+                     nframes=None,
                      types=['SCI', 'SCI_BG', 'REF', 'REF_BG'],
                      subdir='coadded'):
         
@@ -218,6 +218,9 @@ class ImageTools():
         output_dir = os.path.join(self.Database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
+
+        #The starting value
+        nframes0 = nframes
         
         # Loop through concatenations.
         for i, key in enumerate(self.Database.obs.keys()):
@@ -233,6 +236,10 @@ class ImageTools():
                 nints = self.Database.obs[key]['NINTS'][j]
                 effinttm = self.Database.obs[key]['EFFINTTM'][j]
                 
+                #If nframes is not provided, collapse everything
+                if nframes0 is None:
+                    nframes = nints
+                
                 # Skip file types that are not in the list of types.
                 if self.Database.obs[key]['TYPE'][j] in types:
                     
@@ -241,7 +248,12 @@ class ImageTools():
                     log.info('  --> Frame coadding: ' + tail)
                     Ncoadds = data.shape[0] // nframes
                     data = np.nanmedian(data[:nframes * Ncoadds].reshape((nframes, Ncoadds, data.shape[-2], data.shape[-1])), axis=0)
-                    erro = np.nanmedian(erro[:nframes * Ncoadds].reshape((nframes, Ncoadds, erro.shape[-2], erro.shape[-1])), axis=0)
+
+                    #Add the errors in quadrature
+                    erro_reshape = erro[:nframes * Ncoadds].reshape((nframes, Ncoadds, erro.shape[-2], erro.shape[-1]))
+                    Nsample = np.sum(np.logical_not(np.isnan(erro_reshape)), axis=0)
+                    erro = np.true_divide(np.sqrt(np.nansum(erro_reshape**2, axis=0)), Nsample)
+
                     pxdq_temp = pxdq[:nframes * Ncoadds].reshape((nframes, Ncoadds, pxdq.shape[-2], pxdq.shape[-1]))
                     pxdq = pxdq_temp[0]
                     for k in range(1, nframes):
