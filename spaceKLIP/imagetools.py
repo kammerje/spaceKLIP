@@ -210,7 +210,7 @@ class ImageTools():
         pass
     
     def coadd_frames(self,
-                     nframes=10,
+                     nframes=None,
                      types=['SCI', 'SCI_BG', 'REF', 'REF_BG'],
                      subdir='coadded'):
         
@@ -218,6 +218,9 @@ class ImageTools():
         output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
+
+        #The starting value
+        nframes0 = nframes
         
         # Loop through concatenations.
         for i, key in enumerate(self.database.obs.keys()):
@@ -233,6 +236,10 @@ class ImageTools():
                 nints = self.database.obs[key]['NINTS'][j]
                 effinttm = self.database.obs[key]['EFFINTTM'][j]
                 
+                #If nframes is not provided, collapse everything
+                if nframes0 is None:
+                    nframes = nints
+                
                 # Skip file types that are not in the list of types.
                 if self.database.obs[key]['TYPE'][j] in types:
                     
@@ -241,8 +248,11 @@ class ImageTools():
                     log.info('  --> Frame coadding: ' + tail)
                     ncoadds = data.shape[0] // nframes
                     data = np.nanmedian(data[:nframes * ncoadds].reshape((nframes, ncoadds, data.shape[-2], data.shape[-1])), axis=0)
-                    erro = np.nanmedian(erro[:nframes * ncoadds].reshape((nframes, ncoadds, erro.shape[-2], erro.shape[-1])), axis=0)
+                    erro_reshape = erro[:nframes * ncoadds].reshape((nframes, ncoadds, erro.shape[-2], erro.shape[-1]))
+                    nsample = np.sum(np.logical_not(np.isnan(erro_reshape)), axis=0)
+                    erro = np.true_divide(np.sqrt(np.nansum(erro_reshape**2, axis=0)), nsample)
                     pxdq_temp = pxdq[:nframes * ncoadds].reshape((nframes, ncoadds, pxdq.shape[-2], pxdq.shape[-1]))
+                    
                     pxdq = pxdq_temp[0]
                     for k in range(1, nframes):
                         pxdq = np.bitwise_or(pxdq, pxdq_temp[k])
