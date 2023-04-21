@@ -167,10 +167,15 @@ class Database():
             INSTRUME += [head.get('INSTRUME', 'UNKNOWN')]
             DETECTOR += [head.get('DETECTOR', 'UNKNOWN')]
             FILTER += [head['FILTER']]
+            PUPIL += [head.get('PUPIL', 'NONE')]
             if TELESCOP[-1] == 'JWST':
                 if INSTRUME[-1] == 'NIRCAM':
-                    CWAVEL += [wave_nircam[FILTER[-1]]]
-                    DWAVEL += [weff_nircam[FILTER[-1]]]
+                    if PUPIL[-1] in wave_nircam.keys():
+                        CWAVEL += [wave_nircam[PUPIL[-1]]]
+                        DWAVEL += [weff_nircam[PUPIL[-1]]]
+                    else:
+                        CWAVEL += [wave_nircam[FILTER[-1]]]
+                        DWAVEL += [weff_nircam[FILTER[-1]]]
                 elif INSTRUME[-1] == 'NIRISS':
                     CWAVEL += [wave_niriss[FILTER[-1]]]
                     DWAVEL += [weff_niriss[FILTER[-1]]]
@@ -181,7 +186,6 @@ class Database():
                     raise UserWarning('Data originates from unknown JWST instrument')
             else:
                 raise UserWarning('Data originates from unknown telescope')
-            PUPIL += [head.get('PUPIL', 'NONE')]
             CORONMSK += [head.get('CORONMSK', 'NONE')]
             EXP_TYPE += [head.get('EXP_TYPE', 'UNKNOWN')]
             EXPSTART += [head.get('EXPSTART', np.nan)]
@@ -529,10 +533,15 @@ class Database():
             INSTRUME += [head.get('INSTRUME', 'UNKNOWN')]
             DETECTOR += [head.get('DETECTOR', 'UNKNOWN')]
             FILTER += [head['FILTER']]
+            PUPIL += [head.get('PUPIL', 'NONE')]
             if TELESCOP[-1] == 'JWST':
                 if INSTRUME[-1] == 'NIRCAM':
-                    CWAVEL += [wave_nircam[FILTER[-1]]]
-                    DWAVEL += [weff_nircam[FILTER[-1]]]
+                    if PUPIL[-1] in wave_nircam.keys():
+                        CWAVEL += [wave_nircam[PUPIL[-1]]]
+                        DWAVEL += [weff_nircam[PUPIL[-1]]]
+                    else:
+                        CWAVEL += [wave_nircam[FILTER[-1]]]
+                        DWAVEL += [weff_nircam[FILTER[-1]]]
                 elif INSTRUME[-1] == 'NIRISS':
                     CWAVEL += [wave_niriss[FILTER[-1]]]
                     DWAVEL += [weff_niriss[FILTER[-1]]]
@@ -543,7 +552,6 @@ class Database():
                     raise UserWarning('Data originates from unknown JWST instrument')
             else:
                 raise UserWarning('Data originates from unknown telescope')
-            PUPIL += [head.get('PUPIL', 'NONE')]
             CORONMSK += [head.get('CORONMSK', 'NONE')]
             EXP_TYPE += [head.get('EXP_TYPE', 'UNKNOWN')]
             EXPSTART += [head.get('EXPSTART', np.nan)]

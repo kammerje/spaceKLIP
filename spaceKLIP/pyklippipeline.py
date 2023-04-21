@@ -308,14 +308,12 @@ class SpaceTelescope(Data):
         filenames = np.unique(self.filenames)
         Nfiles = np.size(filenames)
         hdul[0].header['DRPNFILE'] = (Nfiles, 'Num raw files used in pyKLIP')
-        error = False
         for i, filename in enumerate(filenames):
-            try:
+            if i < 1000:
                 hdul[0].header['FILE_{0}'.format(i)] = filename + '.fits'
-            except:
-                if not error:
-                    log.warning('--> Too many files to be written to header, skipping')
-                    error = True
+            else:
+                log.warning('--> Too many files to be written to header, skipping')
+                break
         
         # Write PSF subtraction parameters and pyKLIP version to header.
         try:
