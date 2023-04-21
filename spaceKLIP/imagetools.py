@@ -18,10 +18,11 @@ import numpy as np
 
 from copy import deepcopy
 from jwst.pipeline import Detector1Pipeline, Image2Pipeline, Coron3Pipeline
-from scipy.ndimage import fourier_shift, median_filter
+from scipy.ndimage import fourier_shift, gaussian_filter, median_filter
 from scipy.ndimage import shift as spline_shift
 from scipy.optimize import leastsq, minimize
 from spaceKLIP import utils as ut
+from spaceKLIP.xara import core
 
 import logging
 log = logging.getLogger(__name__)
@@ -79,12 +80,12 @@ class ImageTools():
                 if self.Database.obs[key]['TYPE'][j] in types:
                     
                     # Remove frames.
+                    head, tail = os.path.split(fitsfile)
+                    log.info('  --> Frame removal: ' + tail)
                     try:
                         index_temp = frame[key][j]
                     except:
                         index_temp = index.copy()
-                    head, tail = os.path.split(fitsfile)
-                    log.info('  --> Frame removal: ' + tail)
                     log.info('  --> Frame removal: removing frame(s) ' + str(index_temp))
                     data = np.delete(data, index_temp, axis=0)
                     erro = np.delete(erro, index_temp, axis=0)
@@ -762,6 +763,65 @@ class ImageTools():
         
         pass
     
+    def blur_frames(self,
+                    fact='auto',
+                    types=['SCI', 'SCI_BG', 'REF', 'REF_BG'],
+                    subdir='blurred'):
+        
+        # Set output directory.
+        output_dir = os.path.join(self.Database.output_dir, subdir)
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        
+        # Loop through concatenations.
+        for i, key in enumerate(self.Database.obs.keys()):
+            log.info('--> Concatenation ' + key)
+            
+            # Loop through FITS files.
+            Nfitsfiles = len(self.Database.obs[key])
+            for j in range(Nfitsfiles):
+                
+                # Read FITS file.
+                fitsfile = self.Database.obs[key]['FITSFILE'][j]
+                data, erro, pxdq, head_pri, head_sci, is2d = ut.read_obs(fitsfile)
+                
+                # Skip file types that are not in the list of types.
+                if self.Database.obs[key]['TYPE'][j] in types:
+                    
+                    # Blur frames.
+                    head, tail = os.path.split(fitsfile)
+                    log.info('  --> Frame blurring: ' + tail)
+                    try:
+                        fact_temp = fact[key][j]
+                    except:
+                        fact_temp = fact
+                    if self.Database.obs[key]['TELESCOP'][j] == 'JWST':
+                        if self.Database.obs[key]['EXP_TYPE'][j] in ['NRC_CORON']:
+                            diam = 5.2
+                        else:
+                            diam = 6.5
+                    else:
+                        raise UserWarning('Data originates from unknown telescope')
+                    if fact_temp is not None:
+                        if str(fact_temp) == 'auto':
+                            wave_min = self.Database.obs[key]['CWAVEL'][j] - self.Database.obs[key]['DWAVEL'][j]
+                            nyquist = 0.5 * wave_min * 1e-6 / diam * 180. / np.pi * 3600. * 1000.
+                            fact_temp = self.Database.obs[key]['PIXSCALE'][j] / nyquist
+                        log.info('  --> Frame blurring: factor = %.3f' % fact_temp)
+                        for k in range(data.shape[0]):
+                            data[k] = gaussian_filter(data[k], fact_temp)
+                            erro[k] = gaussian_filter(erro[k], fact_temp)
+                    else:
+                        log.info('  --> Frame blurring: skipped')
+                
+                # Write FITS file.
+                fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d)
+                
+                # Update spaceKLIP database.
+                self.Database.update_obs(key, j, fitsfile)
+        
+        pass
+    
     def align_frames(self,
                      method='fourier',
                      kwargs={},
@@ -878,7 +938,7 @@ class ImageTools():
             ax = plt.gca()
             seen = []
             reps = []
-            syms = ['o', 'v', '^', '<', '>']
+            syms = ['o', 'v', '^', '<', '>'] * (1 + len(ww_ref) // 5)
             add = len(ww_sci)
             for index, j in enumerate(ww_ref):
                 this = '%.0f_%.0f' % (Database_temp[key]['XOFFSET'][j], Database_temp[key]['YOFFSET'][j])
@@ -915,6 +975,7 @@ class ImageTools():
     
     def recenter_frames(self,
                         method='fourier',
+                        subpix_first_sci_only=False,
                         kwargs={},
                         subdir='recentered'):
         
@@ -927,12 +988,18 @@ class ImageTools():
         for i, key in enumerate(self.Database.obs.keys()):
             log.info('--> Concatenation ' + key)
             
-            # Find TA files.
-            ww_ta = np.append(np.where(self.Database.obs[key]['TYPE'] == 'SCI_TA')[0], np.where(self.Database.obs[key]['TYPE'] == 'REF_TA')[0])
+            # Find science and reference files.
+            ww_sci = np.where(self.Database.obs[key]['TYPE'] == 'SCI')[0]
+            ww_sci_ta = np.where(self.Database.obs[key]['TYPE'] == 'SCI_TA')[0]
+            ww_ref = np.where(self.Database.obs[key]['TYPE'] == 'REF')[0]
+            ww_ref_ta = np.where(self.Database.obs[key]['TYPE'] == 'REF_TA')[0]
             
             # Loop through FITS files.
+            ww_all = np.append(ww_sci, ww_ref)
+            ww_all = np.append(ww_all, ww_sci_ta)
+            ww_all = np.append(ww_all, ww_ref_ta)
             shifts_all = []
-            for j in ww_ta:
+            for j in ww_all:
                 
                 # Read FITS file.
                 fitsfile = self.Database.obs[key]['FITSFILE'][j]
@@ -948,21 +1015,42 @@ class ImageTools():
                 yoffset = 0. # mas
                 crpix1 = data.shape[-1]//2 + 1 # 1-indexed
                 crpix2 = data.shape[-2]//2 + 1 # 1-indexed
-                for k in range(data.shape[0]):
-                    p0 = np.array([0., 0.])
-                    pp = minimize(self.recenterlsq,
-                                  p0,
-                                  args=(data[k], method, kwargs))['x']
-                    shifts += [np.array([pp[0], pp[1]])]
-                    data[k] = self.imshift(data[k], [shifts[k][0], shifts[k][1]], method, kwargs)
-                    erro[k] = self.imshift(erro[k], [shifts[k][0], shifts[k][1]], method, kwargs)
-                    ww_max = np.unravel_index(np.argmax(data[k]), data[k].shape)
-                    if ww_max != (data.shape[-2]//2, data.shape[-1]//2):
-                        dx, dy = data.shape[-1]//2 - ww_max[1], data.shape[-2]//2 - ww_max[0]
-                        shifts[-1][0] += dx
-                        shifts[-1][1] += dy
-                        data[k] = np.roll(np.roll(data[k], dx, axis=1), dy, axis=0)
-                        erro[k] = np.roll(np.roll(erro[k], dx, axis=1), dy, axis=0)
+                if ww_all[j] in ww_sci or ww_all[j] in ww_ref:
+                    if 'CORON' in self.Database.obs[key]['EXP_TYPE'][j]:
+                        log.warning('  --> Recenter frames: not implemented for EXP_TYPE CORON, skipped')
+                        shifts += [np.array([0., 0.])]
+                    else:
+                        for k in range(data.shape[0]):
+                            if subpix_first_sci_only == False or (ww_all[j] == ww_sci[0] and k == 0):
+                                pp = core.determine_origin(data[k], algo='BCEN')
+                                shifts += [np.array([-(pp[0] - data.shape[-1]//2), -(pp[1] - data.shape[-2]//2)])]
+                                data[k] = self.imshift(data[k], [shifts[k][0], shifts[k][1]], method, kwargs)
+                                erro[k] = self.imshift(erro[k], [shifts[k][0], shifts[k][1]], method, kwargs)
+                            else:
+                                shifts += [np.array([0., 0.])]
+                            ww_max = np.unravel_index(np.argmax(data[k]), data[k].shape)
+                            if ww_max != (data.shape[-2]//2, data.shape[-1]//2):
+                                dx, dy = data.shape[-1]//2 - ww_max[1], data.shape[-2]//2 - ww_max[0]
+                                shifts[-1][0] += dx
+                                shifts[-1][1] += dy
+                                data[k] = np.roll(np.roll(data[k], dx, axis=1), dy, axis=0)
+                                erro[k] = np.roll(np.roll(erro[k], dx, axis=1), dy, axis=0)
+                if ww_all[j] in ww_sci_ta or ww_all[j] in ww_ref_ta:
+                    for k in range(data.shape[0]):
+                        p0 = np.array([0., 0.])
+                        pp = minimize(self.recenterlsq,
+                                      p0,
+                                      args=(data[k], method, kwargs))['x']
+                        shifts += [np.array([pp[0], pp[1]])]
+                        data[k] = self.imshift(data[k], [shifts[k][0], shifts[k][1]], method, kwargs)
+                        erro[k] = self.imshift(erro[k], [shifts[k][0], shifts[k][1]], method, kwargs)
+                        ww_max = np.unravel_index(np.argmax(data[k]), data[k].shape)
+                        if ww_max != (data.shape[-2]//2, data.shape[-1]//2):
+                            dx, dy = data.shape[-1]//2 - ww_max[1], data.shape[-2]//2 - ww_max[0]
+                            shifts[-1][0] += dx
+                            shifts[-1][1] += dy
+                            data[k] = np.roll(np.roll(data[k], dx, axis=1), dy, axis=0)
+                            erro[k] = np.roll(np.roll(erro[k], dx, axis=1), dy, axis=0)
                 shifts = np.array(shifts)
                 shifts_all += [shifts]
                 
@@ -970,12 +1058,12 @@ class ImageTools():
                 dist = np.sqrt(np.sum(shifts[:, :2]**2, axis=1)) # pix
                 dist *= self.Database.obs[key]['PIXSCALE'][j] # mas
                 head, tail = os.path.split(self.Database.obs[key]['FITSFILE'][j])
-                log.info('  --> Align frames: ' + tail)
-                log.info('  --> Align frames: median required shift = %.2f mas' % np.median(dist))
+                log.info('  --> Recenter frames: ' + tail)
+                log.info('  --> Recenter frames: median required shift = %.2f mas' % np.median(dist))
                 ww = dist > 300.
                 if np.sum(ww) != 0:
                     ww = np.where(ww == True)[0]
-                    log.warning('The following frames might not be properly aligned (0-indexed): '+str(ww))
+                    log.warning('The following frames might not be properly recentered (0-indexed): '+str(ww))
                 
                 # Write FITS file.
                 head_pri['XOFFSET'] = xoffset
