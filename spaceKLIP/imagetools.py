@@ -498,7 +498,10 @@ class ImageTools():
                             self.find_bad_pixels_bpclean(data, erro, pxdq_temp, pxdq & 512 == 512, bpclean_kwargs)
                         elif method_split[k] == 'custom':
                             log.info('  --> Method ' + method_split[k] + ': ' + tail)
-                            self.find_bad_pixels_custom(data, erro, pxdq_temp, key, custom_kwargs)
+                            if self.database.obs[key]['TYPE'][j] not in ['SCI_TA', 'REF_TA']:
+                                self.find_bad_pixels_custom(data, erro, pxdq_temp, key, custom_kwargs)
+                            else:
+                                log.info('  --> Method ' + method_split[k] + ': skipped because TA file')
                         elif method_split[k] == 'timemed':
                             log.info('  --> Method ' + method_split[k] + ': ' + tail)
                             self.fix_bad_pixels_timemed(data, erro, pxdq_temp, timemed_kwargs)
@@ -778,24 +781,24 @@ class ImageTools():
                     subdir='blurred'):
         
         # Set output directory.
-        output_dir = os.path.join(self.Database.output_dir, subdir)
+        output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         
         # Loop through concatenations.
-        for i, key in enumerate(self.Database.obs.keys()):
+        for i, key in enumerate(self.database.obs.keys()):
             log.info('--> Concatenation ' + key)
             
             # Loop through FITS files.
-            Nfitsfiles = len(self.Database.obs[key])
+            Nfitsfiles = len(self.database.obs[key])
             for j in range(Nfitsfiles):
                 
                 # Read FITS file.
-                fitsfile = self.Database.obs[key]['FITSFILE'][j]
+                fitsfile = self.database.obs[key]['FITSFILE'][j]
                 data, erro, pxdq, head_pri, head_sci, is2d = ut.read_obs(fitsfile)
                 
                 # Skip file types that are not in the list of types.
-                if self.Database.obs[key]['TYPE'][j] in types:
+                if self.database.obs[key]['TYPE'][j] in types:
                     
                     # Blur frames.
                     head, tail = os.path.split(fitsfile)
@@ -804,8 +807,8 @@ class ImageTools():
                         fact_temp = fact[key][j]
                     except:
                         fact_temp = fact
-                    if self.Database.obs[key]['TELESCOP'][j] == 'JWST':
-                        if self.Database.obs[key]['EXP_TYPE'][j] in ['NRC_CORON']:
+                    if self.database.obs[key]['TELESCOP'][j] == 'JWST':
+                        if self.database.obs[key]['EXP_TYPE'][j] in ['NRC_CORON']:
                             diam = 5.2
                         else:
                             diam = 6.5
@@ -813,9 +816,9 @@ class ImageTools():
                         raise UserWarning('Data originates from unknown telescope')
                     if fact_temp is not None:
                         if str(fact_temp) == 'auto':
-                            wave_min = self.Database.obs[key]['CWAVEL'][j] - self.Database.obs[key]['DWAVEL'][j]
+                            wave_min = self.database.obs[key]['CWAVEL'][j] - self.database.obs[key]['DWAVEL'][j]
                             nyquist = 0.5 * wave_min * 1e-6 / diam * 180. / np.pi * 3600. * 1000.
-                            fact_temp = self.Database.obs[key]['PIXSCALE'][j] / nyquist
+                            fact_temp = self.database.obs[key]['PIXSCALE'][j] / nyquist
                         log.info('  --> Frame blurring: factor = %.3f' % fact_temp)
                         for k in range(data.shape[0]):
                             data[k] = gaussian_filter(data[k], fact_temp)
@@ -827,7 +830,7 @@ class ImageTools():
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d)
                 
                 # Update spaceKLIP database.
-                self.Database.update_obs(key, j, fitsfile)
+                self.database.update_obs(key, j, fitsfile)
         
         pass
     
@@ -998,10 +1001,10 @@ class ImageTools():
             log.info('--> Concatenation ' + key)
             
             # Find science and reference files.
-            ww_sci = np.where(self.Database.obs[key]['TYPE'] == 'SCI')[0]
-            ww_sci_ta = np.where(self.Database.obs[key]['TYPE'] == 'SCI_TA')[0]
-            ww_ref = np.where(self.Database.obs[key]['TYPE'] == 'REF')[0]
-            ww_ref_ta = np.where(self.Database.obs[key]['TYPE'] == 'REF_TA')[0]
+            ww_sci = np.where(self.database.obs[key]['TYPE'] == 'SCI')[0]
+            ww_sci_ta = np.where(self.database.obs[key]['TYPE'] == 'SCI_TA')[0]
+            ww_ref = np.where(self.database.obs[key]['TYPE'] == 'REF')[0]
+            ww_ref_ta = np.where(self.database.obs[key]['TYPE'] == 'REF_TA')[0]
             
             # Loop through FITS files.
             ww_all = np.append(ww_sci, ww_ref)
@@ -1025,7 +1028,7 @@ class ImageTools():
                 crpix1 = data.shape[-1]//2 + 1 # 1-indexed
                 crpix2 = data.shape[-2]//2 + 1 # 1-indexed
                 if ww_all[j] in ww_sci or ww_all[j] in ww_ref:
-                    if 'CORON' in self.Database.obs[key]['EXP_TYPE'][j]:
+                    if 'CORON' in self.database.obs[key]['EXP_TYPE'][j]:
                         log.warning('  --> Recenter frames: not implemented for EXP_TYPE CORON, skipped')
                         shifts += [np.array([0., 0.])]
                     else:
@@ -1065,8 +1068,8 @@ class ImageTools():
                 
                 # Compute shift distances.
                 dist = np.sqrt(np.sum(shifts[:, :2]**2, axis=1)) # pix
-                dist *= self.Database.obs[key]['PIXSCALE'][j] # mas
-                head, tail = os.path.split(self.Database.obs[key]['FITSFILE'][j])
+                dist *= self.database.obs[key]['PIXSCALE'][j] # mas
+                head, tail = os.path.split(self.database.obs[key]['FITSFILE'][j])
                 log.info('  --> Recenter frames: ' + tail)
                 log.info('  --> Recenter frames: median required shift = %.2f mas' % np.median(dist))
                 ww = dist > 300.
