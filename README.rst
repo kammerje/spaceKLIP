@@ -60,7 +60,15 @@ The current capabilities of the code are summarized below.
 - ``print_obs``: working
 - ``print_red``: working
 - ``update_obs``: working
+- ``summarize``: working
 - support for companion fitting: missing
+
+::
+
+	plotting.py
+
+- ``display_coron_image``: working
+- ``display_coron_dataset``: working
 
 ::
 

@@ -6,6 +6,8 @@ from . import coron3pipeline
 from . import database
 from . import imagetools
 from . import mast
+from . import plotting
+from . import psf
 from . import pyklippipeline
 from . import utils
 

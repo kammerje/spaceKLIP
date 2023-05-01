@@ -825,3 +825,31 @@ class Database():
         hdul.close()
         
         pass
+    
+    def summarize(self):
+        """Succinctly summarize the contents of a database, i.e., how many
+        files are present at each level of reduction, what kind (SCI, REF, TA),
+        etc"""
+        
+        def short_concat_name(concat_name):
+            """Return a shorter, less redundant name for a coronagraphic mode,
+            useful for display"""
+            
+            parts = concat_name.split('_')
+            
+            return "_".join([parts[1], parts[3], parts[5], ])
+        
+        for mode in self.obs:
+            print(short_concat_name(mode))
+            tab = self.obs[mode]
+            for stage in [0, 1, 2, 3]:
+                stagetab = tab[tab['DATAMODL'] == f'STAGE{stage}']
+                if len(stagetab):
+                    nsci = np.sum(stagetab['TYPE'] == 'SCI')
+                    nref = np.sum(stagetab['TYPE'] == 'REF')
+                    nta = np.sum((stagetab['TYPE'] == 'SCI_TA') | (stagetab['TYPE'] == 'REF_TA'))
+                    
+                    summarystr = f'\tSTAGE{stage}: {len(stagetab)} files;\t{nsci} SCI, {nref} REF'
+                    if nta:
+                        summarystr += f', {nta} TA'
+                    print(summarystr)
