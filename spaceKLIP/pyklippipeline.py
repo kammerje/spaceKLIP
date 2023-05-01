@@ -22,6 +22,7 @@ from astropy import wcs
 from jwst.pipeline import Detector1Pipeline, Image2Pipeline, Coron3Pipeline
 from pyklip import parallelized, rdi
 from pyklip.instruments.Instrument import Data
+from pyklip.klip import _rotate_wcs_hdr
 
 import logging
 log = logging.getLogger(__name__)
@@ -334,15 +335,15 @@ class SpaceTelescope(Data):
                 hdul[0].header['CTYPE3'] = 'KLMODES'
                 for i, klmode in enumerate(zaxis):
                     hdul[0].header['KLMODE{0}'.format(i)] = (klmode, 'KL Mode of slice {0}'.format(i))
-                hdul[0].header['CUNIT3'] = 'N/A'
-                hdul[0].header['CRVAL3'] = 1
-                hdul[0].header['CRPIX3'] = 1.
-                hdul[0].header['CD3_3'] = 1.
+                # hdul[0].header['CUNIT3'] = 'N/A'
+                # hdul[0].header['CRVAL3'] = 1
+                # hdul[0].header['CRPIX3'] = 1.
+                # hdul[0].header['CD3_3'] = 1.
         
         # Write WCS information to header.
-        wcshdr = self.output_wcs[0].to_header()
-        for key in wcshdr.keys():
-            hdul[0].header[key] = wcshdr[key]
+        # wcshdr = self.output_wcs[0].to_header()
+        # for key in wcshdr.keys():
+        #     hdul[0].header[key] = wcshdr[key]
         
         # Write extra keywords to header if necessary.
         if more_keywords is not None:
@@ -352,7 +353,7 @@ class SpaceTelescope(Data):
         # Update image center.
         center = self.output_centers[0]
         hdul[0].header.update({'PSFCENTX': center[0], 'PSFCENTY': center[1]})
-        hdul[0].header.update({'CRPIX1': center[0], 'CRPIX2': center[1]})
+        hdul[0].header.update({'CRPIX1': center[0] + 1, 'CRPIX2': center[1] + 1})
         hdul[0].header.add_history('Image recentered to {0}'.format(str(center)))
         
         # Write FITS file.
@@ -392,6 +393,10 @@ def run_obs(database,
     kwargs_temp['calibrate_flux'] = False
     if 'verbose' not in kwargs_temp.keys():
         kwargs_temp['verbose'] = database.verbose
+    if 'save_rolls' not in kwargs_temp.keys():
+        kwargs_temp['save_ints'] = False
+    else:
+        kwargs_temp['save_ints'] = kwargs_temp['save_rolls']
     
     # Set output directory.
     output_dir = os.path.join(database.output_dir, subdir)
@@ -443,7 +448,9 @@ def run_obs(database,
                     kwargs_temp['mode'] = mode
                     kwargs_temp['annuli'] = annu
                     kwargs_temp['subsections'] = subs
-                    parallelized.klip_dataset(**kwargs_temp)
+                    kwargs_temp_temp = kwargs_temp.copy()
+                    del kwargs_temp_temp['save_rolls']
+                    parallelized.klip_dataset(**kwargs_temp_temp)
                     
                     # Get reduction path.
                     datapath = os.path.join(output_dir, fileprefix + '-KLmodes-all.fits')
@@ -451,6 +458,8 @@ def run_obs(database,
                     
                     # Update reduction header.
                     ww_sci = np.where(database.obs[key]['TYPE'] == 'SCI')[0]
+                    head_sci = pyfits.getheader(database.obs[key]['FITSFILE'][ww_sci[0]], 'SCI')
+                    head_sci['NAXIS'] = 2
                     hdul = pyfits.open(datapath)
                     hdul[0].header['TELESCOP'] = database.obs[key]['TELESCOP'][ww_sci[0]]
                     hdul[0].header['TARGPROP'] = database.obs[key]['TARGPROP'][ww_sci[0]]
@@ -474,8 +483,51 @@ def run_obs(database,
                     hdul[0].header['ANNULI'] = annu
                     hdul[0].header['SUBSECTS'] = subs
                     hdul[0].header['BUNIT'] = database.obs[key]['BUNIT'][ww_sci[0]]
+                    w = wcs.WCS(head_sci)
+                    _rotate_wcs_hdr(w, database.obs[key]['ROLL_REF'][ww_sci[0]])
+                    hdul[0].header['WCSAXES'] = head_sci['WCSAXES']
+                    hdul[0].header['CRVAL1'] = head_sci['CRVAL1']
+                    hdul[0].header['CRVAL2'] = head_sci['CRVAL2']
+                    hdul[0].header['CTYPE1'] = head_sci['CTYPE1']
+                    hdul[0].header['CTYPE2'] = head_sci['CTYPE2']
+                    hdul[0].header['CUNIT1'] = head_sci['CUNIT1']
+                    hdul[0].header['CUNIT2'] = head_sci['CUNIT2']
+                    hdul[0].header['CD1_1'] = w.wcs.cd[0, 0]
+                    hdul[0].header['CD1_2'] = w.wcs.cd[0, 1]
+                    hdul[0].header['CD2_1'] = w.wcs.cd[1, 0]
+                    hdul[0].header['CD2_2'] = w.wcs.cd[1, 1]
+                    if not np.isnan(database.obs[key]['BLURFWHM'][ww_sci[0]]):
+                        hdul[0].header['BLURFWHM'] = database.obs[key]['BLURFWHM'][ww_sci[0]]
                     hdul.writeto(datapath, output_verify='fix', overwrite=True)
                     hdul.close()
+                    
+                    # Save each roll separately.
+                    if kwargs_temp['save_ints']:
+                        n_roll = 1
+                        for j in ww_sci:
+                            fitsfile = os.path.split(database.obs[key]['FITSFILE'][j])[1]
+                            head_sci = pyfits.getheader(database.obs[key]['FITSFILE'][j], 'SCI')
+                            ww = [k for k in range(len(dataset._filenames)) if fitsfile in dataset._filenames[k]]
+                            hdul = pyfits.open(datapath)
+                            if dataset.allints.shape[1] == 1:
+                                hdul[0].data = np.median(dataset.allints[:, :, ww, :, :], axis=(1, 2))
+                            else:
+                                hdul[0].data = np.median(dataset.allints[:, :, ww, :, :], axis=2)
+                            hdul[0].header['NINTS'] = database.obs[key]['NINTS'][j]
+                            hdul[0].header['WCSAXES'] = head_sci['WCSAXES']
+                            hdul[0].header['CRVAL1'] = head_sci['CRVAL1']
+                            hdul[0].header['CRVAL2'] = head_sci['CRVAL2']
+                            hdul[0].header['CTYPE1'] = head_sci['CTYPE1']
+                            hdul[0].header['CTYPE2'] = head_sci['CTYPE2']
+                            hdul[0].header['CUNIT1'] = head_sci['CUNIT1']
+                            hdul[0].header['CUNIT2'] = head_sci['CUNIT2']
+                            hdul[0].header['CD1_1'] = head_sci['CD1_1']
+                            hdul[0].header['CD1_2'] = head_sci['CD1_2']
+                            hdul[0].header['CD2_1'] = head_sci['CD2_1']
+                            hdul[0].header['CD2_2'] = head_sci['CD2_2']
+                            hdul.writeto(datapath.replace('-KLmodes-all.fits', '-KLmodes-all_roll%.0f.fits' % n_roll), output_verify='fix', overwrite=True)
+                            hdul.close()
+                            n_roll += 1
     
     # Read reductions into database.
     database.read_jwst_s3_data(datapaths)

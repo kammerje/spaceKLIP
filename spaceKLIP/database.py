@@ -62,6 +62,10 @@ wave_miri['FND'] = 13.  # micron
 weff_miri['FND'] = 10.  # micron
 del filter_list
 
+# Initialize WebbPSF instruments.
+nircam = webbpsf.NIRCam()
+niriss = webbpsf.NIRISS()
+miri = webbpsf.MIRI()
 
 class Database():
     """
@@ -143,6 +147,7 @@ class Database():
         RA_REF = []  # deg
         DEC_REF = []  # deg
         ROLL_REF = []  # deg
+        BLURFWHM = []  # pix
         HASH = []
         if psflibpaths is not None:
             allpaths = np.array(datapaths + psflibpaths)
@@ -201,21 +206,19 @@ class Database():
             APERNAME += [head.get('APERNAME', 'UNKNOWN')]
             if TELESCOP[-1] == 'JWST':
                 if INSTRUME[-1] == 'NIRCAM':
-                    nircam = webbpsf.NIRCam()
                     if 'LONG' in DETECTOR[-1] or '5' in DETECTOR[-1]:
                         PIXSCALE += [nircam._pixelscale_long * 1e3]
                     else:
                         PIXSCALE += [nircam._pixelscale_short * 1e3]
                 elif INSTRUME[-1] == 'NIRISS':
-                    niriss = webbpsf.NIRISS()
                     PIXSCALE += [niriss.pixelscale * 1e3]
                 elif INSTRUME[-1] == 'MIRI':
-                    miri = webbpsf.MIRI()
                     PIXSCALE += [miri.pixelscale * 1e3]
                 else:
                     raise UserWarning('Data originates from unknown JWST instrument')
             else:
                 raise UserWarning('Data originates from unknown telescope')
+            BLURFWHM += [head.get('BLURFWHM', np.nan)]
             head = hdul['SCI'].header
             BUNIT += [head.get('BUNIT', 'NONE')]
             CRPIX1 += [head.get('CRPIX1', np.nan)]
@@ -259,6 +262,7 @@ class Database():
         RA_REF = np.array(RA_REF)
         DEC_REF = np.array(DEC_REF)
         ROLL_REF = np.array(ROLL_REF)
+        BLURFWHM = np.array(BLURFWHM)
         HASH = np.array(HASH)
         
         # Find unique concatenations.
@@ -348,6 +352,7 @@ class Database():
                                'RA_REF',
                                'DEC_REF',
                                'ROLL_REF',
+                               'BLURFWHM',
                                'FITSFILE'),
                         dtype=('object',
                                'object',
@@ -373,6 +378,7 @@ class Database():
                                'object',
                                'float',
                                'object',
+                               'float',
                                'float',
                                'float',
                                'float',
@@ -434,6 +440,7 @@ class Database():
                              RA_REF[ww][j],
                              DEC_REF[ww][j],
                              ROLL_REF[ww][j] - V3I_YANG[ww][j] * VPARITY[ww][j],
+                             BLURFWHM[ww][j],
                              allpaths[ww][j]))
             self.obs[HASH_unique[i]] = tab.copy()
             del tab
@@ -515,6 +522,7 @@ class Database():
         BUNIT = []
         CRPIX1 = []  # pix
         CRPIX2 = []  # pix
+        BLURFWHM = []  # pix
         HASH = []
         Ndatapaths = len(datapaths)
         for i in range(Ndatapaths):
@@ -562,16 +570,13 @@ class Database():
             APERNAME += [head.get('APERNAME', 'UNKNOWN')]
             if TELESCOP[-1] == 'JWST':
                 if INSTRUME[-1] == 'NIRCAM':
-                    nircam = webbpsf.NIRCam()
                     if 'LONG' in DETECTOR[-1] or '5' in DETECTOR[-1]:
                         PIXSCALE += [nircam._pixelscale_long * 1e3]
                     else:
                         PIXSCALE += [nircam._pixelscale_short * 1e3]
                 elif INSTRUME[-1] == 'NIRISS':
-                    niriss = webbpsf.NIRISS()
                     PIXSCALE += [niriss.pixelscale * 1e3]
                 elif INSTRUME[-1] == 'MIRI':
-                    miri = webbpsf.MIRI()
                     PIXSCALE += [miri.pixelscale * 1e3]
                 else:
                     raise UserWarning('Data originates from unknown JWST instrument')
@@ -601,6 +606,7 @@ class Database():
                 KLMODES += [klmodes]
             else:
                 raise UserWarning('File must have one of the following types: CORON3, PYKLIP')
+            BLURFWHM += [head.get('BLURFWHM', np.nan)]
             if TYPE[-1] == 'CORON3':
                 head = hdul['SCI'].header
             BUNIT += [head.get('BUNIT', 'NONE')]
@@ -635,6 +641,7 @@ class Database():
         BUNIT = np.array(BUNIT)
         CRPIX1 = np.array(CRPIX1)
         CRPIX2 = np.array(CRPIX2)
+        BLURFWHM = np.array(BLURFWHM)
         HASH = np.array(HASH)
         
         # Find unique concatenations.
@@ -672,6 +679,7 @@ class Database():
                                    'SUBSECTS',
                                    'KLMODES',
                                    'BUNIT',
+                                   'BLURFWHM',
                                    'FITSFILE'),
                             dtype=('object',
                                    'object',
@@ -698,6 +706,7 @@ class Database():
                                    'int',
                                    'object',
                                    'object',
+                                   'float',
                                    'object'))
             else:
                 tab = self.red[HASH_unique[i]].copy()
@@ -727,6 +736,7 @@ class Database():
                              SUBSECTS[ww[j]],
                              KLMODES[ww[j]],
                              BUNIT[ww[j]],
+                             BLURFWHM[ww][j],
                              datapaths[ww[j]]))
             self.red[HASH_unique[i]] = tab.copy()
             del tab
@@ -782,7 +792,8 @@ class Database():
                    xoffset=None,
                    yoffset=None,
                    crpix1=None,
-                   crpix2=None):
+                   crpix2=None,
+                   blurfwhm=None):
         
         # Update spaceKLIP database.
         if 'uncal' in fitsfile:
@@ -808,6 +819,8 @@ class Database():
             self.obs[key]['CRPIX1'][index] = crpix1
         if crpix2 is not None:
             self.obs[key]['CRPIX2'][index] = crpix2
+        if blurfwhm is not None:
+            self.obs[key]['BLURFWHM'][index] = blurfwhm
         self.obs[key]['FITSFILE'][index] = fitsfile
         hdul.close()
         

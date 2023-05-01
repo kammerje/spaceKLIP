@@ -36,6 +36,12 @@ With the Anaconda environment created, move to the cloned directory and install 
 	pip install -r requirements.txt
 	pip install -e .
 
+NEW AS OF 1 MAY 2023: you also need to switch to the jwst branch of pyKLIP:
+
+::
+
+	pip install git+https://bitbucket.org/pyKLIP/pyklip.git@jwst
+
 Finally, and very importantly, you will need to download the reference files and set the environment variables supporting the functioning of :code:`webbpsf` and :code:`webbpsf_ext`. Instructions to do this can be found at the respective package websites (`WebbPSF <https://webbpsf.readthedocs.io/en/latest/installation.html#installing-the-required-data-files>`_, `WebbPSF_ext <https://github.com/JarronL/webbpsf_ext>`_). Ensure that if you edit your .bashrc file, close and reopen your terminal to fully apply the changes (:code:`source ~/.bashrc` or :code:`source ~/.zshrc` may also work).
 
 SpaceKLIP also makes use of the JWST Calibration Reference Data System (CRDS) and you will need to set the corresponding environment variables. Follow the instructions here for bash or zsh: https://jwst-crds.stsci.edu/docs/cmdline_bestrefs/. Note that you do not have to install AstroConda, just set the environment variables (making sure that the CRDS path you set actually exists, i.e., you may need to create the directory).
@@ -94,12 +100,14 @@ The current capabilities of the code are summarized below.
 - no absolute PSF alignment, this is now done using the ``ImageTools`` library
 - no relative frame alignment, this is now done using the ``ImageTools`` library
 - the old ``JWST.py`` is now implemented here
+- save individual rolls with ``save_rolls = True`` keyword
 
 ::
 
 	classpsfsubpipeline.py
 
-- ``run_obs``: not working, under development
+- ``run_obs``: working, under development
+- save individual rolls with ``save_rolls = True`` keyword
 
 ::
 
@@ -114,8 +122,8 @@ The current capabilities of the code are summarized below.
 - ``fix_bad_pixels``: working
 - ``replace_nans``: working
 - ``align_frames``: working (relative frame alignment)
-- ``recenter_frames``: working only for TA images (absolute PSF alignment)
-- blurring: missing
+- ``recenter_frames``: working with filter-dependent shifts (absolute PSF alignment)
+- ``blur_frames``: working
 
 ::
 

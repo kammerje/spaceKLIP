@@ -16,24 +16,67 @@ import astropy.io.fits as pyfits
 import matplotlib.pyplot as plt
 import numpy as np
 
+import pysiaf
+import webbpsf_ext
+
 from copy import deepcopy
 from jwst.pipeline import Detector1Pipeline, Image2Pipeline, Coron3Pipeline
 from scipy.ndimage import fourier_shift, gaussian_filter, median_filter
 from scipy.ndimage import shift as spline_shift
 from scipy.optimize import leastsq, minimize
+from skimage.registration import phase_cross_correlation
 from spaceKLIP import utils as ut
+from spaceKLIP.psf import JWST_PSF
 from spaceKLIP.xara import core
+from webbpsf_ext import robust
+from webbpsf_ext.coords import dist_image
+from webbpsf_ext.webbpsf_ext_core import _transmission_map
 
 import logging
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
 
-from webbpsf_ext import robust
-
 
 # =============================================================================
 # MAIN
 # =============================================================================
+
+# Set parameters.
+crpix_jarron = {
+    'NRCA2_MASK210R': (321.8, 331.5),
+    'NRCA5_MASK210R': (319.04, 320.97),
+    'NRCA2_FULL_MASK210R': (712.8, 1516.5),
+    'NRCA5_FULL_MASK210R': (319.04, 1672.97),
+    'NRCB1_MASK210R': (320.8, 321.6),
+    'NRCA2_MASK335R': (160.13, 161.20),
+    'NRCA5_MASK335R': (150.2, 174.6),
+    'NRCA2_FULL_MASK335R': (1368.13, 1520.20),
+    'NRCA5_FULL_MASK335R': (641.2, 1675.6),
+    'NRCB5_MASK335R': (160.1, 161.4),
+    'NRCA2_MASK430R': (295.91, 160.88),
+    'NRCA5_MASK430R': (151.3, 175.2),
+    'NRCA2_FULL_MASK430R': (2023.91, 1519.88),
+    'NRCA5_FULL_MASK430R': (964.3, 1676.2),
+    'NRCB5_MASK430R': (160.5, 161.0),
+    }
+filter_shifts_jarron = {
+    'F182M': (-0.071, -1.365),
+    'F187N': (-0.108, -1.216),
+    'F200W': (+2.543, +4.119),
+    'F210M': (+0.000, +0.000),
+    'F212N': (+0.037, +0.344),
+    'F250M': (+0.056, -2.038),
+    'F300M': (+0.086, -0.526),
+    'F322W2': (+0.198, -0.583),
+    'F335M': (+0.000, +0.000),
+    'F356W': (+0.783, -0.159),
+    'F360M': (+0.204, -0.087),
+    'F410M': (+0.209, -0.132),
+    'F430M': (+0.196, -0.182),
+    'F444W': (+0.177, -0.205),
+    'F460M': (+0.237, -0.766),
+    'F480M': (+0.226, -0.899),
+    }
 
 class ImageTools():
     """
@@ -50,7 +93,6 @@ class ImageTools():
     
     def remove_frames(self,
                       index=[0],
-                      frame=None,
                       types=['SCI', 'SCI_BG', 'REF', 'REF_BG'],
                       subdir='removed'):
         
@@ -83,7 +125,7 @@ class ImageTools():
                     head, tail = os.path.split(fitsfile)
                     log.info('  --> Frame removal: ' + tail)
                     try:
-                        index_temp = frame[key][j]
+                        index_temp = index[key][j]
                     except:
                         index_temp = index.copy()
                     log.info('  --> Frame removal: removing frame(s) ' + str(index_temp))
@@ -302,9 +344,13 @@ class ImageTools():
                     data_temp[pxdq != 0] = np.nan
                     # else:
                     #     data_temp[pxdq & 1 == 1] = np.nan
-                    median = np.nanmedian(data_temp, axis=(1, 2), keepdims=True)
-                    data -= median
-                    log.info('  --> Median subtraction: mean of frame median = %.2f' % np.mean(median))
+                    bg_med = np.nanmedian(data_temp, axis=(1, 2), keepdims=True)
+                    bg_std = robust.medabsdev(data_temp, axis=(1, 2), keepdims=True)
+                    bg_ind = data_temp > (bg_med + 5. * bg_std) # clip bright PSFs for final calculation
+                    data_temp[bg_ind] = np.nan
+                    bg_med = np.nanmedian(data_temp, axis=(1, 2), keepdims=True)
+                    data -= bg_med
+                    log.info('  --> Median subtraction: mean of frame median = %.2f' % np.mean(bg_med))
                 
                 # Write FITS file.
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d)
@@ -798,6 +844,7 @@ class ImageTools():
                 data, erro, pxdq, head_pri, head_sci, is2d = ut.read_obs(fitsfile)
                 
                 # Skip file types that are not in the list of types.
+                fact_temp = None
                 if self.database.obs[key]['TYPE'][j] in types:
                     
                     # Blur frames.
@@ -827,12 +874,320 @@ class ImageTools():
                         log.info('  --> Frame blurring: skipped')
                 
                 # Write FITS file.
+                if fact_temp is None:
+                    pass
+                else:
+                    head_pri['BLURFWHM'] = fact_temp
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d)
                 
                 # Update spaceKLIP database.
-                self.database.update_obs(key, j, fitsfile)
+                if fact_temp is None:
+                    self.database.update_obs(key, j, fitsfile, blurfwhm=np.nan)
+                else:
+                    self.database.update_obs(key, j, fitsfile, blurfwhm=fact_temp)
         
         pass
+    
+    def recenter_frames(self,
+                        method='fourier',
+                        subpix_first_sci_only=False,
+                        spectral_type='G2V',
+                        kwargs={},
+                        subdir='recentered'):
+        
+        # Update NIRCam coronagraphy centers, i.e., change SIAF CRPIX position
+        # to true mask center determined by Jarron.
+        self.update_nircam_centers()
+        
+        # Set output directory.
+        output_dir = os.path.join(self.database.output_dir, subdir)
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        
+        # Loop through concatenations.
+        for i, key in enumerate(self.database.obs.keys()):
+            log.info('--> Concatenation ' + key)
+            
+            # Find science and reference files.
+            ww_sci = np.where(self.database.obs[key]['TYPE'] == 'SCI')[0]
+            ww_sci_ta = np.where(self.database.obs[key]['TYPE'] == 'SCI_TA')[0]
+            ww_ref = np.where(self.database.obs[key]['TYPE'] == 'REF')[0]
+            ww_ref_ta = np.where(self.database.obs[key]['TYPE'] == 'REF_TA')[0]
+            
+            # Loop through FITS files.
+            ww_all = np.append(ww_sci, ww_ref)
+            ww_all = np.append(ww_all, ww_sci_ta)
+            ww_all = np.append(ww_all, ww_ref_ta)
+            shifts_all = []
+            for j in ww_all:
+                
+                # Read FITS file.
+                fitsfile = self.database.obs[key]['FITSFILE'][j]
+                data, erro, pxdq, head_pri, head_sci, is2d = ut.read_obs(fitsfile)
+                
+                # Recenter frames. Use different algorithms based on data type.
+                head, tail = os.path.split(fitsfile)
+                log.info('  --> Recenter frames: ' + tail)
+                if np.sum(np.isnan(data)) != 0:
+                    raise UserWarning('Please replace nan pixels before attempting to recenter frames')
+                shifts = []
+                if j in ww_sci or j in ww_ref:
+                    if self.database.obs[key]['EXP_TYPE'][j] == 'NRC_CORON':
+                        for k in range(data.shape[0]):
+                            if j == ww_sci[0] and k == 0:
+                                xc, yc = self.find_nircam_centers(data0=data[k].copy(),
+                                                                  key=key,
+                                                                  j=j,
+                                                                  spectral_type=spectral_type,
+                                                                  date=head_pri['DATE-BEG'],
+                                                                  output_dir=output_dir)
+                            shifts += [np.array([-(xc - data.shape[-1]//2), -(yc - data.shape[-2]//2)])]
+                            data[k] = self.imshift(data[k], [shifts[k][0], shifts[k][1]], method, kwargs)
+                            erro[k] = self.imshift(erro[k], [shifts[k][0], shifts[k][1]], method, kwargs)
+                        xoffset = self.database.obs[key]['XOFFSET'][j] - self.database.obs[key]['XOFFSET'][ww_sci[0]] # mas
+                        yoffset = self.database.obs[key]['YOFFSET'][j] - self.database.obs[key]['YOFFSET'][ww_sci[0]] # mas
+                        crpix1 = data.shape[-1]//2 + 1 # 1-indexed
+                        crpix2 = data.shape[-2]//2 + 1 # 1-indexed
+                    elif self.database.obs[key]['EXP_TYPE'][j] == 'MIR_4QPM' or self.database.obs[key]['EXP_TYPE'][j] == 'MIR_LYOT':
+                        log.warning('  --> Recenter frames: not implemented for MIRI coronagraphy, skipped')
+                        for k in range(data.shape[0]):
+                            shifts += [np.array([0., 0.])]
+                        xoffset = self.database.obs[key]['XOFFSET'][j] # mas
+                        yoffset = self.database.obs[key]['YOFFSET'][j] # mas
+                        crpix1 = self.database.obs[key]['CRPIX1'][j] # 1-indexed
+                        crpix2 = self.database.obs[key]['CRPIX2'][j] # 1-indexed
+                    else:
+                        for k in range(data.shape[0]):
+                            if subpix_first_sci_only == False or (j == ww_sci[0] and k == 0):
+                                pp = core.determine_origin(data[k], algo='BCEN')
+                                shifts += [np.array([-(pp[0] - data.shape[-1]//2), -(pp[1] - data.shape[-2]//2)])]
+                                data[k] = self.imshift(data[k], [shifts[k][0], shifts[k][1]], method, kwargs)
+                                erro[k] = self.imshift(erro[k], [shifts[k][0], shifts[k][1]], method, kwargs)
+                            else:
+                                shifts += [np.array([0., 0.])]
+                            ww_max = np.unravel_index(np.argmax(data[k]), data[k].shape)
+                            if ww_max != (data.shape[-2]//2, data.shape[-1]//2):
+                                dx, dy = data.shape[-1]//2 - ww_max[1], data.shape[-2]//2 - ww_max[0]
+                                shifts[-1][0] += dx
+                                shifts[-1][1] += dy
+                                data[k] = np.roll(np.roll(data[k], dx, axis=1), dy, axis=0)
+                                erro[k] = np.roll(np.roll(erro[k], dx, axis=1), dy, axis=0)
+                        xoffset = 0. # mas
+                        yoffset = 0. # mas
+                        crpix1 = data.shape[-1]//2 + 1 # 1-indexed
+                        crpix2 = data.shape[-2]//2 + 1 # 1-indexed
+                if j in ww_sci_ta or j in ww_ref_ta:
+                    for k in range(data.shape[0]):
+                        p0 = np.array([0., 0.])
+                        pp = minimize(self.recenterlsq,
+                                      p0,
+                                      args=(data[k], method, kwargs))['x']
+                        shifts += [np.array([pp[0], pp[1]])]
+                        data[k] = self.imshift(data[k], [shifts[k][0], shifts[k][1]], method, kwargs)
+                        erro[k] = self.imshift(erro[k], [shifts[k][0], shifts[k][1]], method, kwargs)
+                        ww_max = np.unravel_index(np.argmax(data[k]), data[k].shape)
+                        if ww_max != (data.shape[-2]//2, data.shape[-1]//2):
+                            dx, dy = data.shape[-1]//2 - ww_max[1], data.shape[-2]//2 - ww_max[0]
+                            shifts[-1][0] += dx
+                            shifts[-1][1] += dy
+                            data[k] = np.roll(np.roll(data[k], dx, axis=1), dy, axis=0)
+                            erro[k] = np.roll(np.roll(erro[k], dx, axis=1), dy, axis=0)
+                    xoffset = 0. # mas
+                    yoffset = 0. # mas
+                    crpix1 = data.shape[-1]//2 + 1 # 1-indexed
+                    crpix2 = data.shape[-2]//2 + 1 # 1-indexed
+                shifts = np.array(shifts)
+                shifts_all += [shifts]
+                
+                # Compute shift distances.
+                dist = np.sqrt(np.sum(shifts[:, :2]**2, axis=1)) # pix
+                dist *= self.database.obs[key]['PIXSCALE'][j] # mas
+                head, tail = os.path.split(self.database.obs[key]['FITSFILE'][j])
+                log.info('  --> Recenter frames: ' + tail)
+                log.info('  --> Recenter frames: median required shift = %.2f mas' % np.median(dist))
+                
+                # Write FITS file.
+                head_pri['XOFFSET'] = xoffset
+                head_pri['YOFFSET'] = yoffset
+                head_sci['CRPIX1'] = crpix1
+                head_sci['CRPIX2'] = crpix2
+                fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d)
+                
+                # Update spaceKLIP database.
+                self.database.update_obs(key, j, fitsfile, xoffset=xoffset, yoffset=yoffset, crpix1=crpix1, crpix2=crpix2)
+        
+        pass
+    
+    def update_nircam_centers(self):
+        
+        # Loop through concatenations.
+        for i, key in enumerate(self.database.obs.keys()):
+            log.info('--> Concatenation ' + key)
+            
+            # Loop through FITS files.
+            for j in range(len(self.database.obs[key])):
+                
+                # Skip file types that are not NIRCam coronagraphy.
+                if self.database.obs[key]['EXP_TYPE'][j] == 'NRC_CORON':
+                    
+                    # Read FITS file.
+                    fitsfile = self.database.obs[key]['FITSFILE'][j]
+                    data, erro, pxdq, head_pri, head_sci, is2d = ut.read_obs(fitsfile)
+                    
+                    # Update current reference pixel position.
+                    head, tail = os.path.split(fitsfile)
+                    log.info('  --> Update NIRCam coronagraphy centers: ' + tail)
+                    
+                    # Get current reference pixel position.
+                    crpix1 = self.database.obs[key]['CRPIX1'][j]
+                    crpix2 = self.database.obs[key]['CRPIX2'][j]
+                    
+                    # Get SIAF reference pixel position.
+                    siaf = pysiaf.Siaf('NIRCAM')
+                    apsiaf = siaf[self.database.obs[key]['APERNAME'][j]]
+                    xsciref, ysciref = (apsiaf.XSciRef, apsiaf.YSciRef)
+                    
+                    # Get true mask center from Jarron.
+                    try:
+                        crpix1_jarron, crpix2_jarron = crpix_jarron[self.database.obs[key]['APERNAME'][j]]
+                    except KeyError:
+                        log.warning('  --> Update NIRCam coronagraphy centers: no true mask center found for ' + self.database.obs[key]['APERNAME'][j])
+                        crpix1_jarron, crpix2_jarron = xsciref, ysciref
+                    
+                    # Get filter shift from Jarron.
+                    try:
+                        xshift_jarron, yshift_jarron = filter_shifts_jarron[self.database.obs[key]['FILTER'][j]]
+                    except KeyError:
+                        log.warning('  --> Update NIRCam coronagraphy centers: no filter shift found for ' + self.database.obs[key]['FILTER'][j])
+                        xshift_jarron, yshift_jarron = 0., 0.
+                    
+                    # Determine offset between SIAF reference pixel position
+                    # and true mask center from Jarron and update current
+                    # reference pixel position. Account for filter-dependent
+                    # distortion.
+                    xoff, yoff = crpix1_jarron + xshift_jarron - xsciref, crpix2_jarron + yshift_jarron - ysciref
+                    log.info('  --> Update NIRCam coronagraphy centers: old = (%.2f, %.2f), new = (%.2f, %.2f)' % (crpix1, crpix2, crpix1 + xoff, crpix2 + yoff))
+                    crpix1 += xoff
+                    crpix2 += yoff
+                    
+                    # Update spaceKLIP database.
+                    self.database.update_obs(key, j, fitsfile, crpix1=crpix1, crpix2=crpix2)
+        
+        pass
+    
+    def find_nircam_centers(self,
+                            data0,
+                            key,
+                            j,
+                            spectral_type='G2V',
+                            date=None,
+                            output_dir=None,
+                            oversample=2,
+                            use_coeff=False):
+        
+        # Generate host star spectrum.
+        spectrum = webbpsf_ext.stellar_spectrum(spectral_type)
+        
+        # Get true mask center (0-indexed).
+        crpix1 = self.database.obs[key]['CRPIX1'][j] - 1
+        crpix2 = self.database.obs[key]['CRPIX2'][j] - 1
+        
+        # Initialize JWST_PSF object. Use odd image size so that PSF is
+        # centered in pixel center.
+        log.info('  --> Recenter frames: generating WebbPSF image for absolute centering (this might take a while)')
+        INSTRUME = 'NIRCam'
+        FILTER = self.database.obs[key]['FILTER'][j]
+        CORONMSK = self.database.obs[key]['CORONMSK'][j]
+        if CORONMSK.startswith('MASKA') or CORONMSK.startswith('MASKB'):
+            CORONMSK = CORONMSK[:4] + CORONMSK[5:]
+        fov_pix = 65
+        kwargs = {'oversample': oversample,
+                  'date': date,
+                  'use_coeff': use_coeff,
+                  'sp': spectrum}
+        psf = JWST_PSF(INSTRUME, FILTER, CORONMSK, fov_pix, **kwargs)
+        
+        # Get SIAF reference pixel position.
+        apsiaf = psf.inst_on.siaf[self.database.obs[key]['APERNAME'][j]]
+        xsciref, ysciref = (apsiaf.XSciRef, apsiaf.YSciRef)
+        
+        # Generate model PSF. Apply offset between SIAF reference pixel
+        # position and true mask center.
+        xoff = (crpix1 + 1) - xsciref
+        yoff = (crpix2 + 1) - ysciref
+        # crtel = apsiaf.sci_to_tel((crpix1 + 1) - xoff, (crpix2 + 1) - yoff)
+        # model_psf = psf.gen_psf_idl(crtel, coord_frame='tel', return_oversample=False)
+        model_psf = psf.gen_psf_idl((0, 0), coord_frame='idl', return_oversample=False)  # using this instead after discussing with Jarron
+        if not np.isnan(self.database.obs[key]['BLURFWHM'][j]):
+            model_psf = gaussian_filter(model_psf, self.database.obs[key]['BLURFWHM'][j])
+        
+        # Get transmission mask.
+        yi, xi = np.indices(data0.shape)
+        xtel, ytel = apsiaf.sci_to_tel(xi + 1 - xoff, yi + 1 - yoff)
+        tmask, _, _ = _transmission_map(psf.inst_on, (xtel, ytel), 'tel')
+        mask = tmask**2
+        
+        # Determine relative shift between data and model PSF. Iterate 3 times
+        # to improve precision.
+        xc, yc = (crpix1, crpix2)
+        for i in range(3):
+            
+            # Crop data and transmission mask.
+            datasub, xsub_indarr, ysub_indarr = self.crop_image(image=data0,
+                                                                xycen=(xc, yc),
+                                                                npix=fov_pix,
+                                                                return_indices=True)
+            masksub = self.crop_image(image=mask,
+                                      xycen=(xc, yc),
+                                      npix=fov_pix)
+            
+            # Determine relative shift between data and model PSF.
+            yshift, xshift = phase_cross_correlation(datasub * masksub,
+                                                     model_psf * masksub,
+                                                     upsample_factor=1000,
+                                                     normalization=None,
+                                                     return_error=False)
+            
+            # Update star position.
+            xc = np.mean(xsub_indarr) + xshift
+            yc = np.mean(ysub_indarr) + yshift
+        xshift, yshift = (xc - crpix1, yc - crpix2)
+        log.info('  --> Recenter frames: star offset from coronagraph center (dx, dy) = (%.2f, %.2f) pix' % (xshift, yshift))
+        
+        # Plot data, model PSF, and scene overview.
+        if output_dir is not None:
+            f, ax = plt.subplots(1, 3, figsize=(3 * 6.4, 1 * 4.8))
+            ax[0].imshow(datasub, origin='lower', cmap='Reds')
+            ax[0].contourf(masksub, levels=[0.00, 0.25, 0.50, 0.75], cmap='Greys_r', vmin=0., vmax=2., alpha=0.5)
+            ax[0].set_title('1. SCI frame & transmission mask')
+            ax[1].imshow(model_psf, origin='lower', cmap='Reds')
+            ax[1].contourf(masksub, levels=[0.00, 0.25, 0.50, 0.75], cmap='Greys_r', vmin=0., vmax=2., alpha=0.5)
+            ax[1].set_title('Model PSF & transmission mask')
+            ax[2].scatter((xsciref), (ysciref), marker='+', color='black', label='SIAF reference point')
+            ax[2].scatter((crpix1 + 1), (crpix2 + 1), marker='x', color='skyblue', label='True mask center')
+            ax[2].scatter((xc + 1), (yc + 1), marker='*', color='red', label='Computed star position')
+            ax[2].set_aspect('equal')
+            xlim = ax[2].get_xlim()
+            ylim = ax[2].get_ylim()
+            xrng = xlim[1]-xlim[0]
+            yrng = ylim[1]-ylim[0]
+            if xrng > yrng:
+                ax[2].set_xlim(np.mean(xlim) - xrng, np.mean(xlim) + xrng)
+                ax[2].set_ylim(np.mean(ylim) - xrng, np.mean(ylim) + xrng)
+            else:
+                ax[2].set_xlim(np.mean(xlim) - yrng, np.mean(xlim) + yrng)
+                ax[2].set_ylim(np.mean(ylim) - yrng, np.mean(ylim) + yrng)
+            ax[2].set_xlabel('x-position [pix]')
+            ax[2].set_ylabel('y-position [pix]')
+            ax[2].legend(loc='upper right', fontsize=12)
+            ax[2].set_title('Scene overview (1-indexed)')
+            plt.tight_layout()    
+            plt.savefig(os.path.join(output_dir, key + '_recenter.pdf'))
+            # plt.show()
+            plt.close()
+        
+        # Return star position.
+        return xc, yc
     
     def align_frames(self,
                      method='fourier',
@@ -985,109 +1340,27 @@ class ImageTools():
         
         pass
     
-    def recenter_frames(self,
-                        method='fourier',
-                        subpix_first_sci_only=False,
-                        kwargs={},
-                        subdir='recentered'):
+    def crop_image(self,
+                   image,
+                   xycen,
+                   npix,
+                   return_indices=False):
         
-        # Set output directory.
-        output_dir = os.path.join(self.database.output_dir, subdir)
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
+        # Compute pixel coordinates.
+        xc, yc = xycen
+        x1 = int(xc - npix / 2. + 0.5)
+        x2 = x1 + npix
+        y1 = int(yc - npix / 2. + 0.5)
+        y2 = y1 + npix
         
-        # Loop through concatenations.
-        for i, key in enumerate(self.database.obs.keys()):
-            log.info('--> Concatenation ' + key)
-            
-            # Find science and reference files.
-            ww_sci = np.where(self.database.obs[key]['TYPE'] == 'SCI')[0]
-            ww_sci_ta = np.where(self.database.obs[key]['TYPE'] == 'SCI_TA')[0]
-            ww_ref = np.where(self.database.obs[key]['TYPE'] == 'REF')[0]
-            ww_ref_ta = np.where(self.database.obs[key]['TYPE'] == 'REF_TA')[0]
-            
-            # Loop through FITS files.
-            ww_all = np.append(ww_sci, ww_ref)
-            ww_all = np.append(ww_all, ww_sci_ta)
-            ww_all = np.append(ww_all, ww_ref_ta)
-            shifts_all = []
-            for j in ww_all:
-                
-                # Read FITS file.
-                fitsfile = self.database.obs[key]['FITSFILE'][j]
-                data, erro, pxdq, head_pri, head_sci, is2d = ut.read_obs(fitsfile)
-                
-                # Recenter frames.
-                head, tail = os.path.split(fitsfile)
-                log.info('  --> Recenter frames: ' + tail)
-                if np.sum(np.isnan(data)) != 0:
-                    raise UserWarning('Please replace nan pixels before attempting to recenter frames')
-                shifts = []
-                xoffset = 0. # mas
-                yoffset = 0. # mas
-                crpix1 = data.shape[-1]//2 + 1 # 1-indexed
-                crpix2 = data.shape[-2]//2 + 1 # 1-indexed
-                if ww_all[j] in ww_sci or ww_all[j] in ww_ref:
-                    if 'CORON' in self.database.obs[key]['EXP_TYPE'][j]:
-                        log.warning('  --> Recenter frames: not implemented for EXP_TYPE CORON, skipped')
-                        shifts += [np.array([0., 0.])]
-                    else:
-                        for k in range(data.shape[0]):
-                            if subpix_first_sci_only == False or (ww_all[j] == ww_sci[0] and k == 0):
-                                pp = core.determine_origin(data[k], algo='BCEN')
-                                shifts += [np.array([-(pp[0] - data.shape[-1]//2), -(pp[1] - data.shape[-2]//2)])]
-                                data[k] = self.imshift(data[k], [shifts[k][0], shifts[k][1]], method, kwargs)
-                                erro[k] = self.imshift(erro[k], [shifts[k][0], shifts[k][1]], method, kwargs)
-                            else:
-                                shifts += [np.array([0., 0.])]
-                            ww_max = np.unravel_index(np.argmax(data[k]), data[k].shape)
-                            if ww_max != (data.shape[-2]//2, data.shape[-1]//2):
-                                dx, dy = data.shape[-1]//2 - ww_max[1], data.shape[-2]//2 - ww_max[0]
-                                shifts[-1][0] += dx
-                                shifts[-1][1] += dy
-                                data[k] = np.roll(np.roll(data[k], dx, axis=1), dy, axis=0)
-                                erro[k] = np.roll(np.roll(erro[k], dx, axis=1), dy, axis=0)
-                if ww_all[j] in ww_sci_ta or ww_all[j] in ww_ref_ta:
-                    for k in range(data.shape[0]):
-                        p0 = np.array([0., 0.])
-                        pp = minimize(self.recenterlsq,
-                                      p0,
-                                      args=(data[k], method, kwargs))['x']
-                        shifts += [np.array([pp[0], pp[1]])]
-                        data[k] = self.imshift(data[k], [shifts[k][0], shifts[k][1]], method, kwargs)
-                        erro[k] = self.imshift(erro[k], [shifts[k][0], shifts[k][1]], method, kwargs)
-                        ww_max = np.unravel_index(np.argmax(data[k]), data[k].shape)
-                        if ww_max != (data.shape[-2]//2, data.shape[-1]//2):
-                            dx, dy = data.shape[-1]//2 - ww_max[1], data.shape[-2]//2 - ww_max[0]
-                            shifts[-1][0] += dx
-                            shifts[-1][1] += dy
-                            data[k] = np.roll(np.roll(data[k], dx, axis=1), dy, axis=0)
-                            erro[k] = np.roll(np.roll(erro[k], dx, axis=1), dy, axis=0)
-                shifts = np.array(shifts)
-                shifts_all += [shifts]
-                
-                # Compute shift distances.
-                dist = np.sqrt(np.sum(shifts[:, :2]**2, axis=1)) # pix
-                dist *= self.database.obs[key]['PIXSCALE'][j] # mas
-                head, tail = os.path.split(self.database.obs[key]['FITSFILE'][j])
-                log.info('  --> Recenter frames: ' + tail)
-                log.info('  --> Recenter frames: median required shift = %.2f mas' % np.median(dist))
-                ww = dist > 300.
-                if np.sum(ww) != 0:
-                    ww = np.where(ww == True)[0]
-                    log.warning('The following frames might not be properly recentered (0-indexed): '+str(ww))
-                
-                # Write FITS file.
-                head_pri['XOFFSET'] = xoffset
-                head_pri['YOFFSET'] = yoffset
-                head_sci['CRPIX1'] = crpix1
-                head_sci['CRPIX2'] = crpix2
-                fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d)
-                
-                # Update spaceKLIP database.
-                self.database.update_obs(key, j, fitsfile, xoffset=xoffset, yoffset=yoffset, crpix1=crpix1, crpix2=crpix2)
-        
-        pass
+        # Crop image.
+        imsub = image[y1:y2, x1:x2]
+        if return_indices:
+            xsub_indarr = np.arange(x1, x2).astype('int')
+            ysub_indarr = np.arange(y1, y2).astype('int')
+            return imsub, xsub_indarr, ysub_indarr
+        else:
+            return imsub
     
     def imshift(self,
                 image,
