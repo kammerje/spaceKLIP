@@ -16,6 +16,7 @@ import astropy.io.fits as pyfits
 import matplotlib.pyplot as plt
 import numpy as np
 
+import json
 import pyklip.klip
 
 from astropy import wcs
@@ -23,6 +24,7 @@ from jwst.pipeline import Detector1Pipeline, Image2Pipeline, Coron3Pipeline
 from pyklip import parallelized, rdi
 from pyklip.instruments.Instrument import Data
 from pyklip.klip import _rotate_wcs_hdr
+from spaceKLIP.psf import get_transmission
 
 import logging
 log = logging.getLogger(__name__)
@@ -36,6 +38,7 @@ log.setLevel(logging.INFO)
 class SpaceTelescope(Data):
     """
     The pyKLIP instrument class for space telescope data.
+    
     """
     
     ####################
@@ -46,6 +49,24 @@ class SpaceTelescope(Data):
                  obs,
                  filepaths,
                  psflib_filepaths=None):
+        """
+        Initialize the pyKLIP instrument class for space telescope data.
+        
+        Parameters
+        ----------
+        obs : astropy table
+            Concatenation of a spaceKLIP observations database for which the
+            pyKLIP Data class shall be initialized.
+        filepaths : 1D-array
+            Paths of the input science observations.
+        psflib_filepaths : 1D-array, optional
+            Paths of the input reference observations. The default is None.
+        
+        Returns
+        -------
+        None.
+        
+        """
         
         # Initialize pyKLIP Data class.
         super(SpaceTelescope, self).__init__()
@@ -140,6 +161,22 @@ class SpaceTelescope(Data):
     def readdata(self,
                  obs,
                  filepaths):
+        """
+        Read the input science observations.
+        
+        Parameters
+        ----------
+        obs : astropy table
+            Concatenation of a spaceKLIP observations database for which the
+            pyKLIP Data class shall be initialized.
+        filepaths : 1D-array
+            Paths of the input science observations.
+        
+        Returns
+        -------
+        None.
+        
+        """
         
         # Check input.
         if isinstance(filepaths, str):
@@ -199,8 +236,10 @@ class SpaceTelescope(Data):
         PIXSCALE = np.unique(np.array(PIXSCALE))
         if len(PIXSCALE) != 1:
             raise UserWarning('Some science files do not have matching pixel scales')
-        if TELESCOP == 'JWST' and obs['EXP_TYPE'][ww] in ['NRC_CORON', 'MIR_4QPM', 'MIR_LYOT']:
+        if TELESCOP == 'JWST' and obs['EXP_TYPE'][ww] in ['NRC_CORON', 'MIR_LYOT']:
             iwa_all = np.min(wvs_all) / 6.5 * 180. / np.pi * 3600. * 1000. / PIXSCALE[0]  # pix
+        elif TELESCOP == 'JWST' and obs['EXP_TYPE'][ww] in ['MIR_4QPM']:
+            iwa_all = 0.5 * np.min(wvs_all) / 6.5 * 180. / np.pi * 3600. * 1000. / PIXSCALE[0]  # pix
         else:
             iwa_all = 1.  # pix
         
@@ -227,6 +266,22 @@ class SpaceTelescope(Data):
     def readpsflib(self,
                    obs,
                    psflib_filepaths):
+        """
+        Read the input reference observations.
+        
+        Parameters
+        ----------
+        obs : astropy table
+            Concatenation of a spaceKLIP observations database for which the
+            pyKLIP Data class shall be initialized.
+        psflib_filepaths : 1D-array, optional
+            Paths of the input reference observations. The default is None.
+        
+        Returns
+        -------
+        None.
+        
+        """
         
         # Check input.
         if isinstance(psflib_filepaths, str):
@@ -300,6 +355,33 @@ class SpaceTelescope(Data):
                  filetype='',
                  zaxis=None,
                  more_keywords=None):
+        """
+        Function to save the data products that will be called internally by
+        pyKLIP.
+        
+        Parameters
+        ----------
+        filepath : path
+            Path of the output FITS file.
+        data : 3D-array
+            KLIP-subtracted data of shape (nkl, ny, nx).
+        klipparams : str, optional
+            PyKLIP keyword arguments used for the KLIP subtraction. The default
+            is None.
+        filetype : str, optional
+            Data type of the pyKLIP product. The default is ''.
+        zaxis : list, optional
+            List of KL modes used for the KLIP subtraction. The default is
+            None.
+        more_keywords : dict, optional
+            Dictionary of additional header keywords to be written to the
+            output FITS file. The default is None.
+        
+        Returns
+        -------
+        None.
+        
+        """
         
         # Make FITS file.
         hdul = pyfits.HDUList()
@@ -365,10 +447,48 @@ class SpaceTelescope(Data):
         
         pass
 
-
 def run_obs(database,
             kwargs={},
             subdir='klipsub'):
+    """
+    Run pyKLIP on the input observations database.
+    
+    Parameters
+    ----------
+    database : spaceKLIP.Database
+        SpaceKLIP database on which pyKLIP shall be run.
+    kwargs : dict, optional
+        Keyword arguments for the pyklip.parallelized.klip_dataset method.
+        Available keywords are:
+        - mode : list of str, optional
+            Subtraction modes that shall be looped over. Possible values are
+            'ADI', 'RDI', and 'ADI+RDI'. The default is ['ADI+RDI'].
+        - annuli : list of int, optional
+            Numbers of subtraction annuli that shall be looped over. The
+            default is [1].
+        - subsections : list of int, optional
+            Numbers of subtraction subsections that shall be looped over. The
+            default is [1].
+        - numbasis : list of int, optional
+            Number of KL modes that shall be looped over. The default is [1, 2,
+            5, 10, 20, 50, 100].
+        - movement : float, optional
+            Minimum amount of movement (pix) of an astrophysical source to
+            consider using that image as a reference PSF. The default is 1.
+        - verbose : bool, optional
+            Verbose mode? The default is False.
+        - save_rolls : bool, optional
+            Save each processed roll separately? The default is False.
+        The default is {}.
+    subdir : str, optional
+        Name of the directory where the data products shall be saved. The
+        default is 'klipsub'.
+    
+    Returns
+    -------
+    None.
+    
+    """
     
     # Check input.
     if 'mode' not in kwargs.keys():
@@ -414,8 +534,8 @@ def run_obs(database,
         psflib_filepaths = []
         first_sci = True
         nints = []
-        Nfitsfiles = len(database.obs[key])
-        for j in range(Nfitsfiles):
+        nfitsfiles = len(database.obs[key])
+        for j in range(nfitsfiles):
             if database.obs[key]['TYPE'][j] == 'SCI':
                 filepaths += [database.obs[key]['FITSFILE'][j]]
                 if first_sci:
@@ -528,6 +648,20 @@ def run_obs(database,
                             hdul.writeto(datapath.replace('-KLmodes-all.fits', '-KLmodes-all_roll%.0f.fits' % n_roll), output_verify='fix', overwrite=True)
                             hdul.close()
                             n_roll += 1
+        
+        # Save corresponding observations database.
+        file = os.path.join(output_dir, key + '.dat')
+        database.obs[key].write(file, format='ascii', overwrite=True)
+        
+        # Compute and save corresponding transmission mask.
+        file = os.path.join(output_dir, key + '_psfmask.fits')
+        mask = get_transmission(database.obs[key])
+        ww_sci = np.where(database.obs[key]['TYPE'] == 'SCI')[0]
+        if mask is not None:
+            hdul = pyfits.open(database.obs[key]['MASKFILE'][ww_sci[0]])
+            hdul[0].data = None
+            hdul['SCI'].data = mask
+            hdul.writeto(file, output_verify='fix', overwrite=True)
     
     # Read reductions into database.
     database.read_jwst_s3_data(datapaths)

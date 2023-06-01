@@ -1,17 +1,44 @@
-import os
-import numpy as np
+from __future__ import division
+
 import matplotlib
+matplotlib.rcParams.update({'font.size': 14})
+
+
+# =============================================================================
+# IMPORTS
+# =============================================================================
+
+import os
+import pdb
+import sys
+
+import astropy.io.fits as pyfits
 import matplotlib.pyplot as plt
+import numpy as np
+
 import astropy
 import astropy.units as u
 import astropy.visualization as v
+import jdaviz
 import jwst.datamodels
+import matplotlib
+
+import logging
+log = logging.getLogger(__name__)
+log.setLevel(logging.INFO)
+
+
+# =============================================================================
+# MAIN
+# =============================================================================
 
 def annotate_compass(ax, image, wcs, xf=0.9, yf=0.1, length_fraction=0.07, color='white', fontsize=12, ):
-    """ Plot a compass annotation onto an image, to indicate North and East
+    """
+    Plot a compass annotation onto an image, to indicate North and East
     Makes use of the methods from jdaviz, but positions the compass differently:
     jdaviz defaults to putting it in the center, and filling most of the image.
     Here we want to make a small compass in the corner.
+    
     Parameters
     ----------
     ax : matplotlib.Axes
@@ -29,13 +56,17 @@ def annotate_compass(ax, image, wcs, xf=0.9, yf=0.1, length_fraction=0.07, color
         Color
     fontsize : float
         Font size
+    
+    Returns
+    -------
+    None.
+    
     """
-    import jdaviz
-
+    
     # Use jdaviz to compute arrow positions
     x, y, xn, yn, xe, ye, degn, dege, xflip = jdaviz.configs.imviz.wcs_utils.get_compass_info(wcs, image.shape,
                                                                                               r_fac=length_fraction)
-
+    
     # but then apply offsets to recenter the
     xo = image.shape[1] * xf - x
     yo = image.shape[0] * yf - y
@@ -45,7 +76,7 @@ def annotate_compass(ax, image, wcs, xf=0.9, yf=0.1, length_fraction=0.07, color
     y += yo
     yn += yo
     ye += yo
-
+    
     # plot like in jdaviz:
     ax.plot(x, y, marker='o', color=color, markersize=4)
     ax.annotate('N', xy=(x, y), xytext=(xn, yn),
@@ -55,9 +86,10 @@ def annotate_compass(ax, image, wcs, xf=0.9, yf=0.1, length_fraction=0.07, color
                 arrowprops={'arrowstyle': '<-', 'color': color, 'lw': 1.5},
                 color=color, fontsize=fontsize, va='center', ha='center')
 
-
 def annotate_scale_bar(ax, image, wcs, length=1 * u.arcsec, xf=0.1, yf=0.1, color='white', lw=3, fontsize=10):
-    """Plot a scale bar on an image
+    """
+    Plot a scale bar on an image.
+    
     Parameters
     ----------
     ax : matplotlib.Axes
@@ -77,21 +109,27 @@ def annotate_scale_bar(ax, image, wcs, length=1 * u.arcsec, xf=0.1, yf=0.1, colo
         Font size
     lw : float
         line width
+    
+    Returns
+    -------
+    None.
+    
     """
-
+    
     pixelscale = astropy.wcs.utils.proj_plane_pixel_scales(wcs).mean() * u.deg
     sb_length = (length / pixelscale).decompose()
-
+    
     xo = image.shape[1] * xf
     yo = image.shape[0] * yf
-
+    
     ax.plot([xo, xo + sb_length], [yo, yo], color=color, lw=lw)
     ax.text(xo + sb_length / 2, yo + 0.02 * image.shape[0], length, color=color,
             horizontalalignment='center', fontsize=fontsize)
 
-
 def annotate_secondary_axes_arcsec(ax, image, wcs):
-    """ Update an image display to add secondary axes labels in an arcsec
+    """
+    Update an image display to add secondary axes labels in an arcsec.
+    
     Parameters
     ----------
     ax : matplotlib.Axes
@@ -100,17 +138,22 @@ def annotate_secondary_axes_arcsec(ax, image, wcs):
         2D image to be annotated (used just to get the image dimensions)
     wcs : astropy.wcs.WCS
         World Coordinate System information
- 
+    
+    Returns
+    -------
+    None.
+    
     """
+    
     # define the forward and inverse transforms needed for secondary_axes.
     # see https://matplotlib.org/3.1.0/gallery/subplots_axes_and_figures/secondary_axis.html
-
+    
     pixelscale = astropy.wcs.utils.proj_plane_pixel_scales(wcs)
     pix2as_x = lambda x: (x - wcs.wcs.crpix[0]) * pixelscale[0] * 3600
     pix2as_y = lambda y: (y - wcs.wcs.crpix[1]) * pixelscale[1] * 3600
     as2pix_x = lambda x: x / pixelscale[0] / 3600 + wcs.wcs.crpix[0]
     as2pix_y = lambda y: y / pixelscale[1] / 3600 + wcs.wcs.crpix[1]
-
+    
     secax = ax.secondary_xaxis('top', functions=(pix2as_x, as2pix_x))
     secax.set_xlabel('Offset [arcsec]', fontsize='small')
     secay = ax.secondary_yaxis('right', functions=(pix2as_y, as2pix_y))
@@ -118,16 +161,23 @@ def annotate_secondary_axes_arcsec(ax, image, wcs):
     secax.tick_params(labelsize='small')
     secay.tick_params(labelsize='small')
 
-
 def display_coron_image(filename):
-    """Display and annotate a coronagraphic image
+    """
+    Display and annotate a coronagraphic image.
+    
     Shows image on asinh scale along with some basic metadata, scale bar, and compass.
+    
     Parameters
     ----------
     filename : str
         Filename
+    
+    Returns
+    -------
+    None.
+    
     """
-
+    
     if ('uncal' in filename):
         raise RuntimeError("Display code does not support showing stage 0 uncal files. Reduce the data further before trying to display it.")
     elif ('rateints' in filename) or ('calints' in filename):
@@ -136,57 +186,57 @@ def display_coron_image(filename):
     else:
         modeltype = jwst.datamodels.ImageModel
         cube = False
-
+    
     model = modeltype(filename)  # cubemodel needed for rateints
-
+    
     if cube:
         image = np.nanmean(model.data, axis=0)
         dq = model.dq[0]
     else:
         image = model.data
         dq = model.dq
-
+    
     bpmask = np.zeros_like(image) + np.nan
     bpmask[(model.dq[0] & 1) == True] = 1
-
+    
     # Set up image stretch
     #  including reasonable min/max for asinh stretch
     stats = astropy.stats.sigma_clipped_stats(image)
     low = stats[0] - stats[2]  # 1 sigma below image mean.
     high = np.nanmax(image)
-
+    
     interval = v.ManualInterval(low, high)
     stretch = v.AsinhStretch(a=.0001)
-
+    
     norm = v.ImageNormalize(image,
                             interval=interval,
                             stretch=stretch)
-
+    
     # Display image. Overplot DQ
     fig, ax = plt.subplots(figsize=(16, 9))
     im = ax.imshow(image, norm=norm)
-
+    
     imdq = ax.imshow(bpmask, vmin=0, vmax=1.5, cmap=matplotlib.cm.inferno)
-
+    
     # Colorbar
     cb = fig.colorbar(im, pad=0.1, aspect=30, label=model.meta.bunit_data)
     cb.ax.set_yscale('asinh')
-
+    
     # Annotations
     ax.text(0.01, 0.99,
             f"{model.meta.target.proposer_name}\n{model.meta.instrument.filter}, {model.meta.exposure.readpatt}:{model.meta.exposure.ngroups}:{model.meta.exposure.nints}\n{model.meta.exposure.effective_exposure_time:.2f} s",
             transform=ax.transAxes, color='white', verticalalignment='top', fontsize=10)
     ax.set_title(os.path.basename(filename) + "\n", fontsize=14)
-
+    
     ax.set_xlabel("Pixels", fontsize='small')
     ax.set_ylabel("Pixels", fontsize='small')
     ax.tick_params(labelsize='small')
-
+    
     if cube:
         ax.text(0.99, 0.99, f"Showing average of {model.meta.exposure.nints} ints",
                 style='italic', fontsize=10, color='white',
                 horizontalalignment='right', verticalalignment='top', transform=ax.transAxes)
-
+    
     try:
         wcs = model.meta.wcs
         # I don't know how to deal with the slightly different API of the GWCS class
@@ -200,18 +250,19 @@ def display_coron_image(filename):
             wcs = wcs.dropaxis(2)  # drop the nints axis
     annotate_compass(ax, image, wcs, yf=0.07)
     annotate_scale_bar(ax, image, wcs, yf=0.07)
-
+    
     # Annotate secondary axes in arcsec relative to coron mask center (really, relative to V2/V3Ref)
     annotate_secondary_axes_arcsec(ax, image, wcs)
-
+    
     # TODO:
     #   add second panel with zoom in on center
 
-
 def display_coron_dataset(database, restrict_to=None, save_filename=None):
-    """ Display multiple files in a coronagraphic dataset
+    """
+    Display multiple files in a coronagraphic dataset.
+    
     Parameters
-    -----------
+    ----------
     database : spaceklip.Database
         database of files to plot
     restrict_to : str, optional
@@ -221,18 +272,24 @@ def display_coron_dataset(database, restrict_to=None, save_filename=None):
     save_filename : str
         If provided, the plots will be saved to a PDF file with this name.
     # TODO potentially provide other ways of filtering the data, e.g. to show
-    only the PSF stars or only references, etc. 
+    only the PSF stars or only references, etc.
+    
+    Returns
+    -------
+    None.
+    
     """
+    
     if save_filename:
         from matplotlib.backends.backend_pdf import PdfPages
         pdf = PdfPages(save_filename)
-
+    
     for key in database.obs:
         if (restrict_to is None) or (restrict_to in key):
             obstable = database.obs[key]
             for typestr in ['SCI', 'REF']:
                 filenames = obstable[obstable['TYPE'] == typestr]['FITSFILE']
-
+                
                 for fn in filenames:
                     display_coron_image(fn)
                     if save_filename:

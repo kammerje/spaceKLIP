@@ -2,7 +2,9 @@
 SpaceKLIP 2 🚀🪐
 ###############
 
-SpaceKLIP is a data reduction pipeline for JWST high-contrast imaging. All code is currently under heavy development and typically expected features may not be available. 
+![Figure 1](logo.png)
+
+SpaceKLIP is a data reduction pipeline for JWST high-contrast imaging. The current release has been tested with NIRCam and MIRI coronagraphy data.
 
 Compatible test data: `here <https://stsci.box.com/s/0oteh8smujl3pup07hyut6hr4ag1i2el>`_ 
 
@@ -42,6 +44,12 @@ NEW AS OF 1 MAY 2023: you also need to switch to the jwst branch of pyKLIP:
 
 	pip install git+https://bitbucket.org/pyKLIP/pyklip.git@jwst
 
+NEW AS OF 1 JUNE 2023: you also need to make the custom PSF mask files before running spaceKLIP for the first time:
+
+::
+
+	python spaceKLIP/make_psfmasks.py
+
 Finally, and very importantly, you will need to download the reference files and set the environment variables supporting the functioning of :code:`webbpsf` and :code:`webbpsf_ext`. Instructions to do this can be found at the respective package websites (`WebbPSF <https://webbpsf.readthedocs.io/en/latest/installation.html#installing-the-required-data-files>`_, `WebbPSF_ext <https://github.com/JarronL/webbpsf_ext>`_). Ensure that if you edit your .bashrc file, close and reopen your terminal to fully apply the changes (:code:`source ~/.bashrc` or :code:`source ~/.zshrc` may also work).
 
 SpaceKLIP also makes use of the JWST Calibration Reference Data System (CRDS) and you will need to set the corresponding environment variables. Follow the instructions here for bash or zsh: https://jwst-crds.stsci.edu/docs/cmdline_bestrefs/. Note that you do not have to install AstroConda, just set the environment variables (making sure that the CRDS path you set actually exists, i.e., you may need to create the directory).
@@ -57,11 +65,13 @@ The current capabilities of the code are summarized below.
 
 - ``read_jwst_s012_data``: working
 - ``read_jwst_s3_data``: working
+- ``read_jwst_s4_data``: working
 - ``print_obs``: working
 - ``print_red``: working
+- ``print_src``: working
 - ``update_obs``: working
+- ``update_src``: working
 - ``summarize``: working
-- support for companion fitting: missing
 
 ::
 
@@ -129,24 +139,19 @@ The current capabilities of the code are summarized below.
 - ``subtract_background``: working
 - ``fix_bad_pixels``: working
 - ``replace_nans``: working
-- ``align_frames``: working (relative frame alignment)
-- ``recenter_frames``: working with filter-dependent shifts (absolute PSF alignment)
 - ``blur_frames``: working
+- ``update_nircam_centers``: working with filter-dependent shifts
+- ``recenter_frames``: working (absolute PSF alignment)
+- ``align_frames``: working (relative frame alignment)
 
 ::
 
-	contrast.py
+	analysistools.py
 
-- ``raw_contrast``: working with ``pyklippipeline``, but does not normalize flux to host star, not working with ``coron3pipeline`` since PSF center not being tracked
-- need to add throughput map to database and take it into account for raw contrast
-- need to add host star model
+- ``raw_contrast``: working with ``pyklippipeline`` products, not working with ``coron3pipeline`` products since PSF center not being tracked
+- ``extract_companions``: working with ``pyklippipeline`` products, not working with ``coron3pipeline`` products since PSF center not being tracked
+- combined coronagraphic throughput map: working
 - need to add calibrated contrast
-
-::
-
-	companion.py
-
-- missing
 
 ::
 

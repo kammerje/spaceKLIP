@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from jwst.pipeline import Detector1Pipeline, Image2Pipeline, Coron3Pipeline
+from spaceKLIP.psf import get_transmission
 
 import logging
 log = logging.getLogger(__name__)
@@ -30,12 +31,37 @@ log.setLevel(logging.INFO)
 class Coron3Pipeline_spaceKLIP(Coron3Pipeline):
     """
     The spaceKLIP JWST stage 3 pipeline class.
+    
     """
 
 
 def run_obs(database,
             steps={},
             subdir='stage3'):
+    """
+    Run the JWST stage 3 coronagraphy pipeline on the input observations
+    database.
+    
+    Parameters
+    ----------
+    database : spaceKLIP.Database
+        SpaceKLIP database on which the JWST stage 3 coronagraphy pipeline
+        shall be run.
+    steps : dict, optional
+        See here for how to use the steps parameter:
+        https://jwst-pipeline.readthedocs.io/en/latest/jwst/user_documentation/running_pipeline_python.html#configuring-a-pipeline-step-in-python
+        Custom step parameters are:
+        - n/a
+        The default is {}.
+    subdir : str, optional
+        Name of the directory where the data products shall be saved. The
+        default is 'stage3'.
+    
+    Returns
+    -------
+    None.
+    
+    """
     
     # Set output directory.
     output_dir = os.path.join(database.output_dir, subdir)
@@ -49,7 +75,7 @@ def run_obs(database,
         
         # Make ASN file.
         log.info('  --> Coron3Pipeline: processing ' + key)
-        asnpath = make_asn_file(database, output_dir, key)
+        asnpath = make_asn_file(database, key, output_dir)
         
         # Initialize Coron1Pipeline.
         pipeline = Coron3Pipeline_spaceKLIP(output_dir=output_dir)
@@ -72,16 +98,49 @@ def run_obs(database,
         hdul[0].header['KLMODE0'] = pipeline.klip.truncate
         hdul.writeto(datapath, output_verify='fix', overwrite=True)
         hdul.close()
+        
+        # Save corresponding observations database.
+        file = os.path.join(output_dir, key + '.dat')
+        database.obs[key].write(file, format='ascii', overwrite=True)
+        
+        # Compute and save corresponding transmission mask.
+        file = os.path.join(output_dir, key + '_psfmask.fits')
+        mask = get_transmission(database.obs[key])
+        ww_sci = np.where(database.obs[key]['TYPE'] == 'SCI')[0]
+        if mask is not None:
+            hdul = pyfits.open(database.obs[key]['MASKFILE'][ww_sci[0]])
+            hdul[0].data = None
+            hdul['SCI'].data = mask
+            hdul.writeto(file, output_verify='fix', overwrite=True)
     
     # Read reductions into database.
     database.read_jwst_s3_data(datapaths)
     
     pass
 
-
 def make_asn_file(database,
-                  output_dir,
-                  key):
+                  key,
+                  output_dir):
+    """
+    Make the association file required by the JWST stage 3 coronagraphy
+    pipeline for the provided concatenation.
+    
+    Parameters
+    ----------
+    database : spaceKLIP.Database
+        SpaceKLIP database for which the association file shall be made.
+    key : str
+        Database key of the concatenation for which the association file shall
+        be made.
+    output_dir : path
+        Path of the directory where the association file shall be saved.
+    
+    Returns
+    -------
+    asnpath : path
+        Path of the association file.
+    
+    """
     
     # Find science and reference files.
     ww_sci = np.where(database.obs[key]['TYPE'] == 'SCI')[0]

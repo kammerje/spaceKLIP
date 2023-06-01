@@ -18,10 +18,12 @@ import numpy as np
 
 from astropy import wcs
 from pyklip.klip import _rotate_wcs_hdr
+from pyklip.klip import rotate as nanrotate
 from scipy.ndimage import gaussian_filter, rotate
 from scipy.ndimage import shift as spline_shift
 from scipy.optimize import leastsq
 from spaceKLIP import utils as ut
+from spaceKLIP.psf import get_transmission
 
 import logging
 log = logging.getLogger(__name__)
@@ -32,22 +34,37 @@ log.setLevel(logging.INFO)
 # MAIN
 # =============================================================================
 
-def subtractlsq(shift,
-                image,
-                ref_image,
-                mask=None):
-    
-    res = image - shift[0] * ref_image
-    res = res - gaussian_filter(res, 5)
-    if mask is None:
-        return res.ravel()
-    else:
-        return res[mask]
-
-
 def run_obs(database,
             kwargs={},
             subdir='psfsub'):
+    """
+    Run classical PSF subtraction on the input observations database.
+    
+    Parameters
+    ----------
+    database : spaceKLIP.Database
+        SpaceKLIP database on which classical PSF subtraction shall be run.
+    kwargs : dict, optional
+        Keyword arguments for the classical PSF subtraction method. Available
+        keywords are:
+        - combine_dithers : bool, optional
+            Combine all dither positions into a single reference PSF or
+            subtract each dither position individually? The default is True.
+        - save_rolls : bool, optional
+            Save each processed roll separately? The default is False.
+        - mask_bright : float, optional
+            Mask all pixels brighter than this value before minimizing the
+            PSF subtraction residuals.
+        The default is {}.
+    subdir : str, optional
+        Name of the directory where the data products shall be saved. The
+        default is 'psfsub'.
+    
+    Returns
+    -------
+    None.
+    
+    """
     
     # Check input.
     try:
@@ -88,7 +105,11 @@ def run_obs(database,
             
             # Read reference file.
             fitsfile = database.obs[key]['FITSFILE'][j]
-            data, erro, pxdq, head_pri, head_sci, is2d = ut.read_obs(fitsfile)
+            data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs = ut.read_obs(fitsfile)
+            
+            # For now this routine does not work with nans.
+            if np.sum(np.isnan(data)) != 0:
+                raise UserWarning('This routine does not work with nans')
             
             # Compute median reference.
             ref_data += [data]
@@ -114,12 +135,19 @@ def run_obs(database,
             sci_data = []
             sci_erro = []
             sci_pxdq = []
+            sci_mask = []
             sci_effinttm = []
             for ind, j in enumerate(ww_sci):
                 
                 # Read science file.
                 fitsfile = database.obs[key]['FITSFILE'][j]
-                data, erro, pxdq, head_pri, head_sci, is2d = ut.read_obs(fitsfile)
+                data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs = ut.read_obs(fitsfile)
+                maskfile = database.obs[key]['MASKFILE'][j]
+                mask = ut.read_msk(maskfile)
+                
+                # For now this routine does not work with nans.
+                if np.sum(np.isnan(data)) != 0:
+                    raise UserWarning('This routine does not work with nans')
                 
                 # Compute median science.
                 data = np.nanmedian(data, axis=0)
@@ -132,25 +160,25 @@ def run_obs(database,
                 
                 # Mask data.
                 if kwargs['mask_bright'] is not None:
-                    mask = np.ones_like(data)
-                    mask[data > kwargs['mask_bright']] = 0
-                    mask = (mask > 0.5) & (pxdq < 0.5)
+                    temp = np.ones_like(data)
+                    temp[data > kwargs['mask_bright']] = 0
+                    temp = (temp > 0.5) & (pxdq < 0.5)
                     plt.figure()
                     plt.imshow(data, origin='lower', vmin=0, vmax=50)
-                    plt.imshow(mask, origin='lower', cmap='Greys_r', alpha=0.5)
+                    plt.imshow(temp, origin='lower', cmap='Greys_r', alpha=0.5)
                     plt.colorbar()
                     plt.tight_layout()
                     plt.savefig(os.path.join(output_dir, key + '_mask.pdf'))
                     # plt.show()
                     plt.close()
                 else:
-                    mask = None
+                    temp = None
                 
                 # Find best fit scaling factor.
                 p0 = np.array([1.])
-                pp = leastsq(subtractlsq,
+                pp = leastsq(ut.subtractlsq,
                              p0,
-                             args=(data, ref_data_temp, mask))[0][0]
+                             args=(data, ref_data_temp, temp))[0][0]
                 pps += [pp]
                 
                 # Check best fit scaling factor.
@@ -180,10 +208,31 @@ def run_obs(database,
                 data_temp_derot = rotate(data_temp, -database.obs[key]['ROLL_REF'][j], reshape=False)
                 erro_temp_derot = rotate(erro_temp, -database.obs[key]['ROLL_REF'][j], reshape=False)
                 
+                # Recenter and derotate PSF mask.
+                if 'LYOT' in key:
+                    center = [database.obs[key]['CRPIX1'][j] - 1., database.obs[key]['CRPIX2'][j] - 1.]  # pix (0-indexed)
+                    width = 5  # pix
+                    xr = np.arange(mask.shape[1])
+                    yr = np.arange(mask.shape[0])
+                    xx, yy = np.meshgrid(xr, yr)
+                    xx = xx - (database.obs[key]['CRPIX1'][j] - 1.)
+                    xx = np.abs(xx)
+                    xx = xx < width
+                    xx = xx.astype(float)
+                    xx = gaussian_filter(xx, width)
+                    xx = nanrotate(xx, -4.5, center=center)
+                    xx /= np.nanmax(xx)
+                    xx = 1. - xx
+                    mask = xx
+                center = [database.obs[key]['CRPIX1'][j] - 1., database.obs[key]['CRPIX2'][j] - 1.]  # pix (0-indexed)
+                new_center = [mask.shape[1] // 2, mask.shape[0] // 2]  # pix (0-indexed)
+                mask_temp = nanrotate(mask.copy(), database.obs[key]['ROLL_REF'][j], center=center, new_center=new_center)
+                
                 # Append data.
                 sci_data += [data_temp_derot]
                 sci_erro += [erro_temp_derot]
                 sci_pxdq += [pxdq_temp]
+                sci_mask += [mask_temp]
                 sci_effinttm += [database.obs[key]['NINTS'][j] * database.obs[key]['EFFINTTM'][j]]
                 
                 # Write FITS file.
@@ -201,6 +250,19 @@ def run_obs(database,
                     else:
                         hdul.writeto(os.path.join(output_dir, key + '_psfsub_dpos%.0f_roll%.0f.fits' % (dpos + 1, ind + 1)), output_verify='fix', overwrite=True)
                     hdul.close()
+            
+            # Special case with data weighted by PSF mask throughput.
+            # sci_mask = np.multiply(np.array(sci_mask).T, np.array(sci_effinttm)).T
+            # sci_mask = sci_mask**3
+            # sci_mask_sum = np.nansum(sci_mask, axis=0)
+            # sci_mask_sum[sci_mask_sum == 0.] = np.nan
+            # temp = []
+            # for j in range(len(sci_data)):
+            #     weights = np.true_divide(sci_mask[j], sci_mask_sum)
+            #     temp += [np.multiply(sci_data[j], weights)]
+            # temp = np.array(temp)
+            # temp = np.nansum(temp, axis=0)
+            # sci_data = temp
             
             # Combine rolls.
             sci_data = np.array(sci_data)
@@ -236,5 +298,19 @@ def run_obs(database,
                 hdul.writeto(os.path.join(output_dir, key + '_psfsub_dpos%.0f.fits' % (dpos + 1)), output_verify='fix', overwrite=True)
             hdul.close()
             log.info('--> Average best fit scaling factor (dpos%.0f) = %.2f' % (dpos + 1, np.mean(pps)))
+        
+        # Save corresponding observations database.
+        file = os.path.join(output_dir, key + '.dat')
+        database.obs[key].write(file, format='ascii', overwrite=True)
+        
+        # Compute and save corresponding transmission mask.
+        file = os.path.join(output_dir, key + '_psfmask.fits')
+        mask = get_transmission(database.obs[key])
+        ww_sci = np.where(database.obs[key]['TYPE'] == 'SCI')[0]
+        if mask is not None:
+            hdul = pyfits.open(database.obs[key]['MASKFILE'][ww_sci[0]])
+            hdul[0].data = None
+            hdul['SCI'].data = mask
+            hdul.writeto(file, output_verify='fix', overwrite=True)
     
     pass

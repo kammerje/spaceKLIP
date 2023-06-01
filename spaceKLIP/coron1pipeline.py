@@ -31,10 +31,24 @@ log.setLevel(logging.INFO)
 class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
     """
     The spaceKLIP JWST stage 1 pipeline class.
+    
     """
     
     def __init__(self,
                  **kwargs):
+        """
+        Initialize the spaceKLIP JWST stage 1 pipeline class.
+        
+        Parameters
+        ----------
+        **kwargs : keyword arguments
+            Default JWST stage 1 detector pipeline keyword arguments.
+        
+        Returns
+        -------
+        None.
+        
+        """
         
         # Initialize Detector1Pipeline class.
         super(Coron1Pipeline_spaceKLIP, self).__init__(**kwargs)
@@ -53,6 +67,21 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
     
     def process(self,
                 input):
+        """
+        Process an input JWST datamodel with the spaceKLIP JWST stage 1
+        pipeline.
+        
+        Parameters
+        ----------
+        input : jwst.datamodel
+            Input JWST datamodel to be processed.
+        
+        Returns
+        -------
+        output : jwst.datamodel
+            Output JWST datamodel.
+        
+        """
         
         # Open input as ramp model.
         input = RampModel(input)
@@ -111,6 +140,27 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
                  input,
                  save_results=None,
                  **kwargs):
+        """
+        Run a JWST pipeline step.
+        
+        Parameters
+        ----------
+        step_obj : jwst.step
+            JWST pipeline step to be run.
+        input : jwst.datamodel
+            Input JWST datamodel to be processed.
+        save_results : bool, optional
+            Save the JWST pipeline step product? None will default to the JWST
+            pipeline step default. The default is None.
+        **kwargs : keyword arguments
+            Default JWST pipeline step keyword arguments.
+        
+        Returns
+        -------
+        res : jwst.datamodel
+            Output JWST datamodel.
+        
+        """
         
         # Check if results shall be saved.
         if step_obj.skip:
@@ -151,6 +201,22 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
     def do_saturation(self,
                       input,
                       **kwargs):
+        """
+        Do the default or a custom saturation correction.
+        
+        Parameters
+        ----------
+        input : jwst.datamodel
+            Input JWST datamodel to be processed.
+        **kwargs : keyword arguments
+            Default JWST stage 1 saturation step keyword arguments.
+        
+        Returns
+        -------
+        res : jwst.datamodel
+            Output JWST datamodel.
+        
+        """
         
         # Save original step parameter.
         npix_grow = self.saturation.n_pix_grow_sat
@@ -190,6 +256,22 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
     def do_refpix(self,
                   input,
                   **kwargs):
+        """
+        Do the default or a custom pseudo reference pixel correction.
+        
+        Parameters
+        ----------
+        input : jwst.datamodel
+            Input JWST datamodel to be processed.
+        **kwargs : keyword arguments
+            Default JWST stage 1 refpix step keyword arguments.
+        
+        Returns
+        -------
+        res : jwst.datamodel
+            Output JWST datamodel.
+        
+        """
         
         # Check if full frame exposure.
         is_full_frame = 'FULL' in input.meta.subarray.name.upper()
@@ -211,6 +293,24 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
     def do_pseudo_refpix(self,
                          input,
                          **kwargs):
+        """
+        Do a pseudo reference pixel correction. Therefore, flag the requested
+        edge rows and columns as reference pixels, run the JWST stage 1 refpix
+        step, and unflag the pseudo reference pixels again.
+        
+        Parameters
+        ----------
+        input : jwst.datamodel
+            Input JWST datamodel to be processed.
+        **kwargs : keyword arguments
+            Default JWST stage 1 refpix step keyword arguments.
+        
+        Returns
+        -------
+        res : jwst.datamodel
+            Output JWST datamodel.
+        
+        """
         
         # Get number of custom reference pixel rows & columns.
         nlower = self.refpix.nlower
@@ -252,10 +352,54 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         
         return res
 
-
 def run_obs(database,
             steps={},
             subdir='stage1'):
+    """
+    Run the JWST stage 1 detector pipeline on the input observations database.
+    This customized implementation can:
+    - Do a custom saturation correction where only the bottom/top/left/right
+      and not the diagonal pixels next to a saturated pixel are flagged.
+    - Do a pseudo reference pixel correction. Therefore, flag the requested
+      edge rows and columns as reference pixels, run the JWST stage 1 refpix
+      step, and unflag the pseudo reference pixels again.
+    
+    Parameters
+    ----------
+    database : spaceKLIP.Database
+        SpaceKLIP database on which the JWST stage 1 detector pipeline shall be
+        run.
+    steps : dict, optional
+        See here for how to use the steps parameter:
+        https://jwst-pipeline.readthedocs.io/en/latest/jwst/user_documentation/running_pipeline_python.html#configuring-a-pipeline-step-in-python
+        Custom step parameters are:
+        - saturation/grow_diagonal : bool, optional
+            Flag also diagonal pixels (or only bottom/top/left/right)? The
+            default is True.
+        - refpix/nlower : int, optional
+            Number of rows at frame bottom that shall be used as additional
+            reference pixels. The default is 0.
+        - refpix/nupper : int, optional
+            Number of rows at frame top that shall be used as additional
+            reference pixels. The default is 0.
+        - refpix/nleft : int, optional
+            Number of rows at frame left side that shall be used as additional
+            reference pixels. The default is 0.
+        - refpix/nright : int, optional
+            Number of rows at frame right side that shall be used as additional
+            reference pixels. The default is 0.
+        - ramp_fit/save_calibrated_ramp : bool, optional
+            Save the calibrated ramp? The default is False.
+        The default is {}.
+    subdir : str, optional
+        Name of the directory where the data products shall be saved. The
+        default is 'stage1'.
+    
+    Returns
+    -------
+    None.
+    
+    """
     
     # Set output directory.
     output_dir = os.path.join(database.output_dir, subdir)

@@ -16,6 +16,11 @@ import astropy.io.fits as pyfits
 import matplotlib.pyplot as plt
 import numpy as np
 
+import scipy.ndimage.interpolation as sinterp
+
+from scipy.ndimage import fourier_shift, gaussian_filter
+from scipy.ndimage import shift as spline_shift
+
 import logging
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -26,6 +31,36 @@ log.setLevel(logging.INFO)
 # =============================================================================
 
 def read_obs(fitsfile):
+    """
+    Read an observation from a FITS file.
+    
+    Parameters
+    ----------
+    fitsfile : path
+        Path of input FITS file.
+    
+    Returns
+    -------
+    data : 3D-array
+        'SCI' extension data.
+    erro : 3D-array
+        'ERR' extension data.
+    pxdq : 3D-array
+        'DQ' extension data.
+    head_pri : FITS header
+        Primary FITS header.
+    head_sci : FITS header
+        'SCI' extension FITS header.
+    is2d : bool
+        Is the original data 2D?
+    imshifts : 2D-array
+        Array of shape (nints, 2) containing the total shifts applied to the
+        frames. None if not available.
+    maskoffs : 2D-array
+        Array of shape (nints, 2) containing the offsets between the star and
+        coronagraphic mask position. None if not available.
+    
+    """
     
     # Read FITS file.
     hdul = pyfits.open(fitsfile)
@@ -34,7 +69,6 @@ def read_obs(fitsfile):
     pxdq = hdul['DQ'].data
     head_pri = hdul[0].header
     head_sci = hdul['SCI'].header
-    hdul.close()
     is2d = False
     if data.ndim == 2:
         data = data[np.newaxis, :]
@@ -43,9 +77,17 @@ def read_obs(fitsfile):
         is2d = True
     if data.ndim != 3:
         raise UserWarning('Requires 2D/3D data cube')
+    try:
+        imshifts = hdul['IMSHIFTS'].data
+    except KeyError:
+        imshifts = None
+    try:
+        maskoffs = hdul['MASKOFFS'].data
+    except KeyError:
+        maskoffs = None
+    hdul.close()
     
-    return data, erro, pxdq, head_pri, head_sci, is2d
-
+    return data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs
 
 def write_obs(fitsfile,
               output_dir,
@@ -54,7 +96,43 @@ def write_obs(fitsfile,
               pxdq,
               head_pri,
               head_sci,
-              is2d):
+              is2d,
+              imshifts=None,
+              maskoffs=None):
+    """
+    Write an observation to a FITS file.
+    
+    Parameters
+    ----------
+    fitsfile : path
+        Path of input FITS file.
+    output_dir : path
+        Directory where the output FITS file shall be saved.
+    data : 3D-array
+        'SCI' extension data.
+    erro : 3D-array
+        'ERR' extension data.
+    pxdq : 3D-array
+        'DQ' extension data.
+    head_pri : FITS header
+        Primary FITS header.
+    head_sci : FITS header
+        'SCI' extension FITS header.
+    is2d : bool
+        Is the original data 2D?
+    imshifts : 2D-array, optional
+        Array of shape (nints, 2) containing the total shifts applied to the
+        frames. The default is None.
+    maskoffs : 2D-array, optional
+        Array of shape (nints, 2) containing the offsets between the star and
+        coronagraphic mask position. The default is None.
+    
+    Returns
+    -------
+    fitsfile : path
+        Path of output FITS file.
+    
+    """
     
     # Write FITS file.
     hdul = pyfits.open(fitsfile)
@@ -68,14 +146,106 @@ def write_obs(fitsfile,
         hdul['DQ'].data = pxdq
     hdul[0].header = head_pri
     hdul['SCI'].header = head_sci
+    if imshifts is not None:
+        try:
+            hdul['IMSHIFTS'].data = imshifts
+        except KeyError:
+            hdu = pyfits.ImageHDU(imshifts, name='IMSHIFTS')
+            hdul.append(hdu)
+    if maskoffs is not None:
+        try:
+            hdul['MASKOFFS'].data = maskoffs
+        except KeyError:
+            hdu = pyfits.ImageHDU(maskoffs, name='MASKOFFS')
+            hdul.append(hdu)
     fitsfile = os.path.join(output_dir, os.path.split(fitsfile)[1])
     hdul.writeto(fitsfile, output_verify='fix', overwrite=True)
     hdul.close()
     
     return fitsfile
 
+def read_msk(maskfile):
+    """
+    Read a PSF mask from a FITS file.
+    
+    Parameters
+    ----------
+    maskfile : path
+        Path of input FITS file.
+    
+    Returns
+    -------
+    mask : 2D-array
+        PSF mask. None if not available.
+    
+    """
+    
+    # Read FITS file.
+    if maskfile != 'NONE':
+        hdul = pyfits.open(maskfile)
+        mask = hdul['SCI'].data
+        hdul.close()
+    else:
+        mask = None
+    
+    return mask
+
+
+def write_msk(maskfile,
+              mask,
+              fitsfile):
+    """
+    Write a PSF mask to a FITS file.
+    
+    Parameters
+    ----------
+    maskfile : path
+        Path of input FITS file.
+    mask : 2D-array
+        PSF mask. None if not available.
+    fitsfile : path
+        Path of output FITS file (to save the PSF mask in the same directory).
+    
+    Returns
+    -------
+    maskfile : path
+        Path of output FITS file.
+    
+    """
+    
+    # Write FITS file.
+    if mask is not None:
+        hdul = pyfits.open(maskfile)
+        hdul['SCI'].data = mask
+        maskfile = fitsfile.replace('.fits', '_psfmask.fits')
+        hdul.writeto(maskfile, output_verify='fix', overwrite=True)
+        hdul.close()
+    else:
+        maskfile = 'NONE'
+    
+    return maskfile
 
 def read_red(fitsfile):
+    """
+    Read a reduction from a FITS file.
+    
+    Parameters
+    ----------
+    fitsfile : path
+        Path of input FITS file.
+    
+    Returns
+    -------
+    data : 3D-array
+        'SCI' extension data.
+    head_pri : FITS header
+        Primary FITS header.
+    head_sci : FITS header
+        'SCI' extension FITS header.
+    is2d : bool
+        Is the original data 2D?
+    
+    """
     
     # Read FITS file.
     hdul = pyfits.open(fitsfile)
@@ -99,3 +269,259 @@ def read_red(fitsfile):
         raise UserWarning('Requires 2D/3D data cube')
     
     return data, head_pri, head_sci, is2d
+
+def write_fitpsf_images(fitpsf,
+                        fitsfile,
+                        row):
+    """
+    Write a best fit FM PSF to a FITS file.
+    
+    Parameters
+    ----------
+    fitpsf : pyklip.fitpsf
+        PyKLIP PSF fitting object whose best fit FM PSF shall be saved.
+    fitsfile : path
+        Path of output FITS file.
+    row : astropy.table.Row
+        Astropy table row of the companion to be saved to the FITS file.
+    
+    Returns
+    -------
+    None.
+    
+    """
+    
+    # Make best fit FM PSF.
+    dx = fitpsf.fit_x.bestfit - fitpsf.data_stamp_x_center
+    dy = fitpsf.fit_y.bestfit - fitpsf.data_stamp_y_center
+    fm_bestfit = fitpsf.fit_flux.bestfit * sinterp.shift(fitpsf.fm_stamp, [dy, dx])
+    if fitpsf.padding > 0:
+        fm_bestfit = fm_bestfit[fitpsf.padding:-fitpsf.padding, fitpsf.padding:-fitpsf.padding]
+    
+    # Make residual image.
+    residual_image = fitpsf.data_stamp - fm_bestfit
+    snr = np.nanmax(fm_bestfit) / np.nanstd(residual_image)
+    row['SNR'] = snr
+    
+    # Write FITS file.
+    pri = pyfits.PrimaryHDU()
+    for key in row.keys():
+        if key == 'LN(Z/Z0)' and np.isnan(row[key]):
+            pri.header[key] = 'NONE'
+        else:
+            pri.header[key] = row[key]
+    sci = pyfits.ImageHDU(fitpsf.data_stamp, name='SCI')
+    mod = pyfits.ImageHDU(fm_bestfit, name='MOD')
+    res = pyfits.ImageHDU(residual_image, name='RES')
+    hdul = pyfits.HDUList([pri, sci, res, mod])
+    hdul.writeto(fitsfile, output_verify='fix', overwrite=True)
+    
+    pass
+
+def crop_image(image,
+               xycen,
+               npix,
+               return_indices=False):
+    """
+    Crop an image.
+    
+    Parameters
+    ----------
+    image : 2D-array
+        Input image to be cropped.
+    xycen : tuple of float
+        Center around which the image shall be cropped. Will be rounded.
+    npix : float
+        Size of the cropped image. Will be rounded.
+    return_indices : bool, optional
+        If True, returns the x- and y-indices of the cropped image in the
+        coordinate frame of the input image. The default is False.
+    
+    Returns
+    -------
+    imsub : 2D-array
+        The cropped image.
+    xsub_indarr : 1D-array, optional
+        The x-indices of the cropped image in the coordinate frame of the
+        input image.
+    ysub_indarr : 1D-array, optional
+        The y-indices of the cropped image in the coordinate frame of the
+        input image.
+    
+    """
+    
+    # Compute pixel coordinates.
+    xc, yc = xycen
+    x1 = int(xc - npix / 2. + 0.5)
+    x2 = x1 + npix
+    y1 = int(yc - npix / 2. + 0.5)
+    y2 = y1 + npix
+    
+    # Crop image.
+    imsub = image[y1:y2, x1:x2]
+    if return_indices:
+        xsub_indarr = np.arange(x1, x2).astype('int')
+        ysub_indarr = np.arange(y1, y2).astype('int')
+        return imsub, xsub_indarr, ysub_indarr
+    else:
+        return imsub
+
+def imshift(image,
+            shift,
+            pad=False,
+            cval=0.,
+            method='fourier',
+            kwargs={}):
+    """
+    Shift an image.
+    
+    Parameters
+    ----------
+    image : 2D-array
+        Input image to be shifted.
+    shift : 1D-array
+        X- and y-shift to be applied.
+    pad : bool, optional
+        Pad the image before shifting it? Otherwise, it will wrap around
+        the edges. The default is True.
+    cval : float, optional
+        Fill value for the padded pixels. The default is 0.
+    method : 'fourier' or 'spline' (not recommended), optional
+        Method for shifting the frames. The default is 'fourier'.
+    kwargs : dict, optional
+        Keyword arguments for the scipy.ndimage.shift routine. The default
+        is {}.
+    
+    Returns
+    -------
+    imsft : 2D-array
+        The shifted image.
+    
+    """
+    
+    if pad:
+        
+        # Pad image.
+        sy, sx = image.shape
+        xshift, yshift = shift
+        padx = np.abs(int(xshift)) + 5
+        pady = np.abs(int(yshift)) + 5
+        impad = np.pad(image, ((pady, pady), (padx, padx)), mode='constant', constant_values=cval)
+        
+        # Shift image.
+        if method == 'fourier':
+            imsft = np.fft.ifftn(fourier_shift(np.fft.fftn(impad), shift[::-1])).real
+        elif method == 'spline':
+            imsft = spline_shift(impad, shift[::-1], **kwargs)
+        else:
+            raise UserWarning('Image shift method "' + method + '" is not known')
+        
+        # Crop image to original size.
+        return imsft[pady:pady + sy, padx:padx + sx]
+    else:
+        if method == 'fourier':
+            return np.fft.ifftn(fourier_shift(np.fft.fftn(image), shift[::-1])).real
+        elif method == 'spline':
+            return spline_shift(image, shift[::-1], **kwargs)
+        else:
+            raise UserWarning('Image shift method "' + method + '" is not known')
+
+def alignlsq(shift,
+             image,
+             ref_image,
+             mask=None,
+             method='fourier',
+             kwargs={}):
+    """
+    Align an image to a reference image using a Fourier shift and subtract
+    method.
+    
+    Parameters
+    ----------
+    shift : 1D-array
+        X- and y-shift and scaling factor to be applied.
+    image : 2D-array
+        Input image to be aligned to a reference image.
+    ref_image : 2D-array
+        Reference image.
+    mask : 2D-array, optional
+        Weights to be applied to the input and reference images. The
+        default is None.
+    method : 'fourier' or 'spline' (not recommended), optional
+        Method for shifting the frames. The default is 'fourier'.
+    kwargs : dict, optional
+        Keyword arguments for the scipy.ndimage.shift routine. The default
+        is {}.
+    
+    Returns
+    -------
+    imres : 1D-array
+        Residual image collapsed into one dimension.
+    
+    """
+    
+    if mask is None:
+        return (ref_image - shift[2] * imshift(image, shift[:2], method=method, kwargs=kwargs)).ravel()
+    else:
+        return ((ref_image - shift[2] * imshift(image, shift[:2], method=method, kwargs=kwargs)) * mask).ravel()
+
+def recenterlsq(shift,
+                image,
+                method='fourier',
+                kwargs={}):
+    """
+    Center a PSF on its nearest pixel by maximizing its peak count.
+    
+    Parameters
+    ----------
+    shift : 1D-array
+        X- and y-shift to be applied.
+    image : 2D-array
+        Input image to be recentered.
+    method : 'fourier' or 'spline' (not recommended), optional
+        Method for shifting the frames. The default is 'fourier'.
+    kwargs : dict, optional
+        Keyword arguments for the scipy.ndimage.shift routine. The default
+        is {}.
+    
+    Returns
+    -------
+    invpeak : float
+        Inverse of the PSF's peak count.
+    
+    """
+    
+    return 1. / np.nanmax(imshift(image, shift, method=method, kwargs=kwargs))
+
+def subtractlsq(shift,
+                image,
+                ref_image,
+                mask=None):
+    """
+    Scale and subtract a reference from a science image.
+    
+    Parameters
+    ----------
+    shift : 1D-array
+        Scaling factor between the science and the reference PSF.
+    image : 2D-array
+        Input image to be reference PSF-subtracted.
+    ref_image : 2D-array
+        Reference image.
+    mask : 2D-array, optional
+        Mask to be applied to the input and reference images. The default is
+        None.
+    
+    Returns
+    -------
+    imres : 1D-array
+        Residual image collapsed into one dimension.
+    
+    """
+    
+    res = image - shift[0] * ref_image
+    res = res - gaussian_filter(res, 5)
+    if mask is None:
+        return res.ravel()
+    else:
+        return res[mask]

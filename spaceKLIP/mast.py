@@ -30,18 +30,20 @@ log.setLevel(logging.INFO)
 # =============================================================================
 
 def set_params(parameters):
-    """Utility function for making dicts used in MAST queries"""
+    """
+    Utility function for making dicts used in MAST queries.
+    
+    """
     
     return [{'paramName': p, 'values': v} for p, v in parameters.items()]
-
 
 def query_coron_datasets(inst,
                          filt,
                          mask=None,
                          kind=None,
                          ignore_cal=True):
-    """Query MAST to make a summary table of existing JWST coronagraphic
-    datasets
+    """
+    Query MAST to make a summary table of existing JWST coronagraphic datasets.
     
     Parameters
     ----------
@@ -63,6 +65,11 @@ def query_coron_datasets(inst,
         desirable to ignore the NIRCam coronagraphic flux calibration data
         sets, which otherwise look like science data to this query (programs
         1537 and 1538 for example).
+    
+    Returns
+    -------
+    None.
+    
     """
     
     # Perform MAST query to find all available datasets for a given

@@ -33,10 +33,24 @@ log.setLevel(logging.INFO)
 class Coron2Pipeline_spaceKLIP(Image2Pipeline):
     """
     The spaceKLIP JWST stage 2 pipeline class.
+    
     """
     
     def __init__(self,
                  **kwargs):
+        """
+        Initialize the spaceKLIP JWST stage 2 pipeline class.
+        
+        Parameters
+        ----------
+        **kwargs : keyword arguments
+            Default JWST stage 2 image pipeline keyword arguments.
+        
+        Returns
+        -------
+        None.
+        
+        """
         
         # Add outlier detection.
         self.step_defs['outlier_detection'] = OutlierDetectionStep
@@ -51,6 +65,21 @@ class Coron2Pipeline_spaceKLIP(Image2Pipeline):
     
     def process(self,
                 input):
+        """
+        Process an input JWST datamodel with the spaceKLIP JWST stage 2
+        pipeline.
+        
+        Parameters
+        ----------
+        input : jwst.datamodel
+            Input JWST datamodel to be processed.
+        
+        Returns
+        -------
+        all_res : list of jwst.datamodel
+            List of output JWST datamodels.
+        
+        """
         
         # Open input as asn model.
         asn = LoadAsLevel2Asn.load(input, basename=self.output_file)
@@ -85,10 +114,34 @@ class Coron2Pipeline_spaceKLIP(Image2Pipeline):
         
         return all_res
 
-
 def run_obs(database,
             steps={},
             subdir='stage2'):
+    """
+    Run the JWST stage 2 image pipeline on the input observations database.
+    This customized implementation will also run the 'outlier_detection' step
+    if not skipped.
+    
+    Parameters
+    ----------
+    database : spaceKLIP.Database
+        SpaceKLIP database on which the JWST stage 2 image pipeline shall be
+        run.
+    steps : dict, optional
+        See here for how to use the steps parameter:
+        https://jwst-pipeline.readthedocs.io/en/latest/jwst/user_documentation/running_pipeline_python.html#configuring-a-pipeline-step-in-python
+        Custom step parameters are:
+        - n/a
+        The default is {}.
+    subdir : str, optional
+        Name of the directory where the data products shall be saved. The
+        default is 'stage2'.
+    
+    Returns
+    -------
+    None.
+    
+    """
     
     # Set output directory.
     output_dir = os.path.join(database.output_dir, subdir)
