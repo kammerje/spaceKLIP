@@ -2,7 +2,7 @@
 SpaceKLIP 2 🚀🪐
 ###############
 
-![Figure 1](./logo.png)
+.. image:: logo.png
 
 SpaceKLIP is a data reduction pipeline for JWST high-contrast imaging. The current release has been tested with NIRCam and MIRI coronagraphy data.
 
