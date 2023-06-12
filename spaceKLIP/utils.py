@@ -30,7 +30,8 @@ log.setLevel(logging.INFO)
 # MAIN
 # =============================================================================
 
-def read_obs(fitsfile):
+def read_obs(fitsfile,
+             return_var=False):
     """
     Read an observation from a FITS file.
     
@@ -38,6 +39,8 @@ def read_obs(fitsfile):
     ----------
     fitsfile : path
         Path of input FITS file.
+    return_var : bool, optional
+        Return VAR_POISSON and VAR_RNOISE arrays? The default is False.
     
     Returns
     -------
@@ -59,6 +62,10 @@ def read_obs(fitsfile):
     maskoffs : 2D-array
         Array of shape (nints, 2) containing the offsets between the star and
         coronagraphic mask position. None if not available.
+    var_poisson : 3D-array, optional
+        'VAR_POISSON' extension data.
+    var_rnoise : 3D-array, optional
+        'VAR_RNOISE' extension data.
     
     """
     
@@ -85,9 +92,15 @@ def read_obs(fitsfile):
         maskoffs = hdul['MASKOFFS'].data
     except KeyError:
         maskoffs = None
+    if return_var:
+        var_poisson = hdul['VAR_POISSON'].data
+        var_rnoise = hdul['VAR_RNOISE'].data
     hdul.close()
     
-    return data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs
+    if return_var:
+        return data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs, var_poisson, var_rnoise
+    else:
+        return data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs
 
 def write_obs(fitsfile,
               output_dir,
@@ -98,7 +111,9 @@ def write_obs(fitsfile,
               head_sci,
               is2d,
               imshifts=None,
-              maskoffs=None):
+              maskoffs=None,
+              var_poisson=None,
+              var_rnoise=None):
     """
     Write an observation to a FITS file.
     
@@ -126,6 +141,10 @@ def write_obs(fitsfile,
     maskoffs : 2D-array, optional
         Array of shape (nints, 2) containing the offsets between the star and
         coronagraphic mask position. The default is None.
+    var_poisson : 3D-array, optional
+        'VAR_POISSON' extension data. The default is None.
+    var_rnoise : 3D-array, optional
+        'VAR_RNOISE' extension data. The default is None.
     
     Returns
     -------
@@ -158,6 +177,10 @@ def write_obs(fitsfile,
         except KeyError:
             hdu = pyfits.ImageHDU(maskoffs, name='MASKOFFS')
             hdul.append(hdu)
+    if var_poisson is not None:
+        hdul['VAR_POISSON'].data = var_poisson
+    if var_rnoise is not None:
+        hdul['VAR_RNOISE'].data = var_rnoise
     fitsfile = os.path.join(output_dir, os.path.split(fitsfile)[1])
     hdul.writeto(fitsfile, output_verify='fix', overwrite=True)
     hdul.close()

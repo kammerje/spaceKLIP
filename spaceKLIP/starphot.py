@@ -65,6 +65,7 @@ def read_spec_file(starfile):
 def get_stellar_magnitudes(starfile,
                            spectral_type,
                            instrume,
+                           return_si=False,
                            output_dir=None):
     """
     Get the source brightness and zero point fluxes in each filter of the JWST
@@ -80,6 +81,9 @@ def get_stellar_magnitudes(starfile,
         'G2V'.
     instrume : 'NIRCAM', 'NIRISS', or 'MIRI'
         JWST instrument in use.
+    return_si : bool, optional
+        Return the filter zero point in SI units in addition to Jy? The default
+        is False.
     output_dir : path, optional
         Path of the directory where the SED plot shall be saved. The default is
         None.
@@ -92,6 +96,9 @@ def get_stellar_magnitudes(starfile,
     fzero : dict
         Dictionary of the zero point flux (Jy) of each filter of the JWST
         instrument in use.
+    fzero_si : dict, optional
+        Dictionary of the zero point flux (erg/cm^2/s/A) of each filter of the
+        JWST instrument in use.
     
     """
     
@@ -133,10 +140,17 @@ def get_stellar_magnitudes(starfile,
     for i in range(len(filter_list)):
         filts += [filter_list['filterID'][i].split('.')[-1]]
         zeros += [filter_list['ZeroPoint'][i]]
+    zero_points_si = {'F182M': 7.44007e-11,
+                      'F210M': 4.69758e-11,
+                      'F250M': 2.41440e-11,
+                      'F300M': 1.24029e-11,
+                      'F335M': 7.92772e-12,
+                      'F444W': 2.84527e-12}
     
     # Compute magnitude in each filter.
     mstar = {}  # vegamag
     fzero = {}  # Jy
+    fzero_si = {}  # erg/cm^2/s/A
     for i, filt in enumerate(filts):
         
         # Read bandpass.
@@ -157,5 +171,12 @@ def get_stellar_magnitudes(starfile,
         mag = obs.effstim(flux_unit='vegamag', vegaspec=vegased).value
         mstar[filt.upper()] = mag
         fzero[filt.upper()] = zeros[i]
+        try:
+            fzero_si[filt.upper()] = zero_points_si[filt.upper()]
+        except KeyError:
+            fzero_si[filt.upper()] = np.nan
     
-    return mstar, fzero
+    if return_si:
+        return mstar, fzero, fzero_si
+    else:
+        return mstar, fzero

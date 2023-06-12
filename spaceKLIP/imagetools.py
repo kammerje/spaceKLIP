@@ -489,6 +489,7 @@ class ImageTools():
                 self.database.update_obs(key, j, fitsfile, maskfile)
     
     def subtract_background(self,
+                            nsplit=1,
                             subdir='bgsub'):
         """
         Subtract the corresponding background observations from the SCI and REF
@@ -496,6 +497,10 @@ class ImageTools():
         
         Parameters
         ----------
+        nsplit : int, optional
+            Number of separate groups into which the SCI/REF and BG data shall
+            be split before performing the background subtraction. The default
+            is 1.
         subdir : str, optional
             Name of the directory where the data products shall be saved. The
             default is 'bgsub'.
@@ -539,13 +544,14 @@ class ImageTools():
                 sci_bg_data = np.concatenate(sci_bg_data)
                 sci_bg_erro = np.concatenate(sci_bg_erro)
                 sci_bg_pxdq = np.concatenate(sci_bg_pxdq)
-                sci_bg_data = np.nanmedian(sci_bg_data, axis=0)
-                nsample = np.sum(np.logical_not(np.isnan(sci_bg_erro)), axis=0)
-                sci_bg_erro = np.true_divide(np.sqrt(np.nansum(sci_bg_erro**2, axis=0)), nsample)
-                # if self.database.obs[key]['TELESCOP'][j] == 'JWST' and self.database.obs[key]['INSTRUME'][j] == 'NIRCAM':
-                #     sci_bg_pxdq = np.sum(sci_bg_pxdq != 0, axis=0) != 0
-                # else:
-                sci_bg_pxdq = np.sum(sci_bg_pxdq & 1 == 1, axis=0) != 0
+                sci_bg_data_split = np.array_split(sci_bg_data, nsplit, axis=0)
+                sci_bg_erro_split = np.array_split(sci_bg_erro, nsplit, axis=0)
+                sci_bg_pxdq_split = np.array_split(sci_bg_pxdq, nsplit, axis=0)
+                for k in range(nsplit):
+                    sci_bg_data_split[k] = np.nanmedian(sci_bg_data_split[k], axis=0)
+                    nsample = np.sum(np.logical_not(np.isnan(sci_bg_erro_split[k])), axis=0)
+                    sci_bg_erro_split[k] = np.true_divide(np.sqrt(np.nansum(sci_bg_erro_split[k]**2, axis=0)), nsample)
+                    sci_bg_pxdq_split[k] = np.sum(sci_bg_pxdq_split[k] & 1 == 1, axis=0) != 0
             else:
                 sci_bg_data = None
             
@@ -567,13 +573,14 @@ class ImageTools():
                 ref_bg_data = np.concatenate(ref_bg_data)
                 ref_bg_erro = np.concatenate(ref_bg_erro)
                 ref_bg_pxdq = np.concatenate(ref_bg_pxdq)
-                ref_bg_data = np.nanmedian(ref_bg_data, axis=0)
-                nsample = np.sum(np.logical_not(np.isnan(ref_bg_erro)), axis=0)
-                ref_bg_erro = np.true_divide(np.sqrt(np.nansum(ref_bg_erro**2, axis=0)), nsample)
-                # if self.database.obs[key]['TELESCOP'][j] == 'JWST' and self.database.obs[key]['INSTRUME'][j] == 'NIRCAM':
-                #     ref_bg_pxdq = np.sum(ref_bg_pxdq != 0, axis=0) != 0
-                # else:
-                ref_bg_pxdq = np.sum(ref_bg_pxdq & 1 == 1, axis=0) != 0
+                ref_bg_data_split = np.array_split(ref_bg_data, nsplit, axis=0)
+                ref_bg_erro_split = np.array_split(ref_bg_erro, nsplit, axis=0)
+                ref_bg_pxdq_split = np.array_split(ref_bg_pxdq, nsplit, axis=0)
+                for k in range(nsplit):
+                    ref_bg_data_split[k] = np.nanmedian(ref_bg_data_split[k], axis=0)
+                    nsample = np.sum(np.logical_not(np.isnan(ref_bg_erro_split[k])), axis=0)
+                    ref_bg_erro_split[k] = np.true_divide(np.sqrt(np.nansum(ref_bg_erro_split[k]**2, axis=0)), nsample)
+                    ref_bg_pxdq_split[k] = np.sum(ref_bg_pxdq_split[k] & 1 == 1, axis=0) != 0
             else:
                 ref_bg_data = None
             
@@ -609,35 +616,62 @@ class ImageTools():
                     # hdul.writeto(os.path.join(output_dir, tail[:-5] + '_test.fits'), output_verify='fix', overwrite=True)
                     # hdul.close()
                     
-                    data = data - sci_bg_data
-                    erro = np.sqrt(erro**2 + sci_bg_erro**2)
-                    # if self.database.obs[key]['TELESCOP'][j] == 'JWST' and self.database.obs[key]['INSTRUME'][j] == 'NIRCAM':
-                    #     pxdq[(pxdq == 0) & (sci_bg_pxdq != 0)] += 1
-                    # else:
-                    pxdq[np.logical_not(pxdq & 1 == 1) & (sci_bg_pxdq != 0)] += 1
+                    data_split = np.array_split(data, nsplit, axis=0)
+                    erro_split = np.array_split(erro, nsplit, axis=0)
+                    pxdq_split = np.array_split(pxdq, nsplit, axis=0)
+                    for k in range(nsplit):
+                        data_split[k] = data_split[k] - sci_bg_data_split[k]
+                        erro_split[k] = np.sqrt(erro_split[k]**2 + sci_bg_erro_split[k]**2)
+                        pxdq_split[k][np.logical_not(pxdq_split[k] & 1 == 1) & (sci_bg_pxdq_split[k] != 0)] += 1
+                    data = np.concatenate(data_split, axis=0)
+                    erro = np.concatenate(erro_split, axis=0)
+                    pxdq = np.concatenate(pxdq_split, axis=0)
                 elif sci and sci_bg_data is None:
                     log.warning('  --> Could not find science background, attempting to use reference background')
-                    data = data - ref_bg_data
-                    erro = np.sqrt(erro**2 + ref_bg_erro**2)
-                    # if self.database.obs[key]['TELESCOP'][j] == 'JWST' and self.database.obs[key]['INSTRUME'][j] == 'NIRCAM':
-                    #     pxdq[(pxdq == 0) & (ref_bg_pxdq != 0)] += 1
-                    # else:
-                    pxdq[np.logical_not(pxdq & 1 == 1) & (ref_bg_pxdq != 0)] += 1
+                    data_split = np.array_split(data, nsplit, axis=0)
+                    erro_split = np.array_split(erro, nsplit, axis=0)
+                    pxdq_split = np.array_split(pxdq, nsplit, axis=0)
+                    for k in range(nsplit):
+                        data_split[k] = data_split[k] - ref_bg_data_split[k]
+                        erro_split[k] = np.sqrt(erro_split[k]**2 + ref_bg_erro_split[k]**2)
+                        pxdq_split[k][np.logical_not(pxdq_split[k] & 1 == 1) & (ref_bg_pxdq_split[k] != 0)] += 1
+                    data = np.concatenate(data_split, axis=0)
+                    erro = np.concatenate(erro_split, axis=0)
+                    pxdq = np.concatenate(pxdq_split, axis=0)
                 elif not sci and ref_bg_data is not None:
-                    data = data - ref_bg_data
-                    erro = np.sqrt(erro**2 + ref_bg_erro**2)
-                    # if self.database.obs[key]['TELESCOP'][j] == 'JWST' and self.database.obs[key]['INSTRUME'][j] == 'NIRCAM':
-                    #     pxdq[(pxdq == 0) & (ref_bg_pxdq != 0)] += 1
-                    # else:
-                    pxdq[np.logical_not(pxdq & 1 == 1) & (ref_bg_pxdq != 0)] += 1
+                    
+                    # test = []
+                    # for k in np.logspace(-0.5, 0.5, 100):
+                    #     temp = data[0] - k * ref_bg_data
+                    #     test += [temp]
+                    # test = np.array(test)
+                    # hdu0 = pyfits.PrimaryHDU(test)
+                    # hdul = pyfits.HDUList([hdu0])
+                    # hdul.writeto(os.path.join(output_dir, tail[:-5] + '_test.fits'), output_verify='fix', overwrite=True)
+                    # hdul.close()
+                    
+                    data_split = np.array_split(data, nsplit, axis=0)
+                    erro_split = np.array_split(erro, nsplit, axis=0)
+                    pxdq_split = np.array_split(pxdq, nsplit, axis=0)
+                    for k in range(nsplit):
+                        data_split[k] = data_split[k] - ref_bg_data_split[k]
+                        erro_split[k] = np.sqrt(erro_split[k]**2 + ref_bg_erro_split[k]**2)
+                        pxdq_split[k][np.logical_not(pxdq_split[k] & 1 == 1) & (ref_bg_pxdq_split[k] != 0)] += 1
+                    data = np.concatenate(data_split, axis=0)
+                    erro = np.concatenate(erro_split, axis=0)
+                    pxdq = np.concatenate(pxdq_split, axis=0)
                 elif not sci and ref_bg_data is None:
                     log.warning('  --> Could not find reference background, attempting to use science background')
-                    data = data - sci_bg_data
-                    erro = np.sqrt(erro**2 + sci_bg_erro**2)
-                    # if self.database.obs[key]['TELESCOP'][j] == 'JWST' and self.database.obs[key]['INSTRUME'][j] == 'NIRCAM':
-                    #     pxdq[(pxdq == 0) & (sci_bg_pxdq != 0)] += 1
-                    # else:
-                    pxdq[np.logical_not(pxdq & 1 == 1) & (sci_bg_pxdq != 0)] += 1
+                    data_split = np.array_split(data, nsplit, axis=0)
+                    erro_split = np.array_split(erro, nsplit, axis=0)
+                    pxdq_split = np.array_split(pxdq, nsplit, axis=0)
+                    for k in range(nsplit):
+                        data_split[k] = data_split[k] - sci_bg_data_split[k]
+                        erro_split[k] = np.sqrt(erro_split[k]**2 + sci_bg_erro_split[k]**2)
+                        pxdq_split[k][np.logical_not(pxdq_split[k] & 1 == 1) & (sci_bg_pxdq_split[k] != 0)] += 1
+                    data = np.concatenate(data_split, axis=0)
+                    erro = np.concatenate(erro_split, axis=0)
+                    pxdq = np.concatenate(pxdq_split, axis=0)
                 
                 # Write FITS file and PSF mask.
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs)

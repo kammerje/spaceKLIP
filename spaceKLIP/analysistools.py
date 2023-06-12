@@ -328,7 +328,7 @@ class AnalysisTools():
             for j in range(nfitsfiles):
                 
                 # Get stellar magnitudes and filter zero points.
-                mstar, fzero = get_stellar_magnitudes(starfile, spectral_type, self.database.red[key]['INSTRUME'][j], output_dir)  # vegamag, Jy
+                mstar, fzero, fzero_si = get_stellar_magnitudes(starfile, spectral_type, self.database.red[key]['INSTRUME'][j], return_si=True, output_dir=output_dir)  # vegamag, Jy, erg/cm^2/s/A
                 
                 # Compute the pixel area in steradian.
                 pxsc_arcsec = self.database.red[key]['PIXSCALE'][j] / 1000.  # arcsec
@@ -383,7 +383,7 @@ class AnalysisTools():
                 if klmode == 'max':
                     klindex = np.argmax(klmodes)
                 else:
-                    klindex = klmodes.index(klmode)
+                    klindex = klmodes.tolist().index(klmode)
                 
                 # Set output directories.
                 output_dir_kl = os.path.join(output_dir, 'COMPANION_KL%.0f' % klmodes[klindex])
@@ -430,6 +430,12 @@ class AnalysisTools():
                                    'RA_ERR',
                                    'DEC',
                                    'DEC_ERR',
+                                   'FLUX_JY',
+                                   'FLUX_JY_ERR',
+                                   'FLUX_SI',
+                                   'FLUX_SI_ERR',
+                                   'FLUX_SI_ALT',
+                                   'FLUX_SI_ALT_ERR',
                                    'CON',
                                    'CON_ERR',
                                    'DELMAG',
@@ -442,6 +448,12 @@ class AnalysisTools():
                                    'LN(Z/Z0)',
                                    'FITSFILE'),
                             dtype=('int',
+                                   'float',
+                                   'float',
+                                   'float',
+                                   'float',
+                                   'float',
+                                   'float',
                                    'float',
                                    'float',
                                    'float',
@@ -663,6 +675,7 @@ class AnalysisTools():
                                                 exclusion_radius=exclusion_radius)
                         corr_len_label = r'$l$'
                         fma.set_kernel(fitkernel, [corr_len_guess], [corr_len_label])
+                        # fma.set_kernel('diag', [], [])
                         fma.set_bounds(xrange, yrange, frange, [corr_len_range])
                         
                         # Make sure that the noise map is invertible.
@@ -693,6 +706,18 @@ class AnalysisTools():
                         plt.close()
                         
                         # Write the MCMC fit results into a table.
+                        flux_jy = fma.fit_flux.bestfit * guess_flux
+                        flux_jy *= fzero[filt] / 10**(mstar[filt] / 2.5)  # Jy
+                        flux_jy_err = fma.fit_flux.error * guess_flux
+                        flux_jy_err *= fzero[filt] / 10**(mstar[filt] / 2.5)  # Jy
+                        flux_si = fma.fit_flux.bestfit * guess_flux
+                        flux_si *= fzero_si[filt] / 10**(mstar[filt] / 2.5)  # erg/cm^2/s/A
+                        flux_si *= 1e-7 * 1e4 * 1e4  # W/m^2/um
+                        flux_si_err = fma.fit_flux.error * guess_flux
+                        flux_si_err *= fzero_si[filt] / 10**(mstar[filt] / 2.5)  # erg/cm^2/s/A
+                        flux_si_err *= 1e-7 * 1e4 * 1e4  # W/m^2/um
+                        flux_si_alt = flux_jy * 1e-26 * 299792458. / (1e-6 * self.database.red[key]['CWAVEL'][j])**2 * 1e-6  # W/m^2/um
+                        flux_si_alt_err = flux_jy_err * 1e-26 * 299792458. / (1e-6 * self.database.red[key]['CWAVEL'][j])**2 * 1e-6  # W/m^2/um
                         delmag = -2.5 * np.log10(fma.fit_flux.bestfit * guess_flux)  # mag
                         delmag_err = 2.5 / np.log(10.) * fma.fit_flux.error / fma.fit_flux.bestfit  # mag
                         if isinstance(mstar_err, dict):
@@ -707,6 +732,12 @@ class AnalysisTools():
                                      fma.raw_RA_offset.error * pxsc_arcsec,  # arcsec
                                      fma.raw_Dec_offset.bestfit * pxsc_arcsec,  # arcsec
                                      fma.raw_Dec_offset.error * pxsc_arcsec,  # arcsec
+                                     flux_jy,
+                                     flux_jy_err,
+                                     flux_si,
+                                     flux_si_err,
+                                     flux_si_alt,
+                                     flux_si_alt_err,
                                      fma.raw_flux.bestfit * guess_flux,
                                      fma.raw_flux.error * guess_flux,
                                      delmag,  # mag
@@ -773,6 +804,18 @@ class AnalysisTools():
                         plt.close()
                         
                         # Write the pymultinest fit results into a table.
+                        flux_jy = fit.fit_flux.bestfit * guess_flux
+                        flux_jy *= fzero[filt] / 10**(mstar[filt] / 2.5)  # Jy
+                        flux_jy_err = fit.fit_flux.error * guess_flux
+                        flux_jy_err *= fzero[filt] / 10**(mstar[filt] / 2.5)  # Jy
+                        flux_si = fit.fit_flux.bestfit * guess_flux
+                        flux_si *= fzero_si[filt] / 10**(mstar[filt] / 2.5)  # erg/cm^2/s/A
+                        flux_si *= 1e-7 * 1e4 * 1e4  # W/m^2/um
+                        flux_si_err = fit.fit_flux.error * guess_flux
+                        flux_si_err *= fzero_si[filt] / 10**(mstar[filt] / 2.5)  # erg/cm^2/s/A
+                        flux_si_err *= 1e-7 * 1e4 * 1e4  # W/m^2/um
+                        flux_si_alt = flux_jy * 1e-26 * 299792458. / (1e-6 * self.database.red[key]['CWAVEL'][j])**2 * 1e-6  # W/m^2/um
+                        flux_si_alt_err = flux_jy_err * 1e-26 * 299792458. / (1e-6 * self.database.red[key]['CWAVEL'][j])**2 * 1e-6  # W/m^2/um
                         delmag = -2.5 * np.log10(fit.fit_flux.bestfit * guess_flux)  # mag
                         delmag_err = 2.5 / np.log(10.) * fit.fit_flux.error / fit.fit_flux.bestfit  # mag
                         if isinstance(mstar_err, dict):
@@ -787,6 +830,12 @@ class AnalysisTools():
                                      fit.fit_x.error * pxsc_arcsec,  # arcsec
                                      (fit.fit_y.bestfit - data_centy) * pxsc_arcsec,  # arcsec
                                      fit.fit_y.error * pxsc_arcsec,  # arcsec
+                                     flux_jy,
+                                     flux_jy_err,
+                                     flux_si,
+                                     flux_si_err,
+                                     flux_si_alt,
+                                     flux_si_alt_err,
                                      fit.fit_flux.bestfit * guess_flux,
                                      fit.fit_flux.error * guess_flux,
                                      delmag,  # mag
