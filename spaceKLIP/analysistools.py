@@ -72,6 +72,7 @@ class AnalysisTools():
                      starfile,
                      spectral_type='G2V',
                      companions=None,
+                     overwrite_crpix=None,
                      subdir='rawcon'):
         """
         Compute the raw contrast relative to the provided host star flux.
@@ -88,6 +89,10 @@ class AnalysisTools():
             List of companions to be masked before computing the raw contrast.
             For each companion, there should be a three element list containing
             [RA offset (arcsec), Dec offset (arcsec), mask radius (lambda/D)].
+            The default is None.
+        overwrite_crpix : tuple of two float, optional
+            Overwrite the PSF center with the (CRPIX1, CRPIX2) values provided
+            here (in 1-indexed coordinates). This is required for Coron3 data!
             The default is None.
         subdir : str, optional
             Name of the directory where the data products shall be saved. The
@@ -159,7 +164,10 @@ class AnalysisTools():
                     resolution *= self.database.obs[key]['BLURFWHM'][j]
                 
                 # Get the star position.
-                center = (head_pri['CRPIX1'] - 1., head_pri['CRPIX2'] - 1.)  # pix (0-indexed)
+                if overwrite_crpix is None:
+                    center = (head_pri['CRPIX1'] - 1., head_pri['CRPIX2'] - 1.)  # pix (0-indexed)
+                else:
+                    center = (overwrite_crpix[0] - 1., overwrite_crpix[1] - 1.)  # pix (0-indexed)
                 
                 # Mask coronagraph spiders or glow sticks.
                 if self.database.red[key]['EXP_TYPE'][j] in ['NRC_CORON']:
