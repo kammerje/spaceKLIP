@@ -108,8 +108,8 @@ def run_obs(database,
             data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs = ut.read_obs(fitsfile)
             
             # For now this routine does not work with nans.
-            if np.sum(np.isnan(data)) != 0:
-                raise UserWarning('This routine does not work with nans')
+            # if np.sum(np.isnan(data)) != 0:
+            #     raise UserWarning('This routine does not work with nans')
             
             # Compute median reference.
             ref_data += [data]
@@ -142,12 +142,13 @@ def run_obs(database,
                 # Read science file.
                 fitsfile = database.obs[key]['FITSFILE'][j]
                 data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs = ut.read_obs(fitsfile)
+                # pxdq = pyfits.getdata(fitsfile.replace('spaceklip_custom_flat', 'spaceklip'), 'DQ')
                 maskfile = database.obs[key]['MASKFILE'][j]
                 mask = ut.read_msk(maskfile)
                 
                 # For now this routine does not work with nans.
-                if np.sum(np.isnan(data)) != 0:
-                    raise UserWarning('This routine does not work with nans')
+                # if np.sum(np.isnan(data)) != 0:
+                #     raise UserWarning('This routine does not work with nans')
                 
                 # Compute median science.
                 data = np.nanmedian(data, axis=0)
@@ -199,14 +200,11 @@ def run_obs(database,
                 erro_temp = np.sqrt(erro**2 + (pp * ref_erro_temp)**2)
                 pxdq_temp = pxdq | ref_pxdq_temp
                 
-                # Recenter data.
-                shift = (data_temp.shape[1] // 2 - database.obs[key]['CRPIX1'][j] + 1 + database.obs[key]['XOFFSET'][j] / database.obs[key]['PIXSCALE'][j], data_temp.shape[0] // 2 - database.obs[key]['CRPIX2'][j] + 1 + database.obs[key]['YOFFSET'][j] / database.obs[key]['PIXSCALE'][j])
-                data_temp = spline_shift(data_temp, shift[::-1])
-                erro_temp = spline_shift(erro_temp, shift[::-1])
-                
-                # Derotate data.
-                data_temp_derot = rotate(data_temp, -database.obs[key]['ROLL_REF'][j], reshape=False)
-                erro_temp_derot = rotate(erro_temp, -database.obs[key]['ROLL_REF'][j], reshape=False)
+                # Recenter and derotate data.
+                center = [database.obs[key]['CRPIX1'][j] - 1., database.obs[key]['CRPIX2'][j] - 1.]  # pix (0-indexed)
+                new_center = [data_temp.shape[1] // 2, data_temp.shape[0] // 2]  # pix (0-indexed)
+                data_temp_derot = nanrotate(data_temp, database.obs[key]['ROLL_REF'][j], center=center, new_center=new_center)
+                erro_temp_derot = nanrotate(erro_temp, database.obs[key]['ROLL_REF'][j], center=center, new_center=new_center)
                 
                 # Recenter and derotate PSF mask.
                 if 'LYOT' in key:

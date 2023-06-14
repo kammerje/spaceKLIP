@@ -470,7 +470,8 @@ class ImageTools():
                     log.info('  --> Median subtraction: ' + tail)
                     data_temp = data.copy()
                     # if self.database.obs[key]['TELESCOP'][j] == 'JWST' and self.database.obs[key]['INSTRUME'][j] == 'NIRCAM':
-                    data_temp[pxdq != 0] = np.nan
+                    # data_temp[pxdq != 0] = np.nan
+                    data_temp[pxdq & 1 == 1] = np.nan
                     # else:
                     #     data_temp[pxdq & 1 == 1] = np.nan
                     bg_med = np.nanmedian(data_temp, axis=(1, 2), keepdims=True)
