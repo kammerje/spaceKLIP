@@ -38,6 +38,12 @@ With the Anaconda environment created, move to the cloned directory and install 
 	pip install -r requirements.txt
 	pip install -e .
 
+Install the develop branch of WebbPSF_ext:
+
+::
+
+	pip install git+https://github.com/JarronL/webbpsf_ext.git@develop
+
 NEW AS OF 1 MAY 2023: you also need to switch to the jwst branch of pyKLIP:
 
 ::

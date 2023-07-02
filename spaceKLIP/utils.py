@@ -16,8 +16,10 @@ import astropy.io.fits as pyfits
 import matplotlib.pyplot as plt
 import numpy as np
 
+import importlib
 import scipy.ndimage.interpolation as sinterp
 
+from scipy.integrate import simps
 from scipy.ndimage import fourier_shift, gaussian_filter
 from scipy.ndimage import shift as spline_shift
 
@@ -329,7 +331,7 @@ def write_fitpsf_images(fitpsf,
     # Write FITS file.
     pri = pyfits.PrimaryHDU()
     for key in row.keys():
-        if key == 'LN(Z/Z0)' and np.isnan(row[key]):
+        if key in ['FLUX_SI', 'FLUX_SI_ERR', 'LN(Z/Z0)', 'TP_CORONMSK', 'TP_COMSUBST'] and np.isnan(row[key]):
             pri.header[key] = 'NONE'
         else:
             pri.header[key] = row[key]
@@ -548,3 +550,60 @@ def subtractlsq(shift,
         return res.ravel()
     else:
         return res[mask]
+
+def get_tp_comsubst(instrume,
+                    subarray,
+                    filt):
+    """
+    Get the COM substrate transmission averaged over the respective filter
+    profile.
+    
+    Parameters
+    ----------
+    instrume : 'NIRCAM', 'NIRISS', or 'MIRI'
+        JWST instrument in use.
+    subarray : str
+        JWST subarray in use.
+    filt : str
+        JWST filter in use.
+    
+    Returns
+    -------
+    tp_comsubst : float
+        COM substrate transmission averaged over the respective filter profile
+    
+    """
+    
+    # Default return.
+    tp_comsubst = 1.
+    
+    # If NIRCam.
+    if instrume == 'NIRCAM':
+        
+        # If coronagraphy subarray.
+        if '210R' in subarray or '335R' in subarray or '430R' in subarray or 'SWB' in subarray or 'LWB' in subarray:
+            
+            # Read bandpass.
+            try:
+                with importlib.resources.open_text(f'spaceKLIP.resources.PCEs.{instrume}', f'{filt}.txt') as bandpass_file:
+                    bandpass_data = np.genfromtxt(bandpass_file).transpose()
+                    bandpass_wave = bandpass_data[0]  # micron
+                    bandpass_throughput = bandpass_data[1]
+            except FileNotFoundError:
+                log.error('--> Filter ' + filt + ' not found for instrument ' + instrume)
+            
+            # Read COM substrate transmission.
+            with importlib.resources.open_text(f'spaceKLIP.resources.transmissions', f'ModA_COM_Substrate_Transmission_20151028_JKrist.dat') as comsubst_file:
+                comsubst_data = np.genfromtxt(comsubst_file).transpose()
+                comsubst_wave = comsubst_data[0][1:]  # micron
+                comsubst_throughput = comsubst_data[1][1:]
+            
+            # Compute COM substrate transmission averaged over the respective
+            # filter profile.
+            bandpass_throughput = np.interp(comsubst_wave, bandpass_wave, bandpass_throughput)
+            int_tp_bandpass = simps(bandpass_throughput, comsubst_wave)
+            int_tp_bandpass_comsubst = simps(bandpass_throughput * comsubst_throughput, comsubst_wave)
+            tp_comsubst = int_tp_bandpass_comsubst / int_tp_bandpass
+    
+    # Return.
+    return tp_comsubst

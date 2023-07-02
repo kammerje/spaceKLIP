@@ -129,6 +129,10 @@ class AnalysisTools():
                 # Get stellar magnitudes and filter zero points.
                 mstar, fzero = get_stellar_magnitudes(starfile, spectral_type, self.database.red[key]['INSTRUME'][j], output_dir=output_dir)  # vegamag, Jy
                 
+                tp_comsubst = ut.get_tp_comsubst(self.database.red[key]['INSTRUME'][j],
+                                                 self.database.red[key]['SUBARRAY'][j],
+                                                 self.database.red[key]['FILTER'][j])
+                
                 # Read FITS file and PSF mask.
                 fitsfile = self.database.red[key]['FITSFILE'][j]
                 data, head_pri, head_sci, is2d = ut.read_red(fitsfile)
@@ -204,6 +208,10 @@ class AnalysisTools():
                         cons_mask += [con_mask]
                     cons_mask = np.array(cons_mask)
                 
+                # Apply COM substrate transmission.
+                cons /= tp_comsubst
+                cons_mask /= tp_comsubst
+                
                 # Plot masked data.
                 klmodes = self.database.red[key]['KLMODES'][j].split(',')
                 fitsfile = os.path.join(output_dir, os.path.split(fitsfile)[1])
@@ -225,14 +233,15 @@ class AnalysisTools():
                 klmodes = self.database.red[key]['KLMODES'][j].split(',')
                 fitsfile = os.path.join(output_dir, os.path.split(fitsfile)[1])
                 colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+                mod = len(colors)
                 f = plt.figure(figsize=(6.4, 4.8))
                 ax = plt.gca()
                 for k in range(data.shape[0]):
                     if mask is None:
-                        ax.plot(seps[k], cons[k], color=colors[k], label=klmodes[k] + ' KL')
+                        ax.plot(seps[k], cons[k], color=colors[k % mod], label=klmodes[k] + ' KL')
                     else:
-                        ax.plot(seps[k], cons[k], color=colors[k], alpha=0.3)
-                        ax.plot(seps[k], cons_mask[k], color=colors[k], label=klmodes[k] + ' KL')
+                        ax.plot(seps[k], cons[k], color=colors[k % mod], alpha=0.3)
+                        ax.plot(seps[k], cons_mask[k], color=colors[k % mod], label=klmodes[k] + ' KL')
                 ax.set_yscale('log')
                 ax.set_xlabel('Separation [arcsec]')
                 ax.set_ylabel(r'5-$\sigma$ contrast')
@@ -337,6 +346,11 @@ class AnalysisTools():
                 
                 # Get stellar magnitudes and filter zero points.
                 mstar, fzero, fzero_si = get_stellar_magnitudes(starfile, spectral_type, self.database.red[key]['INSTRUME'][j], return_si=True, output_dir=output_dir)  # vegamag, Jy, erg/cm^2/s/A
+                
+                # Get COM substrate throughput.
+                tp_comsubst = ut.get_tp_comsubst(self.database.red[key]['INSTRUME'][j],
+                                                 self.database.red[key]['SUBARRAY'][j],
+                                                 self.database.red[key]['FILTER'][j])
                 
                 # Compute the pixel area in steradian.
                 pxsc_arcsec = self.database.red[key]['PIXSCALE'][j] / 1000.  # arcsec
@@ -454,8 +468,12 @@ class AnalysisTools():
                                    'MSTAR_ERR',
                                    'SNR',
                                    'LN(Z/Z0)',
+                                   'TP_CORONMSK',
+                                   'TP_COMSUBST',
                                    'FITSFILE'),
                             dtype=('int',
+                                   'float',
+                                   'float',
                                    'float',
                                    'float',
                                    'float',
@@ -565,6 +583,10 @@ class AnalysisTools():
                         # Apply scale factor to incorporate the coronagraphic
                         # mask througput.
                         offsetpsf *= scale_factor
+                        
+                        # Apply scale factor to incorporate the COM substrate
+                        # transmission.
+                        offsetpsf *= tp_comsubst
                         
                         # Blur frames with a Gaussian filter.
                         if not np.isnan(self.database.obs[key]['BLURFWHM'][ww]):
@@ -756,6 +778,8 @@ class AnalysisTools():
                                      mstar_err,  # mag
                                      np.nan,
                                      np.nan,
+                                     scale_factor,
+                                     tp_comsubst,
                                      fitsfile))
                         
                         # Write the FM PSF to a file for future plotting.
@@ -854,6 +878,8 @@ class AnalysisTools():
                                      mstar_err,  # mag
                                      np.nan,
                                      evidence_ratio,
+                                     scale_factor,
+                                     tp_comsubst,
                                      fitsfile))
                         
                         # Write the FM PSF to a file for future plotting.

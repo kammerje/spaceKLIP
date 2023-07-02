@@ -145,6 +145,7 @@ def get_stellar_magnitudes(starfile,
                       'F250M': 2.41440e-11,
                       'F300M': 1.24029e-11,
                       'F335M': 7.92772e-12,
+                      'F356W': 6.38971e-12,
                       'F444W': 2.84527e-12}
     
     # Compute magnitude in each filter.

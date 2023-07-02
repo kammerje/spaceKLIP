@@ -120,5 +120,3 @@ for fitsfile in fitsfiles:
     hdu.header['EXTNAME'] = 'SCI'
     hdul.append(hdu)
     hdul.writeto('resources/transmissions/' + fitsfile, output_verify='fix', overwrite=True)
-
-pdb.set_trace()
