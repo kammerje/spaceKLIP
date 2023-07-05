@@ -1770,6 +1770,7 @@ class ImageTools():
     
     def align_frames(self,
                      method='fourier',
+                     align_algo='leastsq',
                      kwargs={},
                      subdir='aligned'):
         """
@@ -1779,6 +1780,9 @@ class ImageTools():
         ----------
         method : 'fourier' or 'spline' (not recommended), optional
             Method for shifting the frames. The default is 'fourier'.
+        align_algo : 'leastsq' or 'header'
+            Algorithm to determine the alignment offsets. Default is 'leastsq',
+            'header' assumes perfect header offsets. 
         kwargs : dict, optional
             Keyword arguments for the scipy.ndimage.shift routine. The default
             is {}.
@@ -1839,10 +1843,19 @@ class ImageTools():
                     # Align all other SCI and REF frames to the first science
                     # frame.
                     else:
+                        # Calculate shifts relative to first frame. 
                         p0 = np.array([((crpix1 + xoffset) - (self.database.obs[key]['CRPIX1'][j] + self.database.obs[key]['XOFFSET'][j])) / self.database.obs[key]['PIXSCALE'][j], ((crpix2 + yoffset) - (self.database.obs[key]['CRPIX2'][j] + self.database.obs[key]['YOFFSET'][j])) / self.database.obs[key]['PIXSCALE'][j], 1.])
-                        pp = leastsq(ut.alignlsq,
-                                     p0,
-                                     args=(data[k], ref_image, mask, method, kwargs))[0]
+                        if align_algo == 'leastsq':
+                            # Use header values to initiate least squares fit
+                            pp = leastsq(ut.alignlsq,
+                                         p0,
+                                         args=(data[k], ref_image, mask, method, kwargs))[0]
+                        elif align_algo == 'header':
+                            # Just assume the header values are correct
+                            pp = p0
+
+                    # Append shifts to array and apply shift to image
+                    # using defined method. 
                     shifts += [np.array([pp[0], pp[1], pp[2]])]
                     if j != ww_sci[0] or k != 0:
                         data[k] = ut.imshift(data[k], [shifts[k][0], shifts[k][1]], method=method, kwargs=kwargs)
@@ -1877,7 +1890,8 @@ class ImageTools():
                     if j == ww_sci[0]:
                         ww = np.append(np.array([False]), ww)
                     ww = np.where(ww == True)[0]
-                    log.warning('  --> The following frames might not be properly aligned: '+str(ww))
+                    if align_algo != 'header':
+                        log.warning('  --> The following frames might not be properly aligned: '+str(ww))
                 
                 # Write FITS file and PSF mask.
                 head_pri['XOFFSET'] = xoffset
