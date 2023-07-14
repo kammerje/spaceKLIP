@@ -24,6 +24,7 @@ from scipy.ndimage import rotate
 from scipy.ndimage import shift as spline_shift
 from scipy.optimize import minimize
 from spaceKLIP import utils as ut
+from tqdm import tqdm
 from webbpsf_ext import NIRCam_ext, MIRI_ext
 from webbpsf_ext.coords import rtheta_to_xy
 from webbpsf_ext.image_manip import fourier_imshift, frebin, pad_or_cut_to_size
