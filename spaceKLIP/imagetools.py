@@ -1325,6 +1325,98 @@ class ImageTools():
         
         pass
     
+    def hpf(self,
+            size='auto',
+            types=['SCI', 'SCI_BG', 'REF', 'REF_BG'],
+            subdir='filtered'):
+        """
+        Blur frames with a Gaussian filter.
+        
+        Parameters
+        ----------
+        fact : 'auto' or float or dict of list of float or None, optional
+            FWHM (pix) of the Gaussian filter. If 'auto', will compute the FWHM
+            automatically based on the Nyquist sampling criterion for discrete
+            data, which is FWHM = lambda / 2.3D, where D = 5.2 m for NIRCam
+            coronagraphy and D = 6.5 m otherwise. If dict of list of float,
+            then the dictionary keys must match the keys of the observations
+            database, and the number of entries in the lists must match the
+            number of observations in the corresponding concatenation. Then, a
+            different FWHM can be used for each observation. If None, the
+            corresponding observation will be skipped. The default is 'auto'.
+        types : list of str, optional
+            List of data types for which the frames shall be blurred. The
+            default is ['SCI', 'SCI_BG', 'REF', 'REF_BG'].
+        subdir : str, optional
+            Name of the directory where the data products shall be saved. The
+            default is 'blurred'.
+        
+        Returns
+        -------
+        None.
+        
+        """
+        
+        # Set output directory.
+        output_dir = os.path.join(self.database.output_dir, subdir)
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        
+        # Loop through concatenations.
+        for i, key in enumerate(self.database.obs.keys()):
+            log.info('--> Concatenation ' + key)
+            
+            # Loop through FITS files.
+            Nfitsfiles = len(self.database.obs[key])
+            for j in range(Nfitsfiles):
+                
+                # Read FITS file.
+                fitsfile = self.database.obs[key]['FITSFILE'][j]
+                data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs = ut.read_obs(fitsfile)
+                maskfile = self.database.obs[key]['MASKFILE'][j]
+                mask = ut.read_msk(maskfile)
+                
+                # Skip file types that are not in the list of types.
+                fact_temp = None
+                if self.database.obs[key]['TYPE'][j] in types:
+                    
+                    # High-pass filter frames.
+                    head, tail = os.path.split(fitsfile)
+                    log.info('  --> Frame filtering: ' + tail)
+                    try:
+                        size_temp = size[key][j]
+                    except:
+                        size_temp = size
+                    if size_temp is not None:
+                        for k in range(data.shape[0]):
+                            orig = data[k].copy()
+                            temp = gaussian_filter(data[k], 3.)
+                            data[k] = orig - temp
+                            # f, ax = plt.subplots(1, 2, figsize=(2 * 6.4, 1 * 4.8))
+                            # ax[0].imshow(np.log10(np.abs(orig)), origin='lower')
+                            # ax[1].imshow(np.log10(np.abs(data[k])), origin='lower')
+                            # plt.tight_layout()
+                            # plt.show()
+                            # pdb.set_trace()
+                            orig = erro[k].copy()
+                            temp = gaussian_filter(erro[k], 3.)
+                            erro[k] = orig - temp
+                    else:
+                        log.info('  --> Frame filtering: skipped')
+                
+                # Write FITS file.
+                if size_temp is None:
+                    pass
+                else:
+                    head_pri['HPFSIZE'] = fact_temp
+                fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs)
+                maskfile = ut.write_msk(maskfile, mask, fitsfile)
+                
+                # Update spaceKLIP database.
+                self.database.update_obs(key, j, fitsfile, maskfile)
+        
+        pass
+    
     def update_nircam_centers(self):
         """
         Determine offset between SIAF reference pixel position and true mask

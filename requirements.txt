@@ -4,6 +4,5 @@ jdaviz
 jwst
 matplotlib
 numpy
-pyklip
 scipy
 webbpsf
