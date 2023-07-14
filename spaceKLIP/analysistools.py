@@ -298,9 +298,9 @@ class AnalysisTools():
             the maximum possible KL mode will be used. The default is 'max'.
         date : str, optional
             Observation date in the format 'YYYY-MM-DDTHH:MM:SS.MMM'. Will
-            query for the wavefront measurement closest in time *before* the
-            given date. If 'auto', will grab date from the FITS file header. If
-            None, then the default WebbPSF OPD is used (RevAA). The default is
+            query for the wavefront measurement closest in time to the given
+            date. If 'auto', will grab date from the FITS file header. If None,
+            then the default WebbPSF OPD is used (RevAA). The default is
             'auto'.
         use_fm_psf : bool, optional
             If True, use a FM PSF generated with pyKLIP, otherwise use a more
@@ -591,6 +591,9 @@ class AnalysisTools():
                         # Blur frames with a Gaussian filter.
                         if not np.isnan(self.database.obs[key]['BLURFWHM'][ww]):
                             offsetpsf = gaussian_filter(offsetpsf, self.database.obs[key]['BLURFWHM'][ww])
+                        # orig = offsetpsf.copy()
+                        # temp = gaussian_filter(offsetpsf, 3.)
+                        # offsetpsf = orig - temp
                         
                         # Save rotated model offset PSFs in case we do not end
                         # up using FM.

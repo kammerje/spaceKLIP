@@ -108,7 +108,10 @@ def get_stellar_magnitudes(starfile,
         # Initialize SED in random bandpass and at random magnitude.
         bp_k = webbpsf_ext.bp_2mass('k')
         bp_mag = 5.
-        spec = webbpsf_ext.spectra.source_spectrum(name='Input Data & SED', sptype=spectral_type, mag_val=bp_mag, bp=bp_k, votable_file=starfile)
+        try:
+            spec = webbpsf_ext.spectra.source_spectrum(name='Input Data & SED', sptype=spectral_type, mag_val=bp_mag, bp=bp_k, votable_file=starfile)
+        except:
+            spec = webbpsf_ext.spectra.source_spectrum(name='Input Data & SED', sptype=spectral_type, mag_val=bp_mag, bp=bp_k, votable_input=starfile)
         
         # Split between NIR and MIR exposures.
         if instrume == 'MIRI':
