@@ -17,6 +17,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import json
+import pysiaf
+import webbpsf
 
 from scipy.ndimage import shift
 
@@ -120,3 +122,111 @@ for fitsfile in fitsfiles:
     hdu.header['EXTNAME'] = 'SCI'
     hdul.append(hdu)
     hdul.writeto('resources/transmissions/' + fitsfile, output_verify='fix', overwrite=True)
+
+
+def get_bar_offset_from_siaf(siaf, filt, channel='LW'):
+        """
+        Get the PSF reference position with respect to the NRCA5_MASKLWB and
+        the NRCA4_MASKSWB subarrays, respectively, from pySIAF.
+        
+        Parameters
+        ----------
+        siaf : pysiaf.Siaf
+            NIRCam SIAF aperture.
+        filt : str
+            Name of the NIRCam filter.
+        channel : str, optional
+            Long wavelength (LW) or short wavelength (SW) channel. The default
+            is 'LW'.
+        
+        Returns
+        -------
+        bar_offset : float
+            Offset of the PSF reference position with respect to the
+            NRCA5_MASKLWB and the NRCA4_MASKSWB subarrays, respectively, in
+            arcseconds.
+        
+        """
+        
+        if channel == 'SW':
+            refapername = 'NRCA4_MASKSWB'
+            apername = 'NRCA4_MASKSWB_' + filt.upper()
+        else:  # otherwise default to LW channel
+            refapername = 'NRCA5_MASKLWB'
+            apername = 'NRCA5_MASKLWB_' + filt.upper()
+        offset_arcsec = np.sqrt((siaf.apertures[refapername].V2Ref - siaf.apertures[apername].V2Ref)**2 + (siaf.apertures[refapername].V3Ref - siaf.apertures[apername].V3Ref)**2)
+        sign = np.sign(siaf.apertures[refapername].V2Ref - siaf.apertures[apername].V2Ref)
+        
+        return sign * offset_arcsec
+
+
+# Get bar mask offsets.
+siaf = pysiaf.Siaf('NIRCAM')
+offset_swb = {filt: get_bar_offset_from_siaf(siaf, filt, channel='SW')
+              for filt in ['F182M', 'F187N', 'F200W', 'F210M', 'F212N', 'narrow']}  # arcsec
+offset_lwb = {filt: get_bar_offset_from_siaf(siaf, filt, channel='LW')
+              for filt in ['F250M', 'F277W', 'F300M', 'F335M', 'F356W', 'F360M', 'F410M', 'F430M', 'F444W', 'F460M', 'F480M', 'narrow']}  # arcsec
+
+# Initialize WebbPSF instruments.
+nircam = webbpsf.NIRCam()
+
+# Loop through apertures and filters.
+fitsfile = 'jwst_nircam_psfmask_0036.fits'
+xcen, ycen = 320.5, 320.5
+for filt in offset_swb:
+    
+    # Get reference pixel position.
+    apername = 'NRCA4_MASKSWB_' + filt.upper()
+    apsiaf = siaf[apername]
+    crpix1, crpix2 = (apsiaf.XSciRef, apsiaf.YSciRef)
+    
+    # Compute required shift.
+    pxsc = nircam._pixelscale_short  # arcsec
+    xoff, yoff = crpix1 - xcen - offset_swb[filt] / pxsc, crpix2 - ycen
+    
+    # Read PSF mask.
+    hdul = pyfits.open('resources/transmissions/' + fitsfile)
+    psfmask = hdul['SCI'].data
+    
+    # Shift the coronagraphic mask separately with a higher interpolation
+    # order.
+    xr = np.arange(psfmask.shape[1]) - (xcen - 1.)
+    yr = np.arange(psfmask.shape[0]) - (ycen - 1.)
+    xx, yy = np.meshgrid(xr, yr)
+    psfmask[np.abs(yy) > 100.] = 1.
+    psfmask = shift(psfmask, (yoff, xoff), order=3, mode='constant', cval=1.)
+    
+    # Write PSF mask.
+    hdul['SCI'].data = psfmask
+    hdul.writeto('resources/transmissions/' + apername + '_' + filt.upper() + '.fits', output_verify='fix', overwrite=True)
+
+# Loop through apertures and filters.
+fitsfile = 'jwst_nircam_psfmask_0003.fits'
+xcen, ycen = 160.5, 160.5
+for filt in offset_lwb:
+    
+    # Get reference pixel position.
+    apername = 'NRCA5_MASKLWB_' + filt.upper()
+    apsiaf = siaf[apername]
+    crpix1, crpix2 = (apsiaf.XSciRef, apsiaf.YSciRef)
+    
+    # Compute required shift.
+    pxsc = nircam._pixelscale_long  # arcsec
+    xoff, yoff = crpix1 - xcen - offset_lwb[filt] / pxsc, crpix2 - ycen
+    
+    # Read PSF mask.
+    hdul = pyfits.open('resources/transmissions/' + fitsfile)
+    psfmask = hdul['SCI'].data
+    psfmask[:, -1] = 1
+    
+    # Shift the coronagraphic mask separately with a higher interpolation
+    # order.
+    xr = np.arange(psfmask.shape[1]) - (xcen - 1.)
+    yr = np.arange(psfmask.shape[0]) - (ycen - 1.)
+    xx, yy = np.meshgrid(xr, yr)
+    psfmask[np.abs(yy) > 50.] = 1.
+    psfmask = shift(psfmask, (yoff, xoff), order=3, mode='constant', cval=1.)
+    
+    # Write PSF mask.
+    hdul['SCI'].data = psfmask
+    hdul.writeto('resources/transmissions/' + apername + '_' + filt.upper() + '.fits', output_verify='fix', overwrite=True)
