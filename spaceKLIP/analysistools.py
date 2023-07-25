@@ -176,7 +176,28 @@ class AnalysisTools():
                 # Mask coronagraph spiders or glow sticks.
                 if self.database.red[key]['EXP_TYPE'][j] in ['NRC_CORON']:
                     if 'WB' in self.database.red[key]['CORONMSK'][j]:
-                        raise NotImplementedError()
+                        xr = np.arange(data.shape[-1]) - center[0]
+                        yr = np.arange(data.shape[-2]) - center[1]
+                        xx, yy = np.meshgrid(xr, yr)
+                        pa = -np.rad2deg(np.arctan2(xx, yy))
+                        pa[pa < 0.] += 360.
+                        ww_sci = np.where(self.database.obs[key]['TYPE'] == 'SCI')[0]
+                        for ww in ww_sci:
+                            roll_ref = self.database.obs[key]['ROLL_REF'][ww]  # deg
+                            pa1 = (90. - 15. + roll_ref) % 360.
+                            pa2 = (90. + 15. + roll_ref) % 360.
+                            if pa1 > pa2:
+                                temp = (pa > pa1) | (pa < pa2)
+                            else:
+                                temp = (pa > pa1) & (pa < pa2)
+                            data[:, temp] = np.nan
+                            pa1 = (270. - 15. + roll_ref) % 360.
+                            pa2 = (270. + 15. + roll_ref) % 360.
+                            if pa1 > pa2:
+                                temp = (pa > pa1) | (pa < pa2)
+                            else:
+                                temp = (pa > pa1) & (pa < pa2)
+                            data[:, temp] = np.nan
                 elif self.database.red[key]['EXP_TYPE'][j] in ['MIR_4QPM', 'MIR_LYOT']:
                     raise NotImplementedError()
                 
@@ -210,7 +231,8 @@ class AnalysisTools():
                 
                 # Apply COM substrate transmission.
                 cons /= tp_comsubst
-                cons_mask /= tp_comsubst
+                if mask is not None:
+                    cons_mask /= tp_comsubst
                 
                 # Plot masked data.
                 klmodes = self.database.red[key]['KLMODES'][j].split(',')
@@ -267,6 +289,7 @@ class AnalysisTools():
                            klmode='max',
                            date='auto',
                            use_fm_psf=True,
+                           highpass=False,
                            fitmethod='mcmc',
                            fitkernel='diag',
                            subtract=True,
@@ -306,6 +329,9 @@ class AnalysisTools():
             If True, use a FM PSF generated with pyKLIP, otherwise use a more
             simple integration time-averaged model offset PSF which does not
             incorporate any KLIP throughput losses. The default is True.
+        highpass : bool or float, optional
+            If float, will apply a high-pass filter to the FM PSF and KLIP
+            dataset. The default is False.
         fitmethod : 'mcmc' or 'nested', optional
             Sampling algorithm which shall be used. The default is 'mcmc'.
         fitkernel : str, optional
@@ -517,6 +543,7 @@ class AnalysisTools():
                     sci_totinttime = []
                     all_offsetpsfs = []
                     all_pas = []
+                    scale_factor_avg = []
                     for ww in ww_sci:
                         roll_ref = self.database.obs[key]['ROLL_REF'][ww]  # deg
                         
@@ -555,13 +582,14 @@ class AnalysisTools():
                         
                         # Generate offset PSF for this roll angle. Do not add
                         # the V3Yidl angle as it has already been added to the
-                        # roll angle by spaceKLIP.
-                        offsetpsf = offsetpsf_func.gen_psf([sim_sep, sim_pa],
-                                                           mode='rth',
-                                                           PA_V3=roll_ref,
-                                                           do_shift=False,
-                                                           quick=False,
-                                                           addV3Yidl=False)
+                        # roll angle by spaceKLIP. This is only for estimating
+                        # the coronagraphic mask throughput!
+                        offsetpsf_coronmsk = offsetpsf_func.gen_psf([sim_sep, sim_pa],
+                                                                    mode='rth',
+                                                                    PA_V3=roll_ref,
+                                                                    do_shift=False,
+                                                                    quick=False,
+                                                                    addV3Yidl=False)
                         
                         # Coronagraphic mask throughput is not incorporated
                         # into the flux calibration of the JWST pipeline so
@@ -571,11 +599,23 @@ class AnalysisTools():
                         # mask throughput (it becomes fainter). Compute scale
                         # factor by comparing a model PSF with and without
                         # coronagraphic mask.
-                        scale_factor = np.sum(offsetpsf) / np.sum(psf_no_coronmsk)
+                        scale_factor = np.sum(offsetpsf_coronmsk) / np.sum(psf_no_coronmsk)
+                        scale_factor_avg += [scale_factor]
                         
                         # Normalize model offset PSF to a total integrated flux
                         # of 1.
-                        offsetpsf /= np.sum(offsetpsf)
+                        # EDIT: this misses all the flux outside of the 65 x 65
+                        # pix PSF stamp. Instead, simulate another offset PSF
+                        # normalized to a total intensity of 1 at an infinite
+                        # exit pupil.
+                        # offsetpsf /= np.sum(offsetpsf)
+                        offsetpsf = offsetpsf_func.gen_psf([sim_sep, sim_pa],
+                                                           mode='rth',
+                                                           PA_V3=roll_ref,
+                                                           do_shift=False,
+                                                           quick=False,
+                                                           addV3Yidl=False,
+                                                           normalize_webbpsf='exit_pupil')
                         
                         # Normalize model offset PSF by the flux of the star.
                         offsetpsf *= fzero[filt] / 10**(mstar[filt] / 2.5) / 1e6 / pxar  # MJy/sr
@@ -591,9 +631,10 @@ class AnalysisTools():
                         # Blur frames with a Gaussian filter.
                         if not np.isnan(self.database.obs[key]['BLURFWHM'][ww]):
                             offsetpsf = gaussian_filter(offsetpsf, self.database.obs[key]['BLURFWHM'][ww])
-                        # orig = offsetpsf.copy()
-                        # temp = gaussian_filter(offsetpsf, 3.)
-                        # offsetpsf = orig - temp
+                        if isinstance(highpass, (float, int)):
+                            highpass = float(highpass)
+                            fourier_sigma_size = (offsetpsf.shape[0] / highpass) / (2. * np.sqrt(2. * np.log(2.)))
+                            offsetpsf = parallelized.high_pass_filter_imgs(np.array([offsetpsf]), numthreads=None, filtersize=fourier_sigma_size)[0]
                         
                         # Save rotated model offset PSFs in case we do not end
                         # up using FM.
@@ -606,6 +647,8 @@ class AnalysisTools():
                         # Save non-rotated model offset PSFs for the FM.
                         all_offsetpsfs.extend([offsetpsf for ni in range(nints)])
                         all_pas.extend([roll_ref for ni in range(nints)])
+                    scale_factor_avg = np.sum([scale_factor_avg[l] * sci_totinttime[l] / np.sum(sci_totinttime)
+                                               for l in range(len(scale_factor_avg))])
                     
                     # Compute the FM dataset if it does not exist yet, or if
                     # overwrite is True.
@@ -646,7 +689,7 @@ class AnalysisTools():
                                         maxnumbasis=maxnumbasis,
                                         calibrate_flux=False,
                                         psf_library=dataset.psflib,
-                                        highpass=False,
+                                        highpass=highpass,
                                         mute_progression=True)
                     
                     # Open the FM dataset.
@@ -686,11 +729,14 @@ class AnalysisTools():
                     
                     # Fit the FM PSF to the KLIP-subtracted data.
                     fitboxsize = 30  # pix
+                    # fitboxsize = 21  # pix
                     dr = 5  # pix
                     exclusion_radius = 3 * resolution  # pix
                     corr_len_guess = 3.  # pix
                     xrange = 2.  # pix
                     yrange = 2.  # pix
+                    # xrange = 0.001  # pix
+                    # yrange = 0.001  # pix
                     frange = 10.  # mag
                     corr_len_range = 1.  # mag
                     
@@ -781,7 +827,7 @@ class AnalysisTools():
                                      mstar_err,  # mag
                                      np.nan,
                                      np.nan,
-                                     scale_factor,
+                                     scale_factor_avg,
                                      tp_comsubst,
                                      fitsfile))
                         
@@ -881,7 +927,7 @@ class AnalysisTools():
                                      mstar_err,  # mag
                                      np.nan,
                                      evidence_ratio,
-                                     scale_factor,
+                                     scale_factor_avg,
                                      tp_comsubst,
                                      fitsfile))
                         
