@@ -176,7 +176,28 @@ class AnalysisTools():
                 # Mask coronagraph spiders or glow sticks.
                 if self.database.red[key]['EXP_TYPE'][j] in ['NRC_CORON']:
                     if 'WB' in self.database.red[key]['CORONMSK'][j]:
-                        raise NotImplementedError()
+                        xr = np.arange(data.shape[-1]) - center[0]
+                        yr = np.arange(data.shape[-2]) - center[1]
+                        xx, yy = np.meshgrid(xr, yr)
+                        pa = -np.rad2deg(np.arctan2(xx, yy))
+                        pa[pa < 0.] += 360.
+                        ww_sci = np.where(self.database.obs[key]['TYPE'] == 'SCI')[0]
+                        for ww in ww_sci:
+                            roll_ref = self.database.obs[key]['ROLL_REF'][ww]  # deg
+                            pa1 = (90. - 15. + roll_ref) % 360.
+                            pa2 = (90. + 15. + roll_ref) % 360.
+                            if pa1 > pa2:
+                                temp = (pa > pa1) | (pa < pa2)
+                            else:
+                                temp = (pa > pa1) & (pa < pa2)
+                            data[:, temp] = np.nan
+                            pa1 = (270. - 15. + roll_ref) % 360.
+                            pa2 = (270. + 15. + roll_ref) % 360.
+                            if pa1 > pa2:
+                                temp = (pa > pa1) | (pa < pa2)
+                            else:
+                                temp = (pa > pa1) & (pa < pa2)
+                            data[:, temp] = np.nan
                 elif self.database.red[key]['EXP_TYPE'][j] in ['MIR_4QPM', 'MIR_LYOT']:
                     raise NotImplementedError()
                 
@@ -210,7 +231,8 @@ class AnalysisTools():
                 
                 # Apply COM substrate transmission.
                 cons /= tp_comsubst
-                cons_mask /= tp_comsubst
+                if mask is not None:
+                    cons_mask /= tp_comsubst
                 
                 # Plot masked data.
                 klmodes = self.database.red[key]['KLMODES'][j].split(',')
@@ -267,9 +289,11 @@ class AnalysisTools():
                            klmode='max',
                            date='auto',
                            use_fm_psf=True,
+                           highpass=False,
                            fitmethod='mcmc',
                            fitkernel='diag',
                            subtract=True,
+                           inject=False,
                            overwrite=True,
                            subdir='companions'):
         """
@@ -306,6 +330,9 @@ class AnalysisTools():
             If True, use a FM PSF generated with pyKLIP, otherwise use a more
             simple integration time-averaged model offset PSF which does not
             incorporate any KLIP throughput losses. The default is True.
+        highpass : bool or float, optional
+            If float, will apply a high-pass filter to the FM PSF and KLIP
+            dataset. The default is False.
         fitmethod : 'mcmc' or 'nested', optional
             Sampling algorithm which shall be used. The default is 'mcmc'.
         fitkernel : str, optional
@@ -314,6 +341,9 @@ class AnalysisTools():
         subtract : bool, optional
             If True, subtract each extracted companion from the pyKLIP dataset
             before fitting the next one in the list. The default is True.
+        inject : bool, optional
+            Instead of fitting for a companion at the guessed location and
+            contrast, inject one into the data.
         overwrite : bool, optional
             If True, compute a new FM PSF and overwrite any existing one,
             otherwise try to load an existing one and only compute a new one if
@@ -516,7 +546,9 @@ class AnalysisTools():
                     rot_offsetpsfs = []
                     sci_totinttime = []
                     all_offsetpsfs = []
+                    all_offsetpsfs_nohpf = []
                     all_pas = []
+                    scale_factor_avg = []
                     for ww in ww_sci:
                         roll_ref = self.database.obs[key]['ROLL_REF'][ww]  # deg
                         
@@ -555,13 +587,14 @@ class AnalysisTools():
                         
                         # Generate offset PSF for this roll angle. Do not add
                         # the V3Yidl angle as it has already been added to the
-                        # roll angle by spaceKLIP.
-                        offsetpsf = offsetpsf_func.gen_psf([sim_sep, sim_pa],
-                                                           mode='rth',
-                                                           PA_V3=roll_ref,
-                                                           do_shift=False,
-                                                           quick=False,
-                                                           addV3Yidl=False)
+                        # roll angle by spaceKLIP. This is only for estimating
+                        # the coronagraphic mask throughput!
+                        offsetpsf_coronmsk = offsetpsf_func.gen_psf([sim_sep, sim_pa],
+                                                                    mode='rth',
+                                                                    PA_V3=roll_ref,
+                                                                    do_shift=False,
+                                                                    quick=False,
+                                                                    addV3Yidl=False)
                         
                         # Coronagraphic mask throughput is not incorporated
                         # into the flux calibration of the JWST pipeline so
@@ -571,11 +604,23 @@ class AnalysisTools():
                         # mask throughput (it becomes fainter). Compute scale
                         # factor by comparing a model PSF with and without
                         # coronagraphic mask.
-                        scale_factor = np.sum(offsetpsf) / np.sum(psf_no_coronmsk)
+                        scale_factor = np.sum(offsetpsf_coronmsk) / np.sum(psf_no_coronmsk)
+                        scale_factor_avg += [scale_factor]
                         
                         # Normalize model offset PSF to a total integrated flux
                         # of 1.
-                        offsetpsf /= np.sum(offsetpsf)
+                        # EDIT: this misses all the flux outside of the 65 x 65
+                        # pix PSF stamp. Instead, simulate another offset PSF
+                        # normalized to a total intensity of 1 at an infinite
+                        # exit pupil.
+                        # offsetpsf /= np.sum(offsetpsf)
+                        offsetpsf = offsetpsf_func.gen_psf([sim_sep, sim_pa],
+                                                           mode='rth',
+                                                           PA_V3=roll_ref,
+                                                           do_shift=False,
+                                                           quick=False,
+                                                           addV3Yidl=False,
+                                                           normalize_webbpsf='exit_pupil')
                         
                         # Normalize model offset PSF by the flux of the star.
                         offsetpsf *= fzero[filt] / 10**(mstar[filt] / 2.5) / 1e6 / pxar  # MJy/sr
@@ -591,9 +636,16 @@ class AnalysisTools():
                         # Blur frames with a Gaussian filter.
                         if not np.isnan(self.database.obs[key]['BLURFWHM'][ww]):
                             offsetpsf = gaussian_filter(offsetpsf, self.database.obs[key]['BLURFWHM'][ww])
-                        # orig = offsetpsf.copy()
-                        # temp = gaussian_filter(offsetpsf, 3.)
-                        # offsetpsf = orig - temp
+                        
+                        # Apply high-pass filter.
+                        offsetpsf_nohpf = copy.deepcopy(offsetpsf)
+                        if not isinstance(highpass, bool):
+                            highpass = float(highpass)
+                            fourier_sigma_size = (offsetpsf.shape[0] / highpass) / (2. * np.sqrt(2. * np.log(2.)))
+                            offsetpsf = parallelized.high_pass_filter_imgs(np.array([offsetpsf]), numthreads=None, filtersize=fourier_sigma_size)[0]
+                        else:
+                            if highpass:
+                                raise NotImplementedError()
                         
                         # Save rotated model offset PSFs in case we do not end
                         # up using FM.
@@ -605,7 +657,10 @@ class AnalysisTools():
                         
                         # Save non-rotated model offset PSFs for the FM.
                         all_offsetpsfs.extend([offsetpsf for ni in range(nints)])
+                        all_offsetpsfs_nohpf.extend([offsetpsf_nohpf for ni in range(nints)])
                         all_pas.extend([roll_ref for ni in range(nints)])
+                    scale_factor_avg = np.sum([scale_factor_avg[l] * sci_totinttime[l] / np.sum(sci_totinttime)
+                                               for l in range(len(scale_factor_avg))])
                     
                     # Compute the FM dataset if it does not exist yet, or if
                     # overwrite is True.
@@ -632,7 +687,7 @@ class AnalysisTools():
                         
                         # Compute the FM dataset.
                         mode = self.database.red[key]['MODE'][j]
-                        annuli = [(0, dataset.input.shape[1] // 2)]
+                        annuli = 1
                         subsections = 1
                         fm.klip_dataset(dataset=dataset,
                                         fm_class=fm_class,
@@ -646,7 +701,7 @@ class AnalysisTools():
                                         maxnumbasis=maxnumbasis,
                                         calibrate_flux=False,
                                         psf_library=dataset.psflib,
-                                        highpass=False,
+                                        highpass=highpass,
                                         mute_progression=True)
                     
                     # Open the FM dataset.
@@ -654,7 +709,7 @@ class AnalysisTools():
                         fm_frame = hdul[0].data[klindex]
                         fm_centx = hdul[0].header['PSFCENTX']
                         fm_centy = hdul[0].header['PSFCENTY']
-                    with pyfits.open(klipdataset) as hdul:
+                    with pyfits.open(self.database.red[key]['FITSFILE'][j]) as hdul:
                         data_frame = hdul[0].data[klindex]
                         data_centx = hdul[0].header['PSFCENTX']
                         data_centy = hdul[0].header['PSFCENTY']
@@ -685,228 +740,243 @@ class AnalysisTools():
                         fm_frame[int(fm_centy) + int(guess_dy) - sy//2:int(fm_centy) + int(guess_dy) + sy//2 + 1, int(fm_centx) - int(guess_dx) - sx//2:int(fm_centx) - int(guess_dx) + sx//2 + 1] = stamp
                     
                     # Fit the FM PSF to the KLIP-subtracted data.
-                    fitboxsize = 30  # pix
-                    dr = 5  # pix
-                    exclusion_radius = 3 * resolution  # pix
-                    corr_len_guess = 3.  # pix
-                    xrange = 2.  # pix
-                    yrange = 2.  # pix
-                    frange = 10.  # mag
-                    corr_len_range = 1.  # mag
-                    
-                    # MCMC.
-                    if fitmethod == 'mcmc':
-                        fma = fitpsf.FMAstrometry(guess_sep=guess_sep,
-                                                  guess_pa=guess_pa,
-                                                  fitboxsize=fitboxsize)
-                        fma.generate_fm_stamp(fm_image=fm_frame,
-                                              fm_center=[fm_centx, fm_centy],
-                                              padding=5)
-                        fma.generate_data_stamp(data=data_frame,
-                                                data_center=[data_centx, data_centy],
-                                                dr=dr,
-                                                exclusion_radius=exclusion_radius)
-                        corr_len_label = r'$l$'
-                        fma.set_kernel(fitkernel, [corr_len_guess], [corr_len_label])
-                        # fma.set_kernel('diag', [], [])
-                        fma.set_bounds(xrange, yrange, frange, [corr_len_range])
-                        
-                        # Make sure that the noise map is invertible.
-                        noise_map_max = np.nanmax(fma.noise_map)
-                        fma.noise_map[np.isnan(fma.noise_map)] = noise_map_max
-                        fma.noise_map[fma.noise_map == 0.] = noise_map_max
-                        
-                        # Run the MCMC fit.
-                        nwalkers = 50
-                        nburn = 100
-                        nsteps = 200
-                        numthreads = 4
-                        chain_output = os.path.join(output_dir_kl, key + '-bka_chain_c%.0f' % (k + 1) + '.pkl')
-                        fma.fit_astrometry(nwalkers=nwalkers,
-                                           nburn=nburn,
-                                           nsteps=nsteps,
-                                           numthreads=numthreads,
-                                           chain_output=chain_output)
-                        
-                        # Plot the MCMC fit results.
-                        path = os.path.join(output_dir_kl, key + '-corner_c%.0f' % (k + 1) + '.pdf')
-                        fma.make_corner_plot()
-                        plt.savefig(path)
-                        plt.close()
-                        path = os.path.join(output_dir_kl, key + '-model_c%.0f' % (k + 1) + '.pdf')
-                        fma.best_fit_and_residuals()
-                        plt.savefig(path)
-                        plt.close()
-                        
-                        # Write the MCMC fit results into a table.
-                        flux_jy = fma.fit_flux.bestfit * guess_flux
-                        flux_jy *= fzero[filt] / 10**(mstar[filt] / 2.5)  # Jy
-                        flux_jy_err = fma.fit_flux.error * guess_flux
-                        flux_jy_err *= fzero[filt] / 10**(mstar[filt] / 2.5)  # Jy
-                        flux_si = fma.fit_flux.bestfit * guess_flux
-                        flux_si *= fzero_si[filt] / 10**(mstar[filt] / 2.5)  # erg/cm^2/s/A
-                        flux_si *= 1e-7 * 1e4 * 1e4  # W/m^2/um
-                        flux_si_err = fma.fit_flux.error * guess_flux
-                        flux_si_err *= fzero_si[filt] / 10**(mstar[filt] / 2.5)  # erg/cm^2/s/A
-                        flux_si_err *= 1e-7 * 1e4 * 1e4  # W/m^2/um
-                        flux_si_alt = flux_jy * 1e-26 * 299792458. / (1e-6 * self.database.red[key]['CWAVEL'][j])**2 * 1e-6  # W/m^2/um
-                        flux_si_alt_err = flux_jy_err * 1e-26 * 299792458. / (1e-6 * self.database.red[key]['CWAVEL'][j])**2 * 1e-6  # W/m^2/um
-                        delmag = -2.5 * np.log10(fma.fit_flux.bestfit * guess_flux)  # mag
-                        delmag_err = 2.5 / np.log(10.) * fma.fit_flux.error / fma.fit_flux.bestfit  # mag
-                        if isinstance(mstar_err, dict):
-                            mstar_err_temp = mstar_err[filt]
-                        else:
-                            mstar_err_temp = mstar_err
-                        appmag = mstar[filt] + delmag  # vegamag
-                        appmag_err = np.sqrt(mstar_err_temp**2 + delmag_err**2)
-                        fitsfile = os.path.join(output_dir_kl, key + '-fitpsf_c%.0f' % (k + 1) + '.fits')
-                        tab.add_row((k + 1,
-                                     fma.raw_RA_offset.bestfit * pxsc_arcsec,  # arcsec
-                                     fma.raw_RA_offset.error * pxsc_arcsec,  # arcsec
-                                     fma.raw_Dec_offset.bestfit * pxsc_arcsec,  # arcsec
-                                     fma.raw_Dec_offset.error * pxsc_arcsec,  # arcsec
-                                     flux_jy,
-                                     flux_jy_err,
-                                     flux_si,
-                                     flux_si_err,
-                                     flux_si_alt,
-                                     flux_si_alt_err,
-                                     fma.raw_flux.bestfit * guess_flux,
-                                     fma.raw_flux.error * guess_flux,
-                                     delmag,  # mag
-                                     delmag_err,  # mag
-                                     appmag,  # mag
-                                     appmag_err,  # mag
-                                     mstar[filt],  # mag
-                                     mstar_err,  # mag
-                                     np.nan,
-                                     np.nan,
-                                     scale_factor,
-                                     tp_comsubst,
-                                     fitsfile))
-                        
-                        # Write the FM PSF to a file for future plotting.
-                        ut.write_fitpsf_images(fma, fitsfile, tab[-1])
-                    
-                    # Nested sampling.
-                    elif fitmethod == 'nested':
-                        output_dir_ns = os.path.join(output_dir_kl, 'temp-multinest/')
-                        
-                        # Initialize PlanetEvidence module.
-                        try:
-                            fit = fitpsf.PlanetEvidence(guess_sep, guess_pa, fitboxsize, output_dir_ns)
-                        except ModuleNotFoundError:
-                            raise ModuleNotFoundError('Pymultinest is not installed, try\n\"conda install -c conda-forge pymultinest\"')
-                        log.info('  --> Initialized PlanetEvidence module')
-                        
-                        # Generate FM and data stamps.
-                        fit.generate_fm_stamp(fm_frame, [fm_centx, fm_centy], padding=5)
-                        fit.generate_data_stamp(data_frame, [data_centx, data_centy], dr=dr, exclusion_radius=exclusion_radius)
-                        log.info('  --> Generated FM and data stamps')
-                        
-                        # Set fit kernel.
+                    if inject == False:
+                        fitboxsize = 30  # pix
+                        # fitboxsize = 21  # pix
+                        dr = 5  # pix
+                        exclusion_radius = 3 * resolution  # pix
                         corr_len_guess = 3.  # pix
-                        corr_len_label = 'l'
-                        fit.set_kernel(fitkernel, [corr_len_guess], [corr_len_label])
-                        log.info('  --> Set fit kernel to ' + fitkernel)
+                        xrange = 2.  # pix
+                        yrange = 2.  # pix
+                        # xrange = 0.001  # pix
+                        # yrange = 0.001  # pix
+                        frange = 10.  # mag
+                        corr_len_range = 1.  # mag
                         
-                        # Set fit bounds.
-                        fit.set_bounds(xrange, yrange, frange, [corr_len_range])
-                        log.info('  --> Set fit bounds')
+                        # MCMC.
+                        if fitmethod == 'mcmc':
+                            fma = fitpsf.FMAstrometry(guess_sep=guess_sep,
+                                                      guess_pa=guess_pa,
+                                                      fitboxsize=fitboxsize)
+                            fma.generate_fm_stamp(fm_image=fm_frame,
+                                                  fm_center=[fm_centx, fm_centy],
+                                                  padding=5)
+                            fma.generate_data_stamp(data=data_frame,
+                                                    data_center=[data_centx, data_centy],
+                                                    dr=dr,
+                                                    exclusion_radius=exclusion_radius)
+                            corr_len_label = r'$l$'
+                            fma.set_kernel(fitkernel, [corr_len_guess], [corr_len_label])
+                            # fma.set_kernel('diag', [], [])
+                            fma.set_bounds(xrange, yrange, frange, [corr_len_range])
+                            
+                            # Make sure that the noise map is invertible.
+                            noise_map_max = np.nanmax(fma.noise_map)
+                            fma.noise_map[np.isnan(fma.noise_map)] = noise_map_max
+                            fma.noise_map[fma.noise_map == 0.] = noise_map_max
+                            
+                            # Run the MCMC fit.
+                            nwalkers = 50
+                            nburn = 100
+                            nsteps = 200
+                            numthreads = 4
+                            chain_output = os.path.join(output_dir_kl, key + '-bka_chain_c%.0f' % (k + 1) + '.pkl')
+                            fma.fit_astrometry(nwalkers=nwalkers,
+                                               nburn=nburn,
+                                               nsteps=nsteps,
+                                               numthreads=numthreads,
+                                               chain_output=chain_output)
+                            
+                            # Plot the MCMC fit results.
+                            path = os.path.join(output_dir_kl, key + '-corner_c%.0f' % (k + 1) + '.pdf')
+                            fma.make_corner_plot()
+                            plt.savefig(path)
+                            plt.close()
+                            path = os.path.join(output_dir_kl, key + '-model_c%.0f' % (k + 1) + '.pdf')
+                            fma.best_fit_and_residuals()
+                            plt.savefig(path)
+                            plt.close()
+                            
+                            # Write the MCMC fit results into a table.
+                            flux_jy = fma.fit_flux.bestfit * guess_flux
+                            flux_jy *= fzero[filt] / 10**(mstar[filt] / 2.5)  # Jy
+                            flux_jy_err = fma.fit_flux.error * guess_flux
+                            flux_jy_err *= fzero[filt] / 10**(mstar[filt] / 2.5)  # Jy
+                            flux_si = fma.fit_flux.bestfit * guess_flux
+                            flux_si *= fzero_si[filt] / 10**(mstar[filt] / 2.5)  # erg/cm^2/s/A
+                            flux_si *= 1e-7 * 1e4 * 1e4  # W/m^2/um
+                            flux_si_err = fma.fit_flux.error * guess_flux
+                            flux_si_err *= fzero_si[filt] / 10**(mstar[filt] / 2.5)  # erg/cm^2/s/A
+                            flux_si_err *= 1e-7 * 1e4 * 1e4  # W/m^2/um
+                            flux_si_alt = flux_jy * 1e-26 * 299792458. / (1e-6 * self.database.red[key]['CWAVEL'][j])**2 * 1e-6  # W/m^2/um
+                            flux_si_alt_err = flux_jy_err * 1e-26 * 299792458. / (1e-6 * self.database.red[key]['CWAVEL'][j])**2 * 1e-6  # W/m^2/um
+                            delmag = -2.5 * np.log10(fma.fit_flux.bestfit * guess_flux)  # mag
+                            delmag_err = 2.5 / np.log(10.) * fma.fit_flux.error / fma.fit_flux.bestfit  # mag
+                            if isinstance(mstar_err, dict):
+                                mstar_err_temp = mstar_err[filt]
+                            else:
+                                mstar_err_temp = mstar_err
+                            appmag = mstar[filt] + delmag  # vegamag
+                            appmag_err = np.sqrt(mstar_err_temp**2 + delmag_err**2)
+                            fitsfile = os.path.join(output_dir_kl, key + '-fitpsf_c%.0f' % (k + 1) + '.fits')
+                            tab.add_row((k + 1,
+                                         fma.raw_RA_offset.bestfit * pxsc_arcsec,  # arcsec
+                                         fma.raw_RA_offset.error * pxsc_arcsec,  # arcsec
+                                         fma.raw_Dec_offset.bestfit * pxsc_arcsec,  # arcsec
+                                         fma.raw_Dec_offset.error * pxsc_arcsec,  # arcsec
+                                         flux_jy,
+                                         flux_jy_err,
+                                         flux_si,
+                                         flux_si_err,
+                                         flux_si_alt,
+                                         flux_si_alt_err,
+                                         fma.raw_flux.bestfit * guess_flux,
+                                         fma.raw_flux.error * guess_flux,
+                                         delmag,  # mag
+                                         delmag_err,  # mag
+                                         appmag,  # mag
+                                         appmag_err,  # mag
+                                         mstar[filt],  # mag
+                                         mstar_err,  # mag
+                                         np.nan,
+                                         np.nan,
+                                         scale_factor_avg,
+                                         tp_comsubst,
+                                         fitsfile))
+                            
+                            # Write the FM PSF to a file for future plotting.
+                            ut.write_fitpsf_images(fma, fitsfile, tab[-1])
                         
-                        # Run the pymultinest fit.
-                        fit.multifit()
-                        log.info('  --> Finished pymultinest fit')
+                        # Nested sampling.
+                        elif fitmethod == 'nested':
+                            output_dir_ns = os.path.join(output_dir_kl, 'temp-multinest/')
+                            
+                            # Initialize PlanetEvidence module.
+                            try:
+                                fit = fitpsf.PlanetEvidence(guess_sep, guess_pa, fitboxsize, output_dir_ns)
+                            except ModuleNotFoundError:
+                                raise ModuleNotFoundError('Pymultinest is not installed, try\n\"conda install -c conda-forge pymultinest\"')
+                            log.info('  --> Initialized PlanetEvidence module')
+                            
+                            # Generate FM and data stamps.
+                            fit.generate_fm_stamp(fm_frame, [fm_centx, fm_centy], padding=5)
+                            fit.generate_data_stamp(data_frame, [data_centx, data_centy], dr=dr, exclusion_radius=exclusion_radius)
+                            log.info('  --> Generated FM and data stamps')
+                            
+                            # Set fit kernel.
+                            corr_len_guess = 3.  # pix
+                            corr_len_label = 'l'
+                            fit.set_kernel(fitkernel, [corr_len_guess], [corr_len_label])
+                            log.info('  --> Set fit kernel to ' + fitkernel)
+                            
+                            # Set fit bounds.
+                            fit.set_bounds(xrange, yrange, frange, [corr_len_range])
+                            log.info('  --> Set fit bounds')
+                            
+                            # Run the pymultinest fit.
+                            fit.multifit()
+                            log.info('  --> Finished pymultinest fit')
+                            
+                            # Get model evidence and posteriors.
+                            evidence = fit.fit_stats()
+                            fm_evidence = evidence[0]['nested sampling global log-evidence']  # FM evidence
+                            fm_posteriors = evidence[0]['marginals']  # FM posteriors
+                            null_evidence = evidence[1]['nested sampling global log-evidence']  # null evidence
+                            null_posteriors = evidence[1]['marginals']  # null posteriors
+                            evidence_ratio = fm_evidence - null_evidence
+                            
+                            # Plot the pymultinest fit results.
+                            path = os.path.join(output_dir_kl, key + '-corner_c%.0f' % (k + 1) + '.pdf')
+                            corn, nullcorn = fit.fit_plots()
+                            plt.close()
+                            corn
+                            plt.savefig(path)
+                            plt.close()
+                            path = os.path.join(output_dir_kl, key + '-model_c%.0f' % (k + 1) + '.pdf')
+                            fit.fm_residuals()
+                            plt.savefig(path)
+                            plt.close()
+                            
+                            # Write the pymultinest fit results into a table.
+                            flux_jy = fit.fit_flux.bestfit * guess_flux
+                            flux_jy *= fzero[filt] / 10**(mstar[filt] / 2.5)  # Jy
+                            flux_jy_err = fit.fit_flux.error * guess_flux
+                            flux_jy_err *= fzero[filt] / 10**(mstar[filt] / 2.5)  # Jy
+                            flux_si = fit.fit_flux.bestfit * guess_flux
+                            flux_si *= fzero_si[filt] / 10**(mstar[filt] / 2.5)  # erg/cm^2/s/A
+                            flux_si *= 1e-7 * 1e4 * 1e4  # W/m^2/um
+                            flux_si_err = fit.fit_flux.error * guess_flux
+                            flux_si_err *= fzero_si[filt] / 10**(mstar[filt] / 2.5)  # erg/cm^2/s/A
+                            flux_si_err *= 1e-7 * 1e4 * 1e4  # W/m^2/um
+                            flux_si_alt = flux_jy * 1e-26 * 299792458. / (1e-6 * self.database.red[key]['CWAVEL'][j])**2 * 1e-6  # W/m^2/um
+                            flux_si_alt_err = flux_jy_err * 1e-26 * 299792458. / (1e-6 * self.database.red[key]['CWAVEL'][j])**2 * 1e-6  # W/m^2/um
+                            delmag = -2.5 * np.log10(fit.fit_flux.bestfit * guess_flux)  # mag
+                            delmag_err = 2.5 / np.log(10.) * fit.fit_flux.error / fit.fit_flux.bestfit  # mag
+                            if isinstance(mstar_err, dict):
+                                mstar_err_temp = mstar_err[filt]
+                            else:
+                                mstar_err_temp = mstar_err
+                            appmag = mstar[filt] + delmag  # vegamag
+                            appmag_err = np.sqrt(mstar_err_temp**2 + delmag_err**2)
+                            fitsfile = os.path.join(output_dir_kl, key + '-fitpsf_c%.0f' % (k + 1) + '.fits')
+                            tab.add_row((k + 1,
+                                         -(fit.fit_x.bestfit - data_centx) * pxsc_arcsec,  # arcsec
+                                         fit.fit_x.error * pxsc_arcsec,  # arcsec
+                                         (fit.fit_y.bestfit - data_centy) * pxsc_arcsec,  # arcsec
+                                         fit.fit_y.error * pxsc_arcsec,  # arcsec
+                                         flux_jy,
+                                         flux_jy_err,
+                                         flux_si,
+                                         flux_si_err,
+                                         flux_si_alt,
+                                         flux_si_alt_err,
+                                         fit.fit_flux.bestfit * guess_flux,
+                                         fit.fit_flux.error * guess_flux,
+                                         delmag,  # mag
+                                         delmag_err,  # mag
+                                         appmag,  # mag
+                                         appmag_err,  # mag
+                                         mstar[filt],  # mag
+                                         mstar_err,  # mag
+                                         np.nan,
+                                         evidence_ratio,
+                                         scale_factor_avg,
+                                         tp_comsubst,
+                                         fitsfile))
+                            
+                            # Write the FM PSF to a file for future plotting.
+                            ut.write_fitpsf_images(fit, fitsfile, tab[-1])
                         
-                        # Get model evidence and posteriors.
-                        evidence = fit.fit_stats()
-                        fm_evidence = evidence[0]['nested sampling global log-evidence']  # FM evidence
-                        fm_posteriors = evidence[0]['marginals']  # FM posteriors
-                        null_evidence = evidence[1]['nested sampling global log-evidence']  # null evidence
-                        null_posteriors = evidence[1]['marginals']  # null posteriors
-                        evidence_ratio = fm_evidence - null_evidence
-                        
-                        # Plot the pymultinest fit results.
-                        path = os.path.join(output_dir_kl, key + '-corner_c%.0f' % (k + 1) + '.pdf')
-                        corn, nullcorn = fit.fit_plots()
-                        plt.close()
-                        corn
-                        plt.savefig(path)
-                        plt.close()
-                        path = os.path.join(output_dir_kl, key + '-model_c%.0f' % (k + 1) + '.pdf')
-                        fit.fm_residuals()
-                        plt.savefig(path)
-                        plt.close()
-                        
-                        # Write the pymultinest fit results into a table.
-                        flux_jy = fit.fit_flux.bestfit * guess_flux
-                        flux_jy *= fzero[filt] / 10**(mstar[filt] / 2.5)  # Jy
-                        flux_jy_err = fit.fit_flux.error * guess_flux
-                        flux_jy_err *= fzero[filt] / 10**(mstar[filt] / 2.5)  # Jy
-                        flux_si = fit.fit_flux.bestfit * guess_flux
-                        flux_si *= fzero_si[filt] / 10**(mstar[filt] / 2.5)  # erg/cm^2/s/A
-                        flux_si *= 1e-7 * 1e4 * 1e4  # W/m^2/um
-                        flux_si_err = fit.fit_flux.error * guess_flux
-                        flux_si_err *= fzero_si[filt] / 10**(mstar[filt] / 2.5)  # erg/cm^2/s/A
-                        flux_si_err *= 1e-7 * 1e4 * 1e4  # W/m^2/um
-                        flux_si_alt = flux_jy * 1e-26 * 299792458. / (1e-6 * self.database.red[key]['CWAVEL'][j])**2 * 1e-6  # W/m^2/um
-                        flux_si_alt_err = flux_jy_err * 1e-26 * 299792458. / (1e-6 * self.database.red[key]['CWAVEL'][j])**2 * 1e-6  # W/m^2/um
-                        delmag = -2.5 * np.log10(fit.fit_flux.bestfit * guess_flux)  # mag
-                        delmag_err = 2.5 / np.log(10.) * fit.fit_flux.error / fit.fit_flux.bestfit  # mag
-                        if isinstance(mstar_err, dict):
-                            mstar_err_temp = mstar_err[filt]
+                        # Otherwise.
                         else:
-                            mstar_err_temp = mstar_err
-                        appmag = mstar[filt] + delmag  # vegamag
-                        appmag_err = np.sqrt(mstar_err_temp**2 + delmag_err**2)
-                        fitsfile = os.path.join(output_dir_kl, key + '-fitpsf_c%.0f' % (k + 1) + '.fits')
-                        tab.add_row((k + 1,
-                                     -(fit.fit_x.bestfit - data_centx) * pxsc_arcsec,  # arcsec
-                                     fit.fit_x.error * pxsc_arcsec,  # arcsec
-                                     (fit.fit_y.bestfit - data_centy) * pxsc_arcsec,  # arcsec
-                                     fit.fit_y.error * pxsc_arcsec,  # arcsec
-                                     flux_jy,
-                                     flux_jy_err,
-                                     flux_si,
-                                     flux_si_err,
-                                     flux_si_alt,
-                                     flux_si_alt_err,
-                                     fit.fit_flux.bestfit * guess_flux,
-                                     fit.fit_flux.error * guess_flux,
-                                     delmag,  # mag
-                                     delmag_err,  # mag
-                                     appmag,  # mag
-                                     appmag_err,  # mag
-                                     mstar[filt],  # mag
-                                     mstar_err,  # mag
-                                     np.nan,
-                                     evidence_ratio,
-                                     scale_factor,
-                                     tp_comsubst,
-                                     fitsfile))
-                        
-                        # Write the FM PSF to a file for future plotting.
-                        ut.write_fitpsf_images(fit, fitsfile, tab[-1])
-                    
-                    # Otherwise.
-                    else:
-                        raise NotImplementedError()
+                            raise NotImplementedError()
                     
                     # Subtract companion before fitting the next one.
-                    if subtract:
+                    if subtract or inject:
                         
                         # Make copy of the original pyKLIP dataset.
                         if k == 0:
                             dataset_orig = copy.deepcopy(dataset)
                         
-                        # Subtract companion from pyKLIP dataset.
-                        ra = tab[-1]['RA']  # arcsec
-                        dec = tab[-1]['DEC']  # arcsec
-                        con = tab[-1]['CON']
+                        # Subtract companion from pyKLIP dataset. Use offset
+                        # PSFs w/o high-pass filtering because this will be
+                        # applied by the klip_dataset routine below.
+                        if inject:
+                            ra = companions[k][0]  # arcsec
+                            dec = companions[k][1]  # arcsec
+                            con = companions[k][2]
+                            inputflux = con * np.array(all_offsetpsfs_nohpf)  # positive to inject companion
+                            fileprefix = 'INJECTED_c%.0f-' % (k + 1) + key
+                        else:
+                            ra = tab[-1]['RA']  # arcsec
+                            dec = tab[-1]['DEC']  # arcsec
+                            con = tab[-1]['CON']
+                            inputflux = -con * np.array(all_offsetpsfs_nohpf)  # negative to remove companion
+                            fileprefix = 'KILLED_c%.0f-' % (k + 1) + key
                         sep = np.sqrt(ra**2 + dec**2) / pxsc_arcsec  # pix
                         pa = np.rad2deg(np.arctan2(ra, dec))  # deg
-                        inputflux = -con * np.array(all_offsetpsfs)  # negative to remove companion
-                        fakes.inject_planet(frames=dataset.input, centers=dataset.centers, inputflux=inputflux, astr_hdrs=dataset.wcs, radius=sep, pa=pa, field_dependent_correction=None)
+                        thetas = [pa + 90. - all_pa for all_pa in all_pas]
+                        fakes.inject_planet(frames=dataset.input, centers=dataset.centers, inputflux=inputflux, astr_hdrs=dataset.wcs, radius=sep, pa=pa, thetas=np.array(thetas), field_dependent_correction=None)
                         
                         # Reduce companion-subtracted data.
                         mode = self.database.red[key]['MODE'][j]
@@ -915,7 +985,7 @@ class AnalysisTools():
                         parallelized.klip_dataset(dataset=dataset,
                                                   mode=mode,
                                                   outputdir=output_dir_fm,
-                                                  fileprefix='KILLED_c%.0f-' % (k + 1) + key,
+                                                  fileprefix=fileprefix,
                                                   annuli=annuli,
                                                   subsections=subsections,
                                                   movement=1,
@@ -923,8 +993,14 @@ class AnalysisTools():
                                                   maxnumbasis=maxnumbasis,
                                                   calibrate_flux=False,
                                                   psf_library=dataset.psflib,
-                                                  highpass=False,
+                                                  highpass=highpass,
                                                   verbose=False)
+                        head = pyfits.getheader(self.database.red[key]['FITSFILE'][j], 0)
+                        temp = os.path.join(output_dir_fm, fileprefix + '-KLmodes-all.fits')
+                        hdul = pyfits.open(temp)
+                        hdul[0].header = head
+                        hdul.writeto(temp, output_verify='fix', overwrite=True)
+                        hdul.close()
                 
                 # Update source database.
                 self.database.update_src(key, j, tab)

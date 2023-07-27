@@ -143,13 +143,19 @@ def get_stellar_magnitudes(starfile,
     for i in range(len(filter_list)):
         filts += [filter_list['filterID'][i].split('.')[-1]]
         zeros += [filter_list['ZeroPoint'][i]]
-    zero_points_si = {'F182M': 7.44007e-11,
-                      'F210M': 4.69758e-11,
-                      'F250M': 2.41440e-11,
-                      'F300M': 1.24029e-11,
-                      'F335M': 7.92772e-12,
-                      'F356W': 6.38971e-12,
-                      'F444W': 2.84527e-12}
+    zero_points_si = {}
+    if instrume == 'NIRCAM':
+        zero_points_si = {'F182M': 7.44007e-11,
+                          'F210M': 4.69758e-11,
+                          'F250M': 2.41440e-11,
+                          'F300M': 1.24029e-11,
+                          'F335M': 7.92772e-12,
+                          'F356W': 6.38971e-12,
+                          'F360M': 5.94138e-12,
+                          'F410M': 3.75536e-12,
+                          'F430M': 3.11904e-12,
+                          'F444W': 2.84527e-12,
+                          'F460M': 2.29513e-12}
     
     # Compute magnitude in each filter.
     mstar = {}  # vegamag

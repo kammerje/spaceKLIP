@@ -333,7 +333,7 @@ class JWST_PSF():
             return self.inst_on.siaf_ap.convert(xidl, yidl, 'idl', frame_out)
     
     def gen_psf_idl(self, coord_vals, coord_frame='idl', quick=True, sp=None,
-                    return_oversample=False, do_shift=False):
+                    return_oversample=False, do_shift=False, normalize='first'):
         """
         Generate offset PSF in detector frame.
         
@@ -407,7 +407,7 @@ class JWST_PSF():
             calc_psf = self._func_on
             sp = self.sp if sp is None else sp
             psfs = calc_psf(sp=sp, coord_vals=coord_vals, coord_frame=coord_frame,
-                            return_oversample=True, return_hdul=False)
+                            return_oversample=True, return_hdul=False, normalize=normalize)
             
             # Ensure 3D cube
             psfs = psfs.reshape([-1,ny,nx])
@@ -440,7 +440,8 @@ class JWST_PSF():
         
         return psfs.squeeze()
     
-    def gen_psf(self, loc, mode='xy', PA_V3=0, return_oversample=False, do_shift=True, addV3Yidl=True, normalize=False, **kwargs):
+    def gen_psf(self, loc, mode='xy', PA_V3=0, return_oversample=False, do_shift=True,
+                addV3Yidl=True, normalize=False, normalize_webbpsf='first', **kwargs):
         """
         Generate offset PSF rotated by PA to N-E orientation.
         
@@ -489,7 +490,7 @@ class JWST_PSF():
         
         # Perform shift in idl frame then rotate to sky coords
         psf = self.gen_psf_idl((xidl, yidl), coord_frame='idl', do_shift=do_shift, 
-                                return_oversample=True, **kwargs)
+                                return_oversample=True, normalize=normalize_webbpsf, **kwargs)
         
         if do_shift:
             # Shifting PSF, means rotate such that North is up
@@ -642,7 +643,13 @@ def gen_offsetpsf(obs,
             # elif obs['CORONMSK'][ww_sci[0]] in ['MASKALWB']:
             #     nircam.pupil_mask = 'MASKLWB'
             if obs['PUPIL'][ww_sci[0]] != 'NONE':
-                nircam.pupil_mask = obs['PUPIL'][ww_sci[0]]
+                if obs['PUPIL'][ww_sci[0]] == 'MASKBAR':
+                    if 'LWB' in obs['CORONMSK'][ww_sci[0]]:
+                        nircam.pupil_mask = 'MASKLWB'
+                    else:
+                        nircam.pupil_mask = 'MASKSWB'
+                else:
+                    nircam.pupil_mask = obs['PUPIL'][ww_sci[0]]
             else:
                 nircam.pupil_mask = None
             if xyoff is not None:  # assume that if an offset is applied, the PSF should be relative to the coronagraphic mask center
@@ -702,7 +709,7 @@ def gen_offsetpsf(obs,
         webbpsf_inst.load_wss_opd_by_date(date=date, choice='before', verbose=False, plot=False)
     
     # Generate offset PSF.
-    hdul = webbpsf_inst.calc_psf(oversample=1, fov_pixels=65, normalize='last', source=source)
+    hdul = webbpsf_inst.calc_psf(oversample=1, fov_pixels=65, normalize='exit_pupil', source=source)
     offsetpsf = hdul[0].data
     
     return offsetpsf
