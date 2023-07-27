@@ -1,6 +1,6 @@
 [project]
 name = "spaceKLIP"
-description = 'Data reduction pipeline for JWST Coronagraphy'
+description = 'Data reduction pipeline for JWST high-contrast imaging'
 readme = "README.rst"
 dynamic = ["version", "dependencies"] # version will come from setuptools.scm
 authors = [
