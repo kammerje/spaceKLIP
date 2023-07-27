@@ -23,14 +23,9 @@ import sys
 import matplotlib
 matplotlib.use("agg")
 
+import spaceKLIP
 
-sys.path.insert(0, os.path.abspath('../../spaceKLIP/'))
-
-with open(os.path.join(os.path.abspath('../../spaceKLIP/'), '__init__.py')) as init:
-    for line in init:
-        if "__version__ =" in line:
-            version = line.split('"')[1]
-
+version = spaceKLIP.__version__
 
 # -- General configuration ------------------------------------------------
 # Add any Sphinx extension module names here, as strings. They can be
