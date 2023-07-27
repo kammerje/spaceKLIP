@@ -1,9 +1,8 @@
 astropy
 astroquery
+jdaviz
 jwst
 matplotlib
 numpy
-pyyaml
-scikit-image
 scipy
 webbpsf
