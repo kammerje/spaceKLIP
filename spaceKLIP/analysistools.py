@@ -709,10 +709,16 @@ class AnalysisTools():
                         fm_frame = hdul[0].data[klindex]
                         fm_centx = hdul[0].header['PSFCENTX']
                         fm_centy = hdul[0].header['PSFCENTY']
-                    with pyfits.open(self.database.red[key]['FITSFILE'][j]) as hdul:
-                        data_frame = hdul[0].data[klindex]
-                        data_centx = hdul[0].header['PSFCENTX']
-                        data_centy = hdul[0].header['PSFCENTY']
+                    if k == 0 or subtract == False:
+                        with pyfits.open(self.database.red[key]['FITSFILE'][j]) as hdul:
+                            data_frame = hdul[0].data[klindex]
+                            data_centx = hdul[0].header['PSFCENTX']
+                            data_centy = hdul[0].header['PSFCENTY']
+                    else:
+                        with pyfits.open(klipdataset) as hdul:
+                            data_frame = hdul[0].data[klindex]
+                            data_centx = hdul[0].header['PSFCENTX']
+                            data_centy = hdul[0].header['PSFCENTY']
                     
                     # If use_fm_psf is False, then replace the FM PSF in the
                     # fm_frame with an integration time-averaged model offset
