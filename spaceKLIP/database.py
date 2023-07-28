@@ -866,6 +866,8 @@ class Database():
                 try:
                     file = os.path.join(os.path.split(datapaths[ww[j]])[0], HASH_unique[i] + '.dat')
                     self.obs[HASH_unique[i]] = Table.read(file, format='ascii')
+                    self.obs[HASH_unique[i]]['FITSFILE'] = self.obs[HASH_unique[i]]['FITSFILE'].astype(object)
+                    self.obs[HASH_unique[i]]['MASKFILE'] = self.obs[HASH_unique[i]]['MASKFILE'].astype(object)
                 except FileNotFoundError:
                     raise UserWarning('Observations database for concatenation ' + HASH_unique[i] + ' not found')
         

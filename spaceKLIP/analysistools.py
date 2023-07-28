@@ -21,6 +21,7 @@ import pyklip.fakes as fakes
 import pyklip.fitpsf as fitpsf
 import pyklip.fm as fm
 import pyklip.fmlib.fmpsf as fmpsf
+import shutil
 
 from astropy.table import Table
 from pyklip import klip, parallelized
@@ -438,12 +439,9 @@ class AnalysisTools():
                     klindex = klmodes.tolist().index(klmode)
                 
                 # Set output directories.
-                output_dir_kl = os.path.join(output_dir, 'COMPANION_KL%.0f' % klmodes[klindex])
+                output_dir_kl = os.path.join(output_dir, 'KL%.0f' % klmodes[klindex])
                 if not os.path.exists(output_dir_kl):
                     os.makedirs(output_dir_kl)
-                output_dir_fm = os.path.join(output_dir_kl, 'FITS')
-                if not os.path.exists(output_dir_fm):
-                    os.makedirs(output_dir_fm)
                 
                 # Initialize a function that can generate model offset PSFs.
                 inst = self.database.red[key]['INSTRUME'][j]
@@ -526,6 +524,15 @@ class AnalysisTools():
                                    'float',
                                    'object'))
                 for k in range(len(companions)):
+                    output_dir_comp = os.path.join(output_dir_kl, 'C%.0f' % (k + 1))
+                    if not os.path.exists(output_dir_comp):
+                        os.makedirs(output_dir_comp)
+                    output_dir_fm = os.path.join(output_dir_comp, 'KLIP_FM')
+                    if not os.path.exists(output_dir_fm):
+                        os.makedirs(output_dir_fm)
+                    output_dir_pk = os.path.join(output_dir_comp, 'PREKLIP')
+                    if not os.path.exists(output_dir_pk):
+                        os.makedirs(output_dir_pk)
                     
                     # Offset PSF that is not affected by the coronagraphic
                     # mask, but only the Lyot stop.
@@ -664,8 +671,8 @@ class AnalysisTools():
                     
                     # Compute the FM dataset if it does not exist yet, or if
                     # overwrite is True.
-                    fmdataset = os.path.join(output_dir_fm, 'FM_c%.0f-' % (k + 1) + key + '-fmpsf-KLmodes-all.fits')
-                    klipdataset = os.path.join(output_dir_fm, 'FM_c%.0f-' % (k + 1) + key + '-klipped-KLmodes-all.fits')
+                    fmdataset = os.path.join(output_dir_fm, 'FM-' + key + '-fmpsf-KLmodes-all.fits')
+                    klipdataset = os.path.join(output_dir_fm, 'FM-' + key + '-klipped-KLmodes-all.fits')
                     if overwrite or (not os.path.exists(fmdataset) or not os.path.exists(klipdataset)):
                         
                         # Initialize the pyKLIP FM class. Use sep/pa relative
@@ -689,11 +696,21 @@ class AnalysisTools():
                         mode = self.database.red[key]['MODE'][j]
                         annuli = 1
                         subsections = 1
+                        if not isinstance(highpass, bool):
+                            if k == 0:
+                                highpass_temp = float(highpass)
+                            else:
+                                highpass_temp = False
+                        else:
+                            if highpass:
+                                raise NotImplementedError()
+                            else:
+                                highpass_temp = False
                         fm.klip_dataset(dataset=dataset,
                                         fm_class=fm_class,
                                         mode=mode,
                                         outputdir=output_dir_fm,
-                                        fileprefix='FM_c%.0f-' % (k + 1) + key,
+                                        fileprefix='FM-' + key,
                                         annuli=annuli,
                                         subsections=subsections,
                                         movement=1,
@@ -701,7 +718,7 @@ class AnalysisTools():
                                         maxnumbasis=maxnumbasis,
                                         calibrate_flux=False,
                                         psf_library=dataset.psflib,
-                                        highpass=highpass,
+                                        highpass=highpass_temp,
                                         mute_progression=True)
                     
                     # Open the FM dataset.
@@ -709,16 +726,10 @@ class AnalysisTools():
                         fm_frame = hdul[0].data[klindex]
                         fm_centx = hdul[0].header['PSFCENTX']
                         fm_centy = hdul[0].header['PSFCENTY']
-                    if k == 0 or subtract == False:
-                        with pyfits.open(self.database.red[key]['FITSFILE'][j]) as hdul:
-                            data_frame = hdul[0].data[klindex]
-                            data_centx = hdul[0].header['PSFCENTX']
-                            data_centy = hdul[0].header['PSFCENTY']
-                    else:
-                        with pyfits.open(klipdataset) as hdul:
-                            data_frame = hdul[0].data[klindex]
-                            data_centx = hdul[0].header['PSFCENTX']
-                            data_centy = hdul[0].header['PSFCENTY']
+                    with pyfits.open(klipdataset) as hdul:
+                        data_frame = hdul[0].data[klindex]
+                        data_centx = hdul[0].header['PSFCENTX']
+                        data_centy = hdul[0].header['PSFCENTY']
                     
                     # If use_fm_psf is False, then replace the FM PSF in the
                     # fm_frame with an integration time-averaged model offset
@@ -971,18 +982,51 @@ class AnalysisTools():
                             ra = companions[k][0]  # arcsec
                             dec = companions[k][1]  # arcsec
                             con = companions[k][2]
-                            inputflux = con * np.array(all_offsetpsfs_nohpf)  # positive to inject companion
-                            fileprefix = 'INJECTED_c%.0f-' % (k + 1) + key
+                            inputflux = con * np.array(all_offsetpsfs)  # positive to inject companion
+                            fileprefix = 'INJECTED-' + key
                         else:
                             ra = tab[-1]['RA']  # arcsec
                             dec = tab[-1]['DEC']  # arcsec
                             con = tab[-1]['CON']
-                            inputflux = -con * np.array(all_offsetpsfs_nohpf)  # negative to remove companion
-                            fileprefix = 'KILLED_c%.0f-' % (k + 1) + key
+                            inputflux = -con * np.array(all_offsetpsfs)  # negative to remove companion
+                            fileprefix = 'KILLED-' + key
                         sep = np.sqrt(ra**2 + dec**2) / pxsc_arcsec  # pix
                         pa = np.rad2deg(np.arctan2(ra, dec))  # deg
                         thetas = [pa + 90. - all_pa for all_pa in all_pas]
                         fakes.inject_planet(frames=dataset.input, centers=dataset.centers, inputflux=inputflux, astr_hdrs=dataset.wcs, radius=sep, pa=pa, thetas=np.array(thetas), field_dependent_correction=None)
+                        
+                        # Copy pre-KLIP files.
+                        for filepath in filepaths:
+                            src = filepath
+                            dst = os.path.join(output_dir_pk, os.path.split(src)[1])
+                            shutil.copy(src, dst)
+                        for psflib_filepath in psflib_filepaths:
+                            src = psflib_filepath
+                            dst = os.path.join(output_dir_pk, os.path.split(src)[1])
+                            shutil.copy(src, dst)
+                        
+                        # Update content of pre-KLIP files.
+                        filenames = dataset.filenames.copy()
+                        for l, filename in enumerate(filenames):
+                            filenames[l] = filename[:filename.find('_INT')]
+                        for filepath in filepaths:
+                            ww_file = filenames == os.path.split(filepath)[1]
+                            file = os.path.join(output_dir_pk, os.path.split(filepath)[1])
+                            hdul = pyfits.open(file)
+                            hdul['SCI'].data = dataset.input[ww_file]
+                            hdul.writeto(file, output_verify='fix', overwrite=True)
+                            hdul.close()
+                        
+                        # Update and write observations database.
+                        temp = self.database.obs.copy()
+                        for l in range(len(self.database.obs[key])):
+                            file = os.path.split(self.database.obs[key]['FITSFILE'][l])[1]
+                            self.database.obs[key]['FITSFILE'][l] = os.path.join(output_dir_pk, file)
+                        file = os.path.split(self.database.red[key]['FITSFILE'][j])[1]
+                        file = file[file.find('JWST'):file.find('-KLmodes-all')]
+                        file = os.path.join(output_dir_fm, file + '.dat')
+                        self.database.obs[key].write(file, format='ascii', overwrite=True)
+                        self.database.obs = temp
                         
                         # Reduce companion-subtracted data.
                         mode = self.database.red[key]['MODE'][j]
@@ -999,7 +1043,7 @@ class AnalysisTools():
                                                   maxnumbasis=maxnumbasis,
                                                   calibrate_flux=False,
                                                   psf_library=dataset.psflib,
-                                                  highpass=highpass,
+                                                  highpass=False,
                                                   verbose=False)
                         head = pyfits.getheader(self.database.red[key]['FITSFILE'][j], 0)
                         temp = os.path.join(output_dir_fm, fileprefix + '-KLmodes-all.fits')
