@@ -4,42 +4,74 @@ spaceKLIP package
 Submodules
 ----------
 
-spaceKLIP.companion module
---------------------------
+spaceKLIP.analysistools module
+------------------------------
 
-.. automodule:: spaceKLIP.companion
+.. automodule:: spaceKLIP.analysistools
    :members:
    :undoc-members:
    :show-inheritance:
 
-spaceKLIP.contrast module
+spaceKLIP.classpsfsubpipeline module
+------------------------------------
+
+.. automodule:: spaceKLIP.classpsfsubpipeline
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+spaceKLIP.coron1pipeline module
+-------------------------------
+
+.. automodule:: spaceKLIP.coron1pipeline
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+spaceKLIP.coron2pipeline module
+-------------------------------
+
+.. automodule:: spaceKLIP.coron2pipeline
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+spaceKLIP.coron3pipeline module
+-------------------------------
+
+.. automodule:: spaceKLIP.coron3pipeline
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+spaceKLIP.database module
 -------------------------
 
-.. automodule:: spaceKLIP.contrast
+.. automodule:: spaceKLIP.database
    :members:
    :undoc-members:
    :show-inheritance:
 
-spaceKLIP.engine module
------------------------
-
-.. automodule:: spaceKLIP.engine
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-spaceKLIP.imgprocess module
+spaceKLIP.imagetools module
 ---------------------------
 
-.. automodule:: spaceKLIP.imgprocess
+.. automodule:: spaceKLIP.imagetools
    :members:
    :undoc-members:
    :show-inheritance:
 
-spaceKLIP.io module
--------------------
+spaceKLIP.make\_psfmasks module
+-------------------------------
 
-.. automodule:: spaceKLIP.io
+.. automodule:: spaceKLIP.make_psfmasks
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+spaceKLIP.mast module
+---------------------
+
+.. automodule:: spaceKLIP.mast
    :members:
    :undoc-members:
    :show-inheritance:
@@ -52,18 +84,26 @@ spaceKLIP.plotting module
    :undoc-members:
    :show-inheritance:
 
-spaceKLIP.rampfit module
-------------------------
+spaceKLIP.psf module
+--------------------
 
-.. automodule:: spaceKLIP.rampfit
+.. automodule:: spaceKLIP.psf
    :members:
    :undoc-members:
    :show-inheritance:
 
-spaceKLIP.subtraction module
-----------------------------
+spaceKLIP.pyklippipeline module
+-------------------------------
 
-.. automodule:: spaceKLIP.subtraction
+.. automodule:: spaceKLIP.pyklippipeline
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+spaceKLIP.starphot module
+-------------------------
+
+.. automodule:: spaceKLIP.starphot
    :members:
    :undoc-members:
    :show-inheritance:
