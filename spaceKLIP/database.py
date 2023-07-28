@@ -1237,14 +1237,32 @@ class Database():
         for mode in self.obs:
             print(short_concat_name(mode))
             tab = self.obs[mode]
-            for stage in [0, 1, 2, 3]:
+            for stage in [0, 1, 2]:
                 stagetab = tab[tab['DATAMODL'] == f'STAGE{stage}']
                 if len(stagetab):
                     nsci = np.sum(stagetab['TYPE'] == 'SCI')
                     nref = np.sum(stagetab['TYPE'] == 'REF')
                     nta = np.sum((stagetab['TYPE'] == 'SCI_TA') | (stagetab['TYPE'] == 'REF_TA'))
+                    nbg = np.sum((stagetab['TYPE'] == 'SCI_BG') | (stagetab['TYPE'] == 'REF_BG'))
                     
                     summarystr = f'\tSTAGE{stage}: {len(stagetab)} files;\t{nsci} SCI, {nref} REF'
                     if nta:
                         summarystr += f', {nta} TA'
+                    if nbg:
+                        summarystr += f', {nbg} BG'
                     print(summarystr)
+            if hasattr(self, 'red') and mode in self.red:
+                tab = self.red[mode]
+                stage = 3
+                stagetab = tab[tab['DATAMODL'] == f'STAGE{stage}']
+                if len(stagetab):
+                    s3types = sorted(list(set(tab['TYPE'].value)))
+                    nta = np.sum((stagetab['TYPE'] == 'SCI_TA') | (stagetab['TYPE'] == 'REF_TA'))
+                    nbg = np.sum((stagetab['TYPE'] == 'SCI_BG') | (stagetab['TYPE'] == 'REF_BG'))
+
+                    summarystr = f'\tSTAGE{stage}: {len(stagetab)} files;\t'
+                    for i, typestr in enumerate(s3types):
+                        ntype = np.sum(stagetab['TYPE'] == typestr)
+                        summarystr += (', ' if i>0 else '') + f'{ntype} {typestr}'
+                    print(summarystr)
+
