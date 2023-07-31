@@ -22,6 +22,7 @@ import webbpsf_ext
 
 from copy import deepcopy
 from jwst.pipeline import Detector1Pipeline, Image2Pipeline, Coron3Pipeline
+from pyklip import parallelized
 from scipy.ndimage import gaussian_filter, median_filter
 from scipy.ndimage import shift as spline_shift
 from scipy.optimize import leastsq, minimize
@@ -1384,23 +1385,14 @@ class ImageTools():
                     head, tail = os.path.split(fitsfile)
                     log.info('  --> Frame filtering: ' + tail)
                     try:
-                        size_temp = size[key][j]
+                        size_temp = size[key]
                     except:
-                        size_temp = size
+                        raise NotImplementedError()
                     if size_temp is not None:
-                        for k in range(data.shape[0]):
-                            orig = data[k].copy()
-                            temp = gaussian_filter(data[k], 3.)
-                            data[k] = orig - temp
-                            # f, ax = plt.subplots(1, 2, figsize=(2 * 6.4, 1 * 4.8))
-                            # ax[0].imshow(np.log10(np.abs(orig)), origin='lower')
-                            # ax[1].imshow(np.log10(np.abs(data[k])), origin='lower')
-                            # plt.tight_layout()
-                            # plt.show()
-                            # pdb.set_trace()
-                            orig = erro[k].copy()
-                            temp = gaussian_filter(erro[k], 3.)
-                            erro[k] = orig - temp
+                        log.info('  --> Frame filtering: HPF FWHM = %.2f pix' % size_temp)
+                        fourier_sigma_size = (data.shape[1] / size_temp) / (2. * np.sqrt(2. * np.log(2.)))
+                        data = parallelized.high_pass_filter_imgs(data, numthreads=None, filtersize=fourier_sigma_size)
+                        erro = parallelized.high_pass_filter_imgs(erro, numthreads=None, filtersize=fourier_sigma_size)
                     else:
                         log.info('  --> Frame filtering: skipped')
                 

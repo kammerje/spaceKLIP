@@ -279,6 +279,8 @@ class AnalysisTools():
                 plt.close()
                 np.save(fitsfile[:-5] + '_seps.npy', seps)
                 np.save(fitsfile[:-5] + '_cons.npy', cons)
+                if mask is not None:
+                    np.save(fitsfile[:-5] + '_cons_mask.npy', cons_mask)
         
         pass
     
