@@ -28,18 +28,22 @@ jobs:
         fetch-depth: 0
 
     - name: Set up Python ${{ matrix.python }}
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python }}
 
     - name: Install Python dependencies
-      run: pip install tox tox-conda>=0.2
+      run: | # pip install tox tox-conda>=0.2
+          python -m pip install --upgrade pip
+          pip install pytest
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      #    - name: Install specific branch of webbpsf_ext
-      #      run:  pip install git+https://github.com/JarronL/webbpsf_ext.git@develop
 
-      # - name: Install specific branch of pyklip
-      #   run:  pip install git+https://bitbucket.org/pyKLIP/pyklip.git@jwst
+    - name: Install specific branch of webbpsf_ext
+      run:  pip install git+https://github.com/JarronL/webbpsf_ext.git@develop
+
+    - name: Install specific branch of pyklip
+      run:  pip install git+https://bitbucket.org/pyKLIP/pyklip.git@jwst
 
     - name: Get WebbPSF Data
       run: | # Get WebbPSF data files (just a subset of the full dataset!) and set up environment variable
@@ -50,23 +54,14 @@ jobs:
     - name: Check conda info
       run: conda info
 
-    - name: Run tests with requirements file
-      if: ${{ contains(matrix.toxenv,'-latest') }}
+    - name: Run pytest directly
+      if: ${{ ! contains(matrix.toxenv,'docbuild') }}
+      run: |
+          pytest
+
+    - name: Run docs tests via Tox
+      if: ${{ contains(matrix.toxenv,'docbuild') }}
       run: |
         cp $RUNNER_WORKSPACE/spaceKLIP/requirements.txt /tmp/
         tox -e ${{ matrix.toxenv }}
-
-    - name: Run tests
-      if: ${{ matrix.continue-on-error == null && contains(matrix.toxenv,'-latest') != true }}
-      run: tox -e ${{ matrix.toxenv }}
-
-    - name: Run tests and allow failures
-      if: matrix.continue-on-error
-      continue-on-error: true
-      run: tox -e ${{ matrix.toxenv }}
-
-    - name: Upload coverage to codecov
-      if: ${{ contains(matrix.toxenv,'-cov') }}
-      uses: codecov/codecov-action@v2
-      with:
-        file: ./coverage.xml
+ 
