@@ -11,4 +11,4 @@ from . import psf
 from . import pyklippipeline
 from . import utils
 
-from ._version import *
+from ._version import __version__, __version_tuple__
