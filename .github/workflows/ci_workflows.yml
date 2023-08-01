@@ -35,11 +35,11 @@ jobs:
     - name: Install Python dependencies
       run: pip install tox tox-conda>=0.2
 
-    - name: Install specific branch of webbpsf_ext
-      run:  pip install git+https://github.com/JarronL/webbpsf_ext.git@develop
+      #    - name: Install specific branch of webbpsf_ext
+      #      run:  pip install git+https://github.com/JarronL/webbpsf_ext.git@develop
 
-    - name: Install specific branch of pyklip
-      run:  pip install git+https://bitbucket.org/pyKLIP/pyklip.git@jwst
+      # - name: Install specific branch of pyklip
+      #   run:  pip install git+https://bitbucket.org/pyKLIP/pyklip.git@jwst
 
     - name: Get WebbPSF Data
       run: | # Get WebbPSF data files (just a subset of the full dataset!) and set up environment variable
