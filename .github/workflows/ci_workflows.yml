@@ -47,6 +47,7 @@ jobs:
            echo "WEBBPSF_PATH=${{github.workspace}}/webbpsf-data" >> $GITHUB_ENV
 
     - name: Get SpaceKLIP test Data
+      if: ${{ contains(matrix.toxenv,'test') }}
       run: |  
            wget https://stsci.box.com/shared/static/dq4y4r4e376922rw6fyu31pr68owrko7.zip -O /tmp/spaceklip_test_data.zip
            unzip /tmp/spaceklip_test_data.zip
