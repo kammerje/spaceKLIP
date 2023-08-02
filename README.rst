@@ -15,20 +15,20 @@ At this stage it is recommended that you clone the Git repository directory for 
 
 ::
 
-	git clone https://github.com/kammerje/spaceKLIP_new.git
+	git clone https://github.com/kammerje/spaceKLIP.git
 
 If you would like to install a specific branch:
 
 ::
 
-	git clone https://github.com/kammerje/spaceKLIP_new.git@branch
+	git clone https://github.com/kammerje/spaceKLIP.git@branch
 
 From here, it is **highly** recommended that you create a unique Anaconda environment to hold all of the spaceKLIP dependencies:
 
 ::
 
-	conda create -n spaceklip_new python=3
-	conda activate spaceklip_new
+	conda create -n spaceklip python=3
+	conda activate spaceklip
 
 With the Anaconda environment created, move to the cloned directory and install the dependencies and spaceKLIP itself:
 
@@ -54,7 +54,8 @@ NEW AS OF 1 JUNE 2023: you also need to make the custom PSF mask files before ru
 
 ::
 
-	python spaceKLIP/make_psfmasks.py
+	cd spaceKLIP/
+        python make_psfmasks.py
 
 Finally, and very importantly, you will need to download the reference files and set the environment variables supporting the functioning of :code:`webbpsf` and :code:`webbpsf_ext`. Instructions to do this can be found at the respective package websites (`WebbPSF <https://webbpsf.readthedocs.io/en/latest/installation.html#installing-the-required-data-files>`_, `WebbPSF_ext <https://github.com/JarronL/webbpsf_ext>`_). Ensure that if you edit your .bashrc file, close and reopen your terminal to fully apply the changes (:code:`source ~/.bashrc` or :code:`source ~/.zshrc` may also work).
 
