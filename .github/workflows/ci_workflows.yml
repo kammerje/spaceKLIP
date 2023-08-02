@@ -46,6 +46,12 @@ jobs:
            tar -xzvf /tmp/minimal-webbpsf-data.tar.gz
            echo "WEBBPSF_PATH=${{github.workspace}}/webbpsf-data" >> $GITHUB_ENV
 
+    - name: Get SpaceKLIP test Data
+      run: |  
+           wget https://stsci.box.com/shared/static/dq4y4r4e376922rw6fyu31pr68owrko7.zip -O /tmp/spaceklip_test_data.zip
+           unzip /tmp/spaceklip_test_data.zip
+           echo "SPACEKLIP_TEST_DATA_PATH=${{github.workspace}}/spaceklip_test_data" >> $GITHUB_ENV
+
     - name: Check conda info
       run: conda info
 

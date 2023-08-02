@@ -5,7 +5,16 @@ import spaceKLIP
 
 import pytest
 
+
+testdatapath = os.getenv('SPACEKLIP_TEST_DATA_PATH')
 testpath = os.path.dirname(os.path.abspath(__file__))
+
+def test_has_test_data():
+
+    assert os.getenv('SPACEKLIP_TEST_DATA_PATH'), "The $SPACEKLIP_TEST_DATA_PATH environment variable must be set"
+    assert os.path.isdir(testdatapath), "The $SPACEKLIP_TEST_DATA_PATH variable must point to a directory that exists"
+    assert len(glob.glob(os.path.join(testdatapath, "*")))>0, "There must be some data files in the $SPACEKLIP_TEST_DATA_PATH folder"
+
 
 @pytest.mark.parametrize('instname', ['nircam', 'miri'])   # Repeat this test for both NIRCam and MIRI
 def test_database_init_and_read(instname):
@@ -17,7 +26,7 @@ def test_database_init_and_read(instname):
         pattern = '*nrca*uncal.fits'
     else:
         pattern = '*mirimage*uncal.fits'
-    fitsfiles = glob.glob(os.path.join(testpath, "test_data", pattern))
+    fitsfiles = glob.glob(os.path.join(testdatapath, pattern))
     output_dir = os.path.join(testpath, 'test_outputs')
 
     db = spaceKLIP.database.Database(output_dir=output_dir)

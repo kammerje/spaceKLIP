@@ -5,13 +5,13 @@ import spaceKLIP
 
 import pytest
 
-testpath = os.path.dirname(os.path.abspath(__file__))
+testdatapath = os.getenv('SPACEKLIP_TEST_DATA_PATH')
 
 def test_utils_read_obs():
     """test the read_obs function
 
     """
-    fitsfiles = glob.glob(os.path.join(testpath, "test_data", '*nrca*calints.fits'))
+    fitsfiles = glob.glob(os.path.join(testdatapath,  '*nrca*calints.fits'))
     fitsfiles.sort()
     fn = fitsfiles[0]
 
