@@ -40,12 +40,6 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
 
-    - name: Install specific branch of webbpsf_ext
-      run:  pip install git+https://github.com/JarronL/webbpsf_ext.git@develop
-
-    - name: Install specific branch of pyklip
-      run:  pip install git+https://bitbucket.org/pyKLIP/pyklip.git@jwst
-
     - name: Get WebbPSF Data
       run: | # Get WebbPSF data files (just a subset of the full dataset!) and set up environment variable
            wget https://stsci.box.com/shared/static/ykkvequ9cbble6qg88ldhjoep4m9ey6x.gz -O /tmp/minimal-webbpsf-data.tar.gz
@@ -55,14 +49,14 @@ jobs:
     - name: Check conda info
       run: conda info
 
-    - name: Run pytest directly
-      if: ${{ ! contains(matrix.toxenv,'docbuild') }}
+    - name: Run tests via tox
+      if: ${{ contains(matrix.toxenv,'test') }}
       run: |
-          pytest
+        tox -e ${{ matrix.toxenv }}
 
     - name: Run docs tests via Tox
       if: ${{ contains(matrix.toxenv,'docbuild') }}
       run: |
         cp $RUNNER_WORKSPACE/spaceKLIP/requirements.txt /tmp/
         tox -e ${{ matrix.toxenv }}
- 
+
