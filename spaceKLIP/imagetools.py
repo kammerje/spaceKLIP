@@ -814,8 +814,19 @@ class ImageTools():
                     # else:
                     # pxdq[(pxdq & 1 == 1) & np.logical_not(pxdq & 512 == 512) & (pxdq_temp == 0)] = 0
                 
+                # update the pixel DQ bit flags for the output files.
+                #  The pxdq variable here is effectively just the DO_NOT_USE flag, discarding other bits.
+                #  We want to make a new dq which retains the other bits as much as possible.
+                #  first, retain all the other bits (bits greater than 1), then add in the new/cleaned DO_NOT_USE bit
+                import jwst.datamodels
+                do_not_use = jwst.datamodels.dqflags.pixel['DO_NOT_USE']
+                new_dq = np.bitwise_and(pxdq.copy(), np.invert(do_not_use))  # retain all other bits except the do_not_use bit
+                new_dq = np.bitwise_or(new_dq, pxdq_temp)  # add in the do_not_use bit from the cleaned version
+                new_dq = new_dq.astype(np.uint32)   # ensure correct output type for saving
+                                                    # (the bitwise steps otherwise return np.int64 which isn't FITS compatible)
+
                 # Write FITS file and PSF mask.
-                fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs)
+                fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, new_dq, head_pri, head_sci, is2d, imshifts, maskoffs)
                 maskfile = ut.write_msk(maskfile, mask, fitsfile)
                 
                 # Update spaceKLIP database.
