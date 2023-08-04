@@ -613,8 +613,8 @@ class ImageTools():
                     #     temp = data[0] - k * sci_bg_data
                     #     test += [temp]
                     # test = np.array(test)
-                    # hdu0 = pyfits.PrimaryHDU(test)
-                    # hdul = pyfits.HDUList([hdu0])
+                    # hdu0 = fits.PrimaryHDU(test)
+                    # hdul = fits.HDUList([hdu0])
                     # hdul.writeto(os.path.join(output_dir, tail[:-5] + '_test.fits'), output_verify='fix', overwrite=True)
                     # hdul.close()
                     
@@ -647,8 +647,8 @@ class ImageTools():
                     #     temp = data[0] - k * ref_bg_data
                     #     test += [temp]
                     # test = np.array(test)
-                    # hdu0 = pyfits.PrimaryHDU(test)
-                    # hdul = pyfits.HDUList([hdu0])
+                    # hdu0 = fits.PrimaryHDU(test)
+                    # hdul = fits.HDUList([hdu0])
                     # hdul.writeto(os.path.join(output_dir, tail[:-5] + '_test.fits'), output_verify='fix', overwrite=True)
                     # hdul.close()
                     

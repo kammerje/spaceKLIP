@@ -12,7 +12,10 @@ import os
 import pdb
 import sys
 
-import astropy.io.fits as pyfits
+import astropy.io.fits as fits
+from astropy.table import Table
+import astropy.units as u
+
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -23,7 +26,6 @@ import pyklip.fm as fm
 import pyklip.fmlib.fmpsf as fmpsf
 import shutil
 
-from astropy.table import Table
 from pyklip import klip, parallelized
 from scipy.ndimage import gaussian_filter, rotate
 from scipy.ndimage import shift as spline_shift
@@ -467,7 +469,7 @@ class AnalysisTools():
                 ww_sci = np.where(self.database.obs[key]['TYPE'] == 'SCI')[0]
                 if date is not None:
                     if date == 'auto':
-                        date = pyfits.getheader(self.database.obs[key]['FITSFILE'][ww_sci[0]], 0)['DATE-BEG']
+                        date = fits.getheader(self.database.obs[key]['FITSFILE'][ww_sci[0]], 0)['DATE-BEG']
                 offsetpsf_func = JWST_PSF(inst,
                                           filt,
                                           image_mask,
@@ -724,11 +726,11 @@ class AnalysisTools():
                                         mute_progression=True)
                     
                     # Open the FM dataset.
-                    with pyfits.open(fmdataset) as hdul:
+                    with fits.open(fmdataset) as hdul:
                         fm_frame = hdul[0].data[klindex]
                         fm_centx = hdul[0].header['PSFCENTX']
                         fm_centy = hdul[0].header['PSFCENTY']
-                    with pyfits.open(klipdataset) as hdul:
+                    with fits.open(klipdataset) as hdul:
                         data_frame = hdul[0].data[klindex]
                         data_centx = hdul[0].header['PSFCENTX']
                         data_centy = hdul[0].header['PSFCENTY']
@@ -1014,7 +1016,7 @@ class AnalysisTools():
                         for filepath in filepaths:
                             ww_file = filenames == os.path.split(filepath)[1]
                             file = os.path.join(output_dir_pk, os.path.split(filepath)[1])
-                            hdul = pyfits.open(file)
+                            hdul = fits.open(file)
                             hdul['SCI'].data = dataset.input[ww_file]
                             hdul.writeto(file, output_verify='fix', overwrite=True)
                             hdul.close()
@@ -1047,9 +1049,9 @@ class AnalysisTools():
                                                   psf_library=dataset.psflib,
                                                   highpass=False,
                                                   verbose=False)
-                        head = pyfits.getheader(self.database.red[key]['FITSFILE'][j], 0)
+                        head = fits.getheader(self.database.red[key]['FITSFILE'][j], 0)
                         temp = os.path.join(output_dir_fm, fileprefix + '-KLmodes-all.fits')
-                        hdul = pyfits.open(temp)
+                        hdul = fits.open(temp)
                         hdul[0].header = head
                         hdul.writeto(temp, output_verify='fix', overwrite=True)
                         hdul.close()
