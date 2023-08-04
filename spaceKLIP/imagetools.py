@@ -1855,8 +1855,10 @@ class ImageTools():
             ax[2].set_ylabel('y-position [pix]')
             ax[2].legend(loc='upper right', fontsize=12)
             ax[2].set_title('Scene overview (1-indexed)')
-            plt.tight_layout()    
-            plt.savefig(os.path.join(output_dir, key + '_recenter.pdf'))
+            plt.tight_layout()
+            output_file = os.path.join(output_dir, key + '_recenter.pdf')
+            plt.savefig(output_file)
+            log.info(f" Plot saved in {output_file}")
             # plt.show()
             plt.close()
         
@@ -2005,8 +2007,8 @@ class ImageTools():
             ax = plt.gca()
             for index, j in enumerate(ww_sci):
                 ax.scatter(shifts_all[index][:, 0] * self.database.obs[key]['PIXSCALE'][j], shifts_all[index][:, 1] * self.database.obs[key]['PIXSCALE'][j], s=5, color=colors[index], marker='o', label='PA = %.0f deg' % self.database.obs[key]['ROLL_REF'][j])
-            ax.axhline(0., color='gray', lw=1)
-            ax.axvline(0., color='gray', lw=1)
+            ax.axhline(0., color='gray', lw=1, zorder=-1)  # set zorder to ensure lines are drawn behind all the scatter points
+            ax.axvline(0., color='gray', lw=1, zorder=-1)
             ax.set_aspect('equal')
             xlim = ax.get_xlim()
             ylim = ax.get_ylim()
@@ -2021,9 +2023,10 @@ class ImageTools():
             ax.set_xlabel('x-shift [mas]')
             ax.set_ylabel('y-shift [mas]')
             ax.legend(loc='upper right')
-            ax.set_title('Science frame alignment')
+            ax.set_title(f'Science frame alignment\nfor {self.database.obs[key]["TARGPROP"][ww_sci[0]]}, {self.database.obs[key]["FILTER"][ww_sci[0]]}')
             output_file = os.path.join(output_dir, key + '_align_sci.pdf')
             plt.savefig(output_file)
+            log.info(f" Plot saved in {output_file}")
             plt.close()
             
             # Plot reference frame alignment.
@@ -2037,7 +2040,7 @@ class ImageTools():
             for index, j in enumerate(ww_ref):
                 this = '%.0f_%.0f' % (database_temp[key]['XOFFSET'][j], database_temp[key]['YOFFSET'][j])
                 if this not in seen:
-                    ax.scatter(shifts_all[index + add][:, 0] * self.database.obs[key]['PIXSCALE'][j], shifts_all[index + add][:, 1] * self.database.obs[key]['PIXSCALE'][j], s=5, color=colors[len(seen)], marker=syms[0], label='dpos %.0f' % (len(seen) + 1))
+                    ax.scatter(shifts_all[index + add][:, 0] * self.database.obs[key]['PIXSCALE'][j], shifts_all[index + add][:, 1] * self.database.obs[key]['PIXSCALE'][j], s=5, color=colors[len(seen)], marker=syms[0], label='dither %.0f' % (len(seen) + 1))
                     ax.hlines(-database_temp[key]['YOFFSET'][j] + yoffset, -database_temp[key]['XOFFSET'][j] + xoffset - 4., -database_temp[key]['XOFFSET'][j] + xoffset + 4., color=colors[len(seen)], lw=1)
                     ax.vlines(-database_temp[key]['XOFFSET'][j] + xoffset, -database_temp[key]['YOFFSET'][j] + yoffset - 4., -database_temp[key]['YOFFSET'][j] + yoffset + 4., color=colors[len(seen)], lw=1)
                     seen += [this]
@@ -2059,10 +2062,9 @@ class ImageTools():
                 ax.set_ylim(np.mean(ylim) - yrng, np.mean(ylim) + yrng)
             ax.set_xlabel('x-shift [mas]')
             ax.set_ylabel('y-shift [mas]')
-            ax.legend(loc='upper right')
-            ax.set_title('Reference frame alignment')
+            ax.legend(loc='upper right', fontsize='small')
+            ax.set_title(f'Reference frame alignment\n showing {len(ww_ref)} PSF refs for {self.database.obs[key]["FILTER"][ww_ref[0]]}')
             output_file = os.path.join(output_dir, key + '_align_ref.pdf')
             plt.savefig(output_file)
+            log.info(f" Plot saved in {output_file}")
             plt.close()
-        
-        pass

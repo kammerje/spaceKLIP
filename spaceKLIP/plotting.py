@@ -231,7 +231,10 @@ def display_coron_image(filename):
     ax.set_xlabel("Pixels", fontsize='small')
     ax.set_ylabel("Pixels", fontsize='small')
     ax.tick_params(labelsize='small')
-    
+
+    ax.text(0.5, 0.99, "PSF Reference" if model.meta.exposure.psf_reference else "Science target",
+            style='italic', fontsize=10, color='white',
+            horizontalalignment='center', verticalalignment='top', transform=ax.transAxes)
     if cube:
         ax.text(0.99, 0.99, f"Showing average of {model.meta.exposure.nints} ints",
                 style='italic', fontsize=10, color='white',
