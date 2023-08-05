@@ -448,6 +448,7 @@ class SpaceTelescope(Data):
         pass
 
 def run_obs(database,
+            restrict_to=None,
             kwargs={},
             subdir='klipsub'):
     """
@@ -528,6 +529,11 @@ def run_obs(database,
     # Loop through concatenations.
     datapaths = []
     for i, key in enumerate(database.obs.keys()):
+
+        # if we limit to only processing some concatenations, check whether this concatenation matches the pattern
+        if (restrict_to is not None) and (restrict_to not in key):
+            continue
+
         log.info('--> Concatenation ' + key)
         
         # Find science and reference files.
