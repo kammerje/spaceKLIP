@@ -212,7 +212,7 @@ class SpaceTelescope(Data):
             
             # Get image centers.
             centers = np.array([obs['CRPIX1'][ww] - 1 + obs['XOFFSET'][ww] / obs['PIXSCALE'][ww], obs['CRPIX2'][ww] - 1 + obs['YOFFSET'][ww] / obs['PIXSCALE'][ww]] * NINTS)
-            
+
             # Get metadata.
             input_all += [data]
             centers_all += [centers]
@@ -224,6 +224,7 @@ class SpaceTelescope(Data):
                 wcs_all += [wcs_hdr.deepcopy()]
             PIXSCALE += [obs['PIXSCALE'][ww]]
             hdul.close()
+
         input_all = np.concatenate(input_all)
         if input_all.ndim != 3:
             raise UserWarning('Some science files do not have matching image shapes')
@@ -242,7 +243,7 @@ class SpaceTelescope(Data):
             iwa_all = 0.5 * np.min(wvs_all) / 6.5 * 180. / np.pi * 3600. * 1000. / PIXSCALE[0]  # pix
         else:
             iwa_all = 1.  # pix
-        
+
         # Recenter science images.
         new_center = np.array(data.shape[1:]) / 2.
         new_center = new_center[::-1]
@@ -309,7 +310,7 @@ class SpaceTelescope(Data):
             
             # Nan out non-science pixels.
             data[pxdq & 512 == 512] = np.nan
-            
+
             # Get image centers.
             centers = np.array([obs['CRPIX1'][ww] - 1 + obs['XOFFSET'][ww] / obs['PIXSCALE'][ww], obs['CRPIX2'][ww] - 1 + obs['YOFFSET'][ww] / obs['PIXSCALE'][ww]] * NINTS)
             

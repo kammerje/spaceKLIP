@@ -494,15 +494,16 @@ class ImageTools():
                             nsplit=1,
                             subdir='bgsub'):
         """
-        Subtract the corresponding background observations from the SCI and REF
+        Median subtract the corresponding background observations from the SCI and REF
         data in the spaceKLIP database.
         
         Parameters
         ----------
-        nsplit : int, optional
+        nsplit : int, list optional
             Number of separate groups into which the SCI/REF and BG data shall
             be split before performing the background subtraction. The default
-            is 1.
+            is 1 (i.e. a median across all images). If a list, this specifies 
+            an independent number of groups for the [SCI, REF] images. 
         subdir : str, optional
             Name of the directory where the data products shall be saved. The
             default is 'bgsub'.
@@ -517,6 +518,14 @@ class ImageTools():
         output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
+
+        # Set split numbers
+        if isinstance(nsplit, int):
+            nsplit_sci = nsplit
+            nsplit_ref = nsplit
+        elif isinstance(nsplit, list):
+            nsplit_sci = nsplit[0]
+            nsplit_ref = nsplit[1]
         
         # Loop through concatenations.
         for i, key in enumerate(self.database.obs.keys()):
@@ -546,10 +555,10 @@ class ImageTools():
                 sci_bg_data = np.concatenate(sci_bg_data)
                 sci_bg_erro = np.concatenate(sci_bg_erro)
                 sci_bg_pxdq = np.concatenate(sci_bg_pxdq)
-                sci_bg_data_split = np.array_split(sci_bg_data, nsplit, axis=0)
-                sci_bg_erro_split = np.array_split(sci_bg_erro, nsplit, axis=0)
-                sci_bg_pxdq_split = np.array_split(sci_bg_pxdq, nsplit, axis=0)
-                for k in range(nsplit):
+                sci_bg_data_split = np.array_split(sci_bg_data, nsplit_sci, axis=0)
+                sci_bg_erro_split = np.array_split(sci_bg_erro, nsplit_sci, axis=0)
+                sci_bg_pxdq_split = np.array_split(sci_bg_pxdq, nsplit_sci, axis=0)
+                for k in range(nsplit_sci):
                     sci_bg_data_split[k] = np.nanmedian(sci_bg_data_split[k], axis=0)
                     nsample = np.sum(np.logical_not(np.isnan(sci_bg_erro_split[k])), axis=0)
                     sci_bg_erro_split[k] = np.true_divide(np.sqrt(np.nansum(sci_bg_erro_split[k]**2, axis=0)), nsample)
@@ -575,10 +584,10 @@ class ImageTools():
                 ref_bg_data = np.concatenate(ref_bg_data)
                 ref_bg_erro = np.concatenate(ref_bg_erro)
                 ref_bg_pxdq = np.concatenate(ref_bg_pxdq)
-                ref_bg_data_split = np.array_split(ref_bg_data, nsplit, axis=0)
-                ref_bg_erro_split = np.array_split(ref_bg_erro, nsplit, axis=0)
-                ref_bg_pxdq_split = np.array_split(ref_bg_pxdq, nsplit, axis=0)
-                for k in range(nsplit):
+                ref_bg_data_split = np.array_split(ref_bg_data, nsplit_ref, axis=0)
+                ref_bg_erro_split = np.array_split(ref_bg_erro, nsplit_ref, axis=0)
+                ref_bg_pxdq_split = np.array_split(ref_bg_pxdq, nsplit_ref, axis=0)
+                for k in range(nsplit_ref):
                     ref_bg_data_split[k] = np.nanmedian(ref_bg_data_split[k], axis=0)
                     nsample = np.sum(np.logical_not(np.isnan(ref_bg_erro_split[k])), axis=0)
                     ref_bg_erro_split[k] = np.true_divide(np.sqrt(np.nansum(ref_bg_erro_split[k]**2, axis=0)), nsample)
@@ -618,10 +627,10 @@ class ImageTools():
                     # hdul.writeto(os.path.join(output_dir, tail[:-5] + '_test.fits'), output_verify='fix', overwrite=True)
                     # hdul.close()
                     
-                    data_split = np.array_split(data, nsplit, axis=0)
-                    erro_split = np.array_split(erro, nsplit, axis=0)
-                    pxdq_split = np.array_split(pxdq, nsplit, axis=0)
-                    for k in range(nsplit):
+                    data_split = np.array_split(data, nsplit_sci, axis=0)
+                    erro_split = np.array_split(erro, nsplit_sci, axis=0)
+                    pxdq_split = np.array_split(pxdq, nsplit_sci, axis=0)
+                    for k in range(nsplit_sci):
                         data_split[k] = data_split[k] - sci_bg_data_split[k]
                         erro_split[k] = np.sqrt(erro_split[k]**2 + sci_bg_erro_split[k]**2)
                         pxdq_split[k][np.logical_not(pxdq_split[k] & 1 == 1) & (sci_bg_pxdq_split[k] != 0)] += 1
@@ -630,10 +639,10 @@ class ImageTools():
                     pxdq = np.concatenate(pxdq_split, axis=0)
                 elif sci and sci_bg_data is None:
                     log.warning('  --> Could not find science background, attempting to use reference background')
-                    data_split = np.array_split(data, nsplit, axis=0)
-                    erro_split = np.array_split(erro, nsplit, axis=0)
-                    pxdq_split = np.array_split(pxdq, nsplit, axis=0)
-                    for k in range(nsplit):
+                    data_split = np.array_split(data, nsplit_sci, axis=0)
+                    erro_split = np.array_split(erro, nsplit_sci, axis=0)
+                    pxdq_split = np.array_split(pxdq, nsplit_sci, axis=0)
+                    for k in range(nsplit_sci):
                         data_split[k] = data_split[k] - ref_bg_data_split[k]
                         erro_split[k] = np.sqrt(erro_split[k]**2 + ref_bg_erro_split[k]**2)
                         pxdq_split[k][np.logical_not(pxdq_split[k] & 1 == 1) & (ref_bg_pxdq_split[k] != 0)] += 1
@@ -652,10 +661,10 @@ class ImageTools():
                     # hdul.writeto(os.path.join(output_dir, tail[:-5] + '_test.fits'), output_verify='fix', overwrite=True)
                     # hdul.close()
                     
-                    data_split = np.array_split(data, nsplit, axis=0)
-                    erro_split = np.array_split(erro, nsplit, axis=0)
-                    pxdq_split = np.array_split(pxdq, nsplit, axis=0)
-                    for k in range(nsplit):
+                    data_split = np.array_split(data, nsplit_ref, axis=0)
+                    erro_split = np.array_split(erro, nsplit_ref, axis=0)
+                    pxdq_split = np.array_split(pxdq, nsplit_ref, axis=0)
+                    for k in range(nsplit_ref):
                         data_split[k] = data_split[k] - ref_bg_data_split[k]
                         erro_split[k] = np.sqrt(erro_split[k]**2 + ref_bg_erro_split[k]**2)
                         pxdq_split[k][np.logical_not(pxdq_split[k] & 1 == 1) & (ref_bg_pxdq_split[k] != 0)] += 1
@@ -664,10 +673,10 @@ class ImageTools():
                     pxdq = np.concatenate(pxdq_split, axis=0)
                 elif not sci and ref_bg_data is None:
                     log.warning('  --> Could not find reference background, attempting to use science background')
-                    data_split = np.array_split(data, nsplit, axis=0)
-                    erro_split = np.array_split(erro, nsplit, axis=0)
-                    pxdq_split = np.array_split(pxdq, nsplit, axis=0)
-                    for k in range(nsplit):
+                    data_split = np.array_split(data, nsplit_ref, axis=0)
+                    erro_split = np.array_split(erro, nsplit_ref, axis=0)
+                    pxdq_split = np.array_split(pxdq, nsplit_ref, axis=0)
+                    for k in range(nsplit_ref):
                         data_split[k] = data_split[k] - sci_bg_data_split[k]
                         erro_split[k] = np.sqrt(erro_split[k]**2 + sci_bg_erro_split[k]**2)
                         pxdq_split[k][np.logical_not(pxdq_split[k] & 1 == 1) & (sci_bg_pxdq_split[k] != 0)] += 1
