@@ -184,14 +184,21 @@ def display_coron_image(filename):
     elif 'KLmodes' in filename:
         # PyKLIP output, we have to open this differently, can't use JWST datamodels
         is_pyklip = True
+        cube_ints = False
+        cube_klmodes = True
 
     elif ('rateints' in filename) or ('calints' in filename):
         modeltype = jwst.datamodels.CubeModel
-        cube = True
+        cube_ints = True
+        cube_klmodes = False
     else:
         modeltype = jwst.datamodels.ImageModel
-        cube = False
+        cube_ints = False
+        cube_klmodes = False
+
+
     if not is_pyklip:
+        # Load in JWST pipeline outputs using jwst.datamodel
 
         model = modeltype(filename)  # cubemodel needed for rateints
         
@@ -203,20 +210,41 @@ def display_coron_image(filename):
             image = model.data
             dq = model.dq
         bunit = model.meta.bunit_data
+        is_psf = model.meta.exposure.psf_reference
 
         annotation_text = f"{model.meta.target.proposer_name}\n{model.meta.instrument.filter}, {model.meta.exposure.readpatt}:{model.meta.exposure.ngroups}:{model.meta.exposure.nints}\n{model.meta.exposure.effective_exposure_time:.2f} s",
+
+        try:
+            wcs = model.meta.wcs
+            # I don't know how to deal with the slightly different API of the GWCS class
+            # so, this is crude, just cast it to a regular WCS and drop the high order distortion stuff
+            # This suffices for our purposes in plotting compass annotations etc.
+            # (There is almost certainly a better way to do this...)
+            wcs = astropy.wcs.WCS(model.meta.wcs.to_fits()[0])
+        except:
+            wcs = model.get_fits_wcs()
+            if cube_ints:
+                wcs = wcs.dropaxis(2)  # drop the nints axis
+
     else:
+        # pyklip outputs aren't compatible with jwst.datamodel
+        # so just load these via astropy.io.fits
+
         image = fits.getdata(filename)
         header= fits.getheader(filename)
         bunit = header['BUNIT']
+        is_psf = False
+        wcs = astropy.wcs.WCS(header)
         if len(image.shape)==3:
             image = image[-1] # select the last KL mode
+            wcs = wcs.dropaxis(2)  # drop the nints axis
         annotation_text = f"pyKLIP results for {header['TARGPROP']}\n{header['FILTER']}\n",
+
     
     bpmask = np.zeros_like(image) + np.nan
     # does this file have DQ extension or not? PyKLIP outputs do not
     if is_pyklip:
-        bpmask[np.isfinite(image)] = 1
+        bpmask[np.isfinite(image)] = 0
     else:
         bpmask[(model.dq[0] & 1) == True] = 1
         
@@ -253,25 +281,21 @@ def display_coron_image(filename):
     ax.set_ylabel("Pixels", fontsize='small')
     ax.tick_params(labelsize='small')
 
-    ax.text(0.5, 0.99, "PSF Reference" if model.meta.exposure.psf_reference else "Science target",
+    if is_psf:
+        labelstr = 'PSF Reference'
+    elif is_pyklip:
+        labelstr = "Science target after pyKLIP PSF sub."
+    else:
+        labelstr = 'Science target'
+
+    ax.text(0.5, 0.99, labelstr,
             style='italic', fontsize=10, color='white',
             horizontalalignment='center', verticalalignment='top', transform=ax.transAxes)
-    if cube:
+    if cube_ints:
         ax.text(0.99, 0.99, f"Showing average of {nints} ints",
                 style='italic', fontsize=10, color='white',
                 horizontalalignment='right', verticalalignment='top', transform=ax.transAxes)
     
-    try:
-        wcs = model.meta.wcs
-        # I don't know how to deal with the slightly different API of the GWCS class
-        # so, this is crude, just cast it to a regular WCS and drop the high order distortion stuff
-        # This suffices for our purposes in plotting compass annotations etc.
-        # (There is almost certainly a better way to do this...)
-        wcs = astropy.wcs.WCS(model.meta.wcs.to_fits()[0])
-    except:
-        wcs = model.get_fits_wcs()
-        if cube:
-            wcs = wcs.dropaxis(2)  # drop the nints axis
     annotate_compass(ax, image, wcs, yf=0.07)
     annotate_scale_bar(ax, image, wcs, yf=0.07)
     
