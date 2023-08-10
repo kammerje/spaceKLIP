@@ -492,7 +492,8 @@ class ImageTools():
        None.
         
         method : str
-            'robust' for a robust median after outlier rejection, using astropy sigma_clipped_stats on the whole image,
+            'robust' for a robust median after masking out bright stars,
+            'sigma_clipped' for another version of robust median using astropy sigma_clipped_stats on the whole image,
             'border' for robust median on the outer border region only, to ignore the bright stellar PSF in the center,
             or 'simple'  for a simple np.nanmedian
         sigma : float
@@ -539,45 +540,48 @@ class ImageTools():
                     data_temp[pxdq & 1 == 1] = np.nan
                     # else:
                     #     data_temp[pxdq & 1 == 1] = np.nan
-                    #====TODO START
                     if method=='robust':
-                        if len(data.shape) == 2:
+                        # Robust median, using a method by Jens
+                        bg_med = np.nanmedian(data_temp, axis=(1, 2), keepdims=True)
+                        bg_std = robust.medabsdev(data_temp, axis=(1, 2), keepdims=True)
+                        bg_ind = data_temp > (bg_med + 5. * bg_std)  # clip bright PSFs for final calculation
+                        data_temp[bg_ind] = np.nan
+                        bg_median = np.nanmedian(data_temp, axis=(1, 2), keepdims=True)
+                    elif method == 'sigma_clipped':
+                        # Robust median using astropy.stats.sigma_clipped_stats
+                            if len(data.shape) == 2:
                             mean, median, stddev = astropy.stats.sigma_clipped_stats(data_temp,sigma=sigma)
                         elif len(data.shape) == 3:
-                            median = np.zeros([data.shape[0], 1, 1])
+                            bg_median = np.zeros([data.shape[0], 1, 1])
                             for iint in range(data.shape[0]):
                                 mean_i, median_i, stddev_i = astropy.stats.sigma_clipped_stats(data[iint])
-                                median[iint] = median_i
+                                bg_median[iint] = median_i
                         else:
                             raise NotImplementedError("data must be 2d or 3d for this method")
                     elif method=='border':
+                        # Use only the outer border region of the image, near the edges of the FOV
                         shape = data.shape
                         if len(shape) == 2:
                             # only one int
                             y, x = np.indices(shape)
                             bordermask = (x < borderwidth) | (x > shape[1] - borderwidth) | (y < borderwidth) | ( y > shape[0] - borderwidth)
-                            mean, median, stddev = astropy.stats.sigma_clipped_stats(data[bordermask])
+                            mean, bg_median, stddev = astropy.stats.sigma_clipped_stats(data[bordermask])
                         elif len(shape) == 3:
                             # perform robust stats on border region of each int
                             y, x = np.indices(data.shape[1:])
                             bordermask = (x < borderwidth) | (x > shape[1] - borderwidth) | (y < borderwidth) | ( y > shape[0] - borderwidth)
-                            median = np.zeros([shape[0],1,1])
+                            bg_median = np.zeros([shape[0],1,1])
                             for iint in range(shape[0]):
                                 mean_i, median_i, stddev_i = astropy.stats.sigma_clipped_stats(data[iint][bordermask])
-                                median[iint] = median_i
+                                bg_median[iint] = median_i
                         else:
                             raise NotImplementedError("data must be 2d or 3d for this method")
                     else:
-                        median = np.nanmedian(data_temp, axis=(1, 2), keepdims=True)
-                    #====TODO STOP
- 
-                    bg_med = np.nanmedian(data_temp, axis=(1, 2), keepdims=True)
-                    bg_std = robust.medabsdev(data_temp, axis=(1, 2), keepdims=True)
-                    bg_ind = data_temp > (bg_med + 5. * bg_std)  # clip bright PSFs for final calculation
-                    data_temp[bg_ind] = np.nan
-                    bg_med = np.nanmedian(data_temp, axis=(1, 2), keepdims=True)
-                    data -= bg_med
-                    log.info('  --> Median subtraction: mean of frame median = %.2f' % np.mean(bg_med))
+                        # Plain vanilla median of the image
+                        bg_median = np.nanmedian(data_temp, axis=(1, 2), keepdims=True)
+
+                    data -= bg_median
+                    log.info('  --> Median subtraction: mean of frame median = %.2f' % np.mean(bg_median))
                 
                 # Write FITS file and PSF mask.
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs)
