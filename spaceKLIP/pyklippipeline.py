@@ -209,7 +209,7 @@ class SpaceTelescope(Data):
             
             # Nan out non-science pixels.
             data[pxdq & 512 == 512] = np.nan
-            
+            a
             # Get image centers.
             centers = np.array([obs['CRPIX1'][ww] - 1 + obs['XOFFSET'][ww] / obs['PIXSCALE'][ww], obs['CRPIX2'][ww] - 1 + obs['YOFFSET'][ww] / obs['PIXSCALE'][ww]] * NINTS)
 
