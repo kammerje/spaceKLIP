@@ -76,7 +76,8 @@ class AnalysisTools():
                      spectral_type='G2V',
                      companions=None,
                      overwrite_crpix=None,
-                     subdir='rawcon'):
+                     subdir='rawcon',
+                     output_filetype="fits"):
         """
         Compute the raw contrast relative to the provided host star flux.
         
@@ -279,11 +280,33 @@ class AnalysisTools():
                 plt.savefig(fitsfile[:-5] + '_rawcon.pdf')
                 # plt.show()
                 plt.close()
-                np.save(fitsfile[:-5] + '_seps.npy', seps)
-                np.save(fitsfile[:-5] + '_cons.npy', cons)
-                if mask is not None:
-                    np.save(fitsfile[:-5] + '_cons_mask.npy', cons_mask)
-        
+
+                if output_filetype.lower()=='fits':
+                    # Save outputs as astropy ECSV text tables
+
+
+                    columns = [seps[0]]
+                    names = ['separation']
+                    for i, klmode in enumerate(klmodes):
+                        columns.append(cons[i])
+                        names.append(f'contrast, N_kl={klmode}')
+                    results_table = Table(columns,
+                                          names=names)
+                    results_table['separation'].unit = u.arcsec
+                    # the following needs debugging:
+                    #for kw in ['TELESCOP', 'INSTRUME', 'SUBARRAY', 'FILTER', 'CORONMSK', 'EXP_TYPE', 'FITSFILE']:
+                    #    results_table.meta[kw] = self.database.red[key][kw][j]
+
+                    output_fn =  fitsfile[:-5]+"_contrast.ecsv"
+                    results_table.write(output_fn, overwrite=True)
+                    print(f"Contrast results saved to {output_fn}")
+                else:
+                    # Save outputs as numpy .npy files
+                    np.save(fitsfile[:-5] + '_seps.npy', seps)
+                    np.save(fitsfile[:-5] + '_cons.npy', cons)
+                    if mask is not None:
+                        np.save(fitsfile[:-5] + '_cons_mask.npy', cons_mask)
+
         pass
     
     def extract_companions(self,
