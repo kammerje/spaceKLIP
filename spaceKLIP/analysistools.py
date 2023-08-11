@@ -174,7 +174,7 @@ class AnalysisTools():
                 else:
                     center = (overwrite_crpix[0] - 1., overwrite_crpix[1] - 1.)  # pix (0-indexed)
                 
-                # Mask coronagraph spiders or glow sticks.
+                # Mask coronagraph spiders, 4QPM edges, etc. 
                 if self.database.red[key]['EXP_TYPE'][j] in ['NRC_CORON']:
                     if 'WB' in self.database.red[key]['CORONMSK'][j]:
                         xr = np.arange(data.shape[-1]) - center[0]
@@ -199,7 +199,64 @@ class AnalysisTools():
                             else:
                                 temp = (pa > pa1) & (pa < pa2)
                             data[:, temp] = np.nan
-                elif self.database.red[key]['EXP_TYPE'][j] in ['MIR_4QPM', 'MIR_LYOT']:
+                elif self.database.red[key]['EXP_TYPE'][j] in ['MIR_4QPM']:
+                    # This is MIRI 4QPM data, want to mask edges. However, close
+                    # to the center you don't have a choice. So, want to use 
+                    # rectangles with a gap in the center. 
+
+                    # Create array and pad slightly
+                    mask = np.zeros_like(data[0])
+                    pad = 5
+                    mask = np.pad(mask, pad)
+
+                    # Upsample array to improve centering. 
+                    samp = 15 #Upsampling factor
+                    mask = mask.repeat(samp, axis=0).repeat(samp, axis=1)
+
+                    # Define rectangle edges
+                    rect_width = 10*samp #pixels
+                    thinrect_width = 2*samp #pixels
+
+                    cent_rect = [(center[0]+pad)*samp,(center[0]+pad)*samp,
+                                    (center[1]+pad)*samp,(center[1]+pad)*samp]
+                    rect = [int(cent_rect[i]-(rect_width/2*(-1)**(i%2))) for i in range(4)]
+                    thinrect = [int(cent_rect[i]-(thinrect_width/2*(-1)**(i%2))) for i in range(4)]
+                    
+                    # Define circle mask for center
+                    circ_rad = 15*samp #pixels
+                    yarr, xarr = np.ogrid[:mask.shape[0], :mask.shape[1]]
+                    rad_dist = np.sqrt((xarr-(center[0]+pad)*samp)**2 + (yarr-(center[1]+pad)*samp)**2)
+                    circ = rad_dist < circ_rad
+
+                    # Loop over images
+                    ww_sci = np.where(self.database.obs[key]['TYPE'] == 'SCI')[0]
+                    for ww in ww_sci:
+                        # Apply cross
+                        roll_ref = self.database.obs[key]['ROLL_REF'][ww]  # deg
+                        temp = np.zeros_like(mask)
+                        temp[:,rect[0]:rect[1]]=1 #Vertical
+                        temp[rect[2]:rect[3],:]=1 #Horizontal
+
+                        # Now ensure center isn't completely masked
+                        temp[circ] = 0
+
+                        # Apply thin cross
+                        temp[:,thinrect[0]:thinrect[1]]=1 #Vertical
+                        temp[thinrect[2]:thinrect[3],:]=1 #Horizontal
+
+                        # Rotate the array, include fixed rotation of FQPM edges
+                        temp = rotate(temp, 90-roll_ref+4.83544897, reshape=False) 
+                        mask += temp
+
+                    # If pixel value too high, should be masked, else set to 1. 
+                    mask[mask>=0.5] = np.nan
+                    mask[mask<0.5] = 1
+
+                    # Downsample, remove padding, and mask data
+                    mask = mask[::samp,::samp]
+                    mask = mask[pad:-pad,pad:-pad]
+                    data *= mask
+                elif self.database.red[key]['EXP_TYPE'][j] in ['MIR_LYOT']:
                     raise NotImplementedError()
                 
                 # Mask companions.
@@ -266,6 +323,7 @@ class AnalysisTools():
                         ax.plot(seps[k], cons[k], color=colors[k % mod], alpha=0.3)
                         ax.plot(seps[k], cons_mask[k], color=colors[k % mod], label=klmodes[k] + ' KL')
                 ax.set_yscale('log')
+                ax.set_ylim([None,1])
                 ax.set_xlabel('Separation [arcsec]')
                 ax.set_ylabel(r'5-$\sigma$ contrast')
                 ax.legend(loc='upper right', ncols=3)
