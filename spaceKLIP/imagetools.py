@@ -1695,8 +1695,8 @@ class ImageTools():
                 log.info('  --> Recenter frames: median required shift = %.2f mas' % np.median(dist))
                 
                 # Write FITS file and PSF mask.
-                head_pri['XOFFSET'] = xoffset
-                head_pri['YOFFSET'] = yoffset
+                head_pri['XOFFSET'] = xoffset / 1e3 #Should be saved in arcseconds for FITS file
+                head_pri['YOFFSET'] = yoffset / 1e3 #Should be saved in arcseconds for FITS file
                 head_sci['CRPIX1'] = crpix1
                 head_sci['CRPIX2'] = crpix2
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs)
@@ -1987,8 +1987,8 @@ class ImageTools():
                         log.warning('  --> The following frames might not be properly aligned: '+str(ww))
                 
                 # Write FITS file and PSF mask.
-                head_pri['XOFFSET'] = xoffset
-                head_pri['YOFFSET'] = yoffset
+                head_pri['XOFFSET'] = xoffset / 1e3 #Should be saved in arcseconds for FITS file
+                head_pri['YOFFSET'] = yoffset / 1e3 #Should be saved in arcseconds for FITS file
                 head_sci['CRPIX1'] = crpix1
                 head_sci['CRPIX2'] = crpix2
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs)
