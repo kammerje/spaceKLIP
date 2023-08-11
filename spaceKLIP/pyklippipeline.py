@@ -12,7 +12,7 @@ import os
 import pdb
 import sys
 
-import astropy.io.fits as pyfits
+from astropy.io import fits 
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -195,7 +195,7 @@ class SpaceTelescope(Data):
         for i, filepath in enumerate(filepaths):
             
             # Read science file.
-            hdul = pyfits.open(filepath)
+            hdul = fits.open(filepath)
             TELESCOP = hdul[0].header['TELESCOP']
             data = hdul['SCI'].data
             pxdq = hdul['DQ'].data
@@ -297,7 +297,7 @@ class SpaceTelescope(Data):
         for i, filepath in enumerate(psflib_filepaths):
             
             # Read reference file.
-            hdul = pyfits.open(filepath)
+            hdul = fits.open(filepath)
             data = hdul['SCI'].data
             pxdq = hdul['DQ'].data
             if data.ndim == 2:
@@ -385,8 +385,8 @@ class SpaceTelescope(Data):
         """
         
         # Make FITS file.
-        hdul = pyfits.HDUList()
-        hdul.append(pyfits.PrimaryHDU(data))
+        hdul = fits.HDUList()
+        hdul.append(fits.PrimaryHDU(data))
         
         # Write all used files to header. Ignore duplicates.
         filenames = np.unique(self.filenames)
@@ -579,9 +579,9 @@ def run_obs(database,
                     
                     # Update reduction header.
                     ww_sci = np.where(database.obs[key]['TYPE'] == 'SCI')[0]
-                    head_sci = pyfits.getheader(database.obs[key]['FITSFILE'][ww_sci[0]], 'SCI')
+                    head_sci = fits.getheader(database.obs[key]['FITSFILE'][ww_sci[0]], 'SCI')
                     head_sci['NAXIS'] = 2
-                    hdul = pyfits.open(datapath)
+                    hdul = fits.open(datapath)
                     hdul[0].header['TELESCOP'] = database.obs[key]['TELESCOP'][ww_sci[0]]
                     hdul[0].header['TARGPROP'] = database.obs[key]['TARGPROP'][ww_sci[0]]
                     hdul[0].header['TARG_RA'] = database.obs[key]['TARG_RA'][ww_sci[0]]
@@ -627,9 +627,9 @@ def run_obs(database,
                         n_roll = 1
                         for j in ww_sci:
                             fitsfile = os.path.split(database.obs[key]['FITSFILE'][j])[1]
-                            head_sci = pyfits.getheader(database.obs[key]['FITSFILE'][j], 'SCI')
+                            head_sci = fits.getheader(database.obs[key]['FITSFILE'][j], 'SCI')
                             ww = [k for k in range(len(dataset._filenames)) if fitsfile in dataset._filenames[k]]
-                            hdul = pyfits.open(datapath)
+                            hdul = fits.open(datapath)
                             if dataset.allints.shape[1] == 1:
                                 hdul[0].data = np.median(dataset.allints[:, :, ww, :, :], axis=(1, 2))
                             else:
@@ -659,7 +659,7 @@ def run_obs(database,
         mask = get_transmission(database.obs[key])
         ww_sci = np.where(database.obs[key]['TYPE'] == 'SCI')[0]
         if mask is not None:
-            hdul = pyfits.open(database.obs[key]['MASKFILE'][ww_sci[0]])
+            hdul = fits.open(database.obs[key]['MASKFILE'][ww_sci[0]])
             hdul[0].data = None
             hdul['SCI'].data = mask
             hdul.writeto(file, output_verify='fix', overwrite=True)
