@@ -25,12 +25,13 @@ import shutil
 
 from astropy.table import Table
 from pyklip import klip, parallelized
+from pyklip.instruments.JWST import JWSTData
 from scipy.ndimage import gaussian_filter, rotate
 from scipy.ndimage import shift as spline_shift
 from spaceKLIP import utils as ut
 from spaceKLIP.psf import get_offsetpsf, JWST_PSF
-from spaceKLIP.pyklippipeline import SpaceTelescope
 from spaceKLIP.starphot import get_stellar_magnitudes, read_spec_file
+from spaceKLIP.pyklippipeline import get_pyklip_filepaths
 
 import logging
 log = logging.getLogger(__name__)
@@ -205,13 +206,13 @@ class AnalysisTools():
                     # rectangles with a gap in the center. 
 
                     # Create array and pad slightly
-                    mask = np.zeros_like(data[0])
+                    nanmask = np.zeros_like(data[0])
                     pad = 5
-                    mask = np.pad(mask, pad)
+                    nanmask = np.pad(nanmask, pad)
 
                     # Upsample array to improve centering. 
                     samp = 15 #Upsampling factor
-                    mask = mask.repeat(samp, axis=0).repeat(samp, axis=1)
+                    nanmask = nanmask.repeat(samp, axis=0).repeat(samp, axis=1)
 
                     # Define rectangle edges
                     rect_width = 10*samp #pixels
@@ -224,7 +225,7 @@ class AnalysisTools():
                     
                     # Define circle mask for center
                     circ_rad = 15*samp #pixels
-                    yarr, xarr = np.ogrid[:mask.shape[0], :mask.shape[1]]
+                    yarr, xarr = np.ogrid[:nanmask.shape[0], :nanmask.shape[1]]
                     rad_dist = np.sqrt((xarr-(center[0]+pad)*samp)**2 + (yarr-(center[1]+pad)*samp)**2)
                     circ = rad_dist < circ_rad
 
@@ -233,7 +234,7 @@ class AnalysisTools():
                     for ww in ww_sci:
                         # Apply cross
                         roll_ref = self.database.obs[key]['ROLL_REF'][ww]  # deg
-                        temp = np.zeros_like(mask)
+                        temp = np.zeros_like(nanmask)
                         temp[:,rect[0]:rect[1]]=1 #Vertical
                         temp[rect[2]:rect[3],:]=1 #Horizontal
 
@@ -246,16 +247,16 @@ class AnalysisTools():
 
                         # Rotate the array, include fixed rotation of FQPM edges
                         temp = rotate(temp, 90-roll_ref+4.83544897, reshape=False) 
-                        mask += temp
+                        nanmask += temp
 
                     # If pixel value too high, should be masked, else set to 1. 
-                    mask[mask>=0.5] = np.nan
-                    mask[mask<0.5] = 1
+                    nanmask[nanmask>=0.5] = np.nan
+                    nanmask[nanmask<0.5] = 1
 
                     # Downsample, remove padding, and mask data
-                    mask = mask[::samp,::samp]
-                    mask = mask[pad:-pad,pad:-pad]
-                    data *= mask
+                    nanmask = nanmask[::samp,::samp]
+                    nanmask = nanmask[pad:-pad,pad:-pad]
+                    data *= nanmask
                 elif self.database.red[key]['EXP_TYPE'][j] in ['MIR_LYOT']:
                     raise NotImplementedError()
                 
@@ -340,6 +341,125 @@ class AnalysisTools():
                 if mask is not None:
                     np.save(fitsfile[:-5] + '_cons_mask.npy', cons_mask)
         
+        pass
+
+    def calibrate_contrast(self,
+                           subdir='calcon',
+                           rawcon_subdir='rawcon',
+                           injection_seps='default',
+                           injection_pas='default',
+                           injection_spacing=None,
+                           ):
+        """ 
+        Compute a calibrated contrast curve relative to the host star flux. 
+       
+        Parameters
+        ----------
+        subdir : str, optional
+            Name of the directory where the data products shall be saved. The
+            default is 'calcon'.
+        rawcon_subdir : str, optional
+            Name of the directory where the raw contrast data products have been 
+            saved. The default is 'rawcon'.
+
+        
+        Returns
+        -------
+        None.
+        """
+
+        # Set output directory.
+        output_dir = os.path.join(self.database.output_dir, subdir)
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+
+        # Load in raw contrast file without contrast correction
+        rawcon_dir = os.path.join(self.database.output_dir, rawcon_subdir)
+        if not os.path.exists(rawcon_dir):
+            raise TypeError('Raw contrast must be calculated first. "rawcon" subdirectory not found.')
+
+        # Loop through concatenations.
+        for i, key in enumerate(self.database.red.keys()):
+            log.info('--> Concatenation ' + key)
+
+            # Need to generate the offset PSF we'll be injecting. Best to do
+            # this per concatenation to save time. 
+            offsetpsf = get_offsetpsf(self.database.obs[key])
+
+            # Loop through FITS files.
+            nfitsfiles = len(self.database.red[key])
+            for j in range(nfitsfiles):
+
+                # Read FITS file and PSF mask.
+                fitsfile = self.database.red[key]['FITSFILE'][j]
+                data, head_pri, head_sci, is2d = ut.read_red(fitsfile)
+                maskfile = self.database.red[key]['MASKFILE'][j]
+                mask = ut.read_msk(maskfile)
+
+                # Get the raw contrast information
+                file_str = fitsfile.split('/')[-1]
+                seps_file = file_str.replace('.fits', '_seps.npy') #Arcseconds
+                rawcons_file = file_str.replace('.fits', '_cons.npy')
+
+                rawseps = np.load(os.path.join(rawcon_dir,seps_file))
+                rawcons = np.load(os.path.join(rawcon_dir,rawcons_file))
+                
+                # Read Stage 2 files and make pyKLIP dataset
+                filepaths, psflib_filepaths = get_pyklip_filepaths(self.database, key)
+                pyklip_dataset = JWSTData(filepaths, psflib_filepaths)
+
+                ### Now want to perform the injection and recovery of companions. 
+                # Define the seps and PAs to inject companions at
+                if injection_seps == 'default':
+                    if '4QPM' in self.database.red[key]['CORONMSK'][j]:
+                        inj_seps = [3.0, 4.0, 5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 25., 30.0, 35.0, 40.0]
+                    elif 'WB' in self.database.red[key]['CORONMSK'][j]:
+                        inj_seps = [2.0, 4.0, 6.0, 8.0, 10.0, 12.5, 15.0, 17.5, 20.0, 25.0, 30.0]
+                    else:
+                        inj_seps = [3.0, 4.0, 5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 25., 30.0, 35.0, 40.0]
+                else:
+                    inj_seps = injection_seps
+                if injection_pas == 'default':
+                    if '4QPM' in self.database.red[key]['CORONMSK'][j]:
+                        inj_pas = [57.5,147.5,237.5,320.5]
+                    elif 'WB' in self.database.red[key]['CORONMSK'][j]:
+                        inj_pas = [45., 135., 225., 315.]
+                    else:
+                        inj_pas = [0, 60, 120, 180, 240, 300]
+                else:
+                    inj_pas = injection_pas
+
+                # Need to get exactly the same KLIP arguments that were used for this subtraction.
+                klip_args = {}
+                klip_args['mode'] = self.database.red[key]['MODE'][j]
+                klip_args['annuli'] = self.database.red[key]['ANNULI'][j]
+                klip_args['subsections'] = self.database.red[key]['SUBSECTS'][j]
+                klip_args['numbasis'] = [int(nb) for nb in self.database.red[key]['KLMODES'][j].split(',')]
+                klip_args['algo'] = 'klip' #Currently not logged, may need changing in future. 
+                klip_args['maxnumbasis'] = np.max(klip_args['numbasis'])
+                inj_subdir = klip_args['mode'] + '_NANNU' + str(klip_args['annuli']) \
+                            + '_NSUBS' + str(klip_args['subsections']) + '_' + key +'/'
+                klip_args['movement'] = 1 #Currently not logged, fix later. 
+                klip_args['calibrate_flux'] = False
+                klip_args['highpass'] = False
+                klip_args['verbose'] = False
+                inj_output_dir = os.path.join(output_dir, inj_subdir)
+                if not os.path.exists(inj_output_dir):
+                    os.makedirs(inj_output_dir)
+                klip_args['outputdir'] = inj_output_dir
+
+                inj_rec = inject_and_recover(pyklip_dataset, 
+                                             injection_psf=offsetpsf,
+                                             injection_seps=inj_seps,
+                                             injection_pas=inj_pas,
+                                             injection_spacing=injection_spacing,
+                                             klip_args=klip_args)
+
+                # Routine to average / median the calibrated flux losses.
+
+                # Save contrast files
+
+                # Create plot of everything
         pass
     
     def extract_companions(self,
@@ -462,30 +582,12 @@ class AnalysisTools():
                     resolution *= self.database.obs[key]['BLURFWHM'][j]
                 
                 # Find science and reference files.
-                filepaths = []
-                psflib_filepaths = []
-                first_sci = True
-                nints = []
-                nfitsfiles_obs = len(self.database.obs[key])
-                for k in range(nfitsfiles_obs):
-                    if self.database.obs[key]['TYPE'][k] == 'SCI':
-                        filepaths += [self.database.obs[key]['FITSFILE'][k]]
-                        if first_sci:
-                            first_sci = False
-                        else:
-                            nints += [self.database.obs[key]['NINTS'][k]]
-                    elif self.database.obs[key]['TYPE'][k] == 'REF':
-                        psflib_filepaths += [self.database.obs[key]['FITSFILE'][k]]
-                        nints += [self.database.obs[key]['NINTS'][k]]
-                filepaths = np.array(filepaths)
-                psflib_filepaths = np.array(psflib_filepaths)
-                nints = np.array(nints)
-                maxnumbasis = np.sum(nints)
+                filepaths, psflib_filepaths, maxnumbasis = get_pyklip_filepaths(database, key, return_maxbasis=True)
                 if 'maxnumbasis' not in kwargs_temp.keys() or kwargs_temp['maxnumbasis'] is None:
                     kwargs_temp['maxnumbasis'] = maxnumbasis
                 
                 # Initialize pyKLIP dataset.
-                dataset = SpaceTelescope(self.database.obs[key], filepaths, psflib_filepaths)
+                dataset = JWSTData(filepaths, psflib_filepaths)
                 kwargs_temp['dataset'] = dataset
                 kwargs_temp['aligned_center'] = dataset._centers[0]
                 kwargs_temp['psf_library'] = dataset.psflib
@@ -1120,3 +1222,124 @@ class AnalysisTools():
                     dataset = dataset_orig
         
         pass
+
+def inject_and_recover(raw_dataset, 
+                       injection_psf, 
+                       injection_seps,
+                       injection_pas,
+                       injection_spacing,
+                       klip_args):
+    '''
+    Function to inject synthetic PSFs into a pyKLIP dataset, then perform
+    KLIP subtraction, then calculate the flux losses from the KLIP process. 
+
+    Parameters
+    ----------
+    raw_dataset : pyKLIP dataset
+        A pyKLIP dataset which companions will be injected into and KLIP
+        will be performed on. 
+    injection_psf : 2D-array
+        The PSF of the companion to be injected. 
+    injection_seps : 1D-array
+        List of separations to inject companions at (pixels). 
+    injection_pas : 1D-array
+        List of position angles to inject companions at (degrees).  
+    injection_spacing : int, None
+        Spacing between companions injected in a single image. If companions
+        are too close then it can pollute the recovered flux. Set to 'None'
+        to inject only one companion at a time (pixels).
+    klip_args : dict
+        Arguments to be passed into the KLIP subtraction process
+
+    Returns
+    -------
+    TBD
+
+    '''
+
+    # Initialise some arrays and quantities
+    Nsep = len(injection_seps)
+    Npa = len(injection_pas)
+    list_of_injected = []
+    all_injected = False
+
+    # Want to keep going until a companion has been injected and recovered
+    # at each given separation and position angle.
+    while all_injected == False:
+        # Make a copy of the dataset
+        dataset = copy.deepcopy(raw_dataset)
+        # Define array to keep track of currently injected positions 
+        current_injected = [] 
+        # Loop over separations
+        for i in range(Nsep):
+            sep = injection_seps[i]
+            # Loop over position angles
+            for j in range(Npa):
+                pa = injection_pas[j]
+
+                # Get specific id for this position
+                pos_id = i*Npa+j
+                if pos_id in list_of_injected:
+                    # Already injected at this position, skip
+                    continue
+
+                # Need to check if this position is too close to already
+                # injected positions. By default, assume we want to inject. 
+                inject_flag = True
+                for inj_id in current_injected:
+                    # If we don't want to inject more than one companion
+                    # per image, then flag to not inject. 
+                    if injection_spacing == None:
+                        inject_flag=False
+                        break
+
+                    # Get separation and PA for injected position
+                    inj_j = inj_id % Npa 
+                    inj_i = (inj_id - inj_j) // Npa 
+                    inj_sep = injection_seps[inj_i]
+                    inj_pa = injection_pas[inj_j]
+
+                    # If something was injected close to the coronagraph
+                    # don't inject anything else in this image. 
+                    if inj_sep < 5:
+                        inject_flag = False
+                        break
+
+                    # Calculate distance between this injected position
+                    # and the new position we'd also like to inject at.
+                    # If object is too close to something that's already
+                    # injected, we don't want to inject.
+                    dist = np.sqrt(sep**2+inj_sep**2
+                            -2*sep*inj_sep*np.cos(np.deg2rad(inj_pa-pa)))
+                    if dist < injection_spacing:
+                        inject_flag = False
+                        break
+
+                # If this position survived the filtering, inject into images
+                if inject_flag == True:
+                    # Mark as injected in this dataset and overall. 
+                    current_injected += [pos_id]
+                    list_of_injected += [pos_id]
+                    
+                    # Injected PSF needs to be a 3D array that matches dataset
+                    inj_psf_3d = np.array([injection_psf*1000 for k in range(dataset.input.shape[0])])
+                    
+                    # Inject the PSF
+                    fakes.inject_planet(frames=dataset.input, centers=dataset.centers, inputflux=inj_psf_3d,
+                        astr_hdrs=dataset.wcs, radius=sep, pa=pa, stampsize=65)
+
+        # Still in the while loop, need to run KLIP on the dataset we
+        # have injected companions into. 
+        parallelized.klip_dataset(dataset=dataset,
+                                  psf_library=dataset.psflib,
+                                  fileprefix='INJ_SEP{:.1f}_PA{:.1f}'.format(sep, pa),
+                                  **klip_args)
+
+        print(current_injected)
+
+        if len(list_of_injected) == Nsep*Npa:
+            all_injected = True
+    exit()
+
+
+    return 0,0,0,0

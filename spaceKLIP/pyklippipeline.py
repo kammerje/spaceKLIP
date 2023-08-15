@@ -117,26 +117,7 @@ def run_obs(database,
     for i, key in enumerate(database.obs.keys()):
         log.info('--> Concatenation ' + key)
         
-        # Find science and reference files.
-        filepaths = []
-        psflib_filepaths = []
-        first_sci = True
-        nints = []
-        nfitsfiles = len(database.obs[key])
-        for j in range(nfitsfiles):
-            if database.obs[key]['TYPE'][j] == 'SCI':
-                filepaths += [database.obs[key]['FITSFILE'][j]]
-                if first_sci:
-                    first_sci = False
-                else:
-                    nints += [database.obs[key]['NINTS'][j]]
-            elif database.obs[key]['TYPE'][j] == 'REF':
-                psflib_filepaths += [database.obs[key]['FITSFILE'][j]]
-                nints += [database.obs[key]['NINTS'][j]]
-        filepaths = np.array(filepaths)
-        psflib_filepaths = np.array(psflib_filepaths)
-        nints = np.array(nints)
-        maxnumbasis = np.sum(nints)
+        filepaths, psflib_filepaths, maxnumbasis = get_pyklip_filepaths(database, key, return_maxbasis=True)
         if 'maxnumbasis' not in kwargs_temp.keys() or kwargs_temp['maxnumbasis'] is None:
             kwargs_temp['maxnumbasis'] = maxnumbasis
         
@@ -255,3 +236,54 @@ def run_obs(database,
     database.read_jwst_s3_data(datapaths)
     
     pass
+
+
+def get_pyklip_filepaths(database, key, return_maxbasis=False):
+    '''
+    Quick wrapper function to get the filepath information (in addition
+    to the maxnumbasis) for pyKLIP from a spaceKLIP database. 
+
+    Parameters
+    ----------
+    database : spaceKLIP.Database
+        SpaceKLIP database on which pyKLIP shall be run.
+    key : str
+        Key for the concatenation of interest in the spaceKLIP database
+    return_maxbasis : bool, optional
+        Toggle for whether to additionally return the 
+        maximum number of basis vectors. 
+
+    Returns
+    -------
+    filepaths : 1D-array 
+        List of science image file names
+    psflib_filepaths : 1D-array 
+        List of reference image file names
+    maxnumbasis : int, optional
+        The maximum number of basis vectors available. 
+    '''
+
+    filepaths = []
+    psflib_filepaths = []
+    first_sci = True
+    nints = []
+    nfitsfiles = len(database.obs[key])
+    for j in range(nfitsfiles):
+        if database.obs[key]['TYPE'][j] == 'SCI':
+            filepaths += [database.obs[key]['FITSFILE'][j]]
+            if first_sci:
+                first_sci = False
+            else:
+                nints += [database.obs[key]['NINTS'][j]]
+        elif database.obs[key]['TYPE'][j] == 'REF':
+            psflib_filepaths += [database.obs[key]['FITSFILE'][j]]
+            nints += [database.obs[key]['NINTS'][j]]
+    filepaths = np.array(filepaths)
+    psflib_filepaths = np.array(psflib_filepaths)
+    nints = np.array(nints)
+    maxnumbasis = np.sum(nints)
+
+    if return_maxbasis:
+        return filepaths, psflib_filepaths, maxnumbasis
+    else:
+        return filepaths, psflib_filepaths
