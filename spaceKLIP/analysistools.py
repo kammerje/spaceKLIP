@@ -12,7 +12,7 @@ import os
 import pdb
 import sys
 
-import astropy.io.fits as pyfits
+import astropy.io.fits as fits
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -28,6 +28,7 @@ from pyklip import klip, parallelized
 from pyklip.instruments.JWST import JWSTData
 from scipy.ndimage import gaussian_filter, rotate
 from scipy.ndimage import shift as spline_shift
+from scipy.interpolate import interp1d
 from spaceKLIP import utils as ut
 from spaceKLIP.psf import get_offsetpsf, JWST_PSF
 from spaceKLIP.starphot import get_stellar_magnitudes, read_spec_file
@@ -119,6 +120,16 @@ class AnalysisTools():
         output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
+
+        # Copy the starfile that will be used into this directory
+        starfile_type = starfile.split('.')[-1]
+        new_starfile_path = output_dir+'/user_starfile.'+starfile_type
+        header = '#'+starfile.split('/')[-1] + ' /// {}'.format(spectral_type)+'\n'
+        with open(new_starfile_path, 'w') as new_starfile:
+            with open(starfile, 'r') as orig_starfile:
+                new_starfile.write(header)
+                for line in orig_starfile.readlines():
+                    new_starfile.write(line)
         
         # Loop through concatenations.
         for i, key in enumerate(self.database.red.keys()):
@@ -346,9 +357,11 @@ class AnalysisTools():
     def calibrate_contrast(self,
                            subdir='calcon',
                            rawcon_subdir='rawcon',
+                           companions=None,
                            injection_seps='default',
                            injection_pas='default',
-                           injection_spacing=None,
+                           injection_flux_sigma=20,
+                           multi_injection_spacing=None,
                            ):
         """ 
         Compute a calibrated contrast curve relative to the host star flux. 
@@ -361,19 +374,43 @@ class AnalysisTools():
         rawcon_subdir : str, optional
             Name of the directory where the raw contrast data products have been 
             saved. The default is 'rawcon'.
+        companions : list of list of three float, optional
+            List of companions to be masked before computing the raw contrast.
+            For each companion, there should be a three element list containing
+            [RA offset (arcsec), Dec offset (arcsec), mask radius (lambda/D)].
+            The default is None.
+        injection_seps : 1D-array
+            List of separations to inject companions at (arcsec). 
+        injection_pas : 1D-array
+            List of position angles to inject companions at (degrees).  
+        injection_flux_sigma : float
+            The peak flux of all injected companions in units of sigma, relative 
+            to the 1sigma contrast at the injected separation. 
+        multi_injection_spacing : int, None
+            Spacing between companions injected in a single image. If companions
+            are too close then it can pollute the recovered flux. Set to 'None'
+            to inject only one companion at a time (lambda/D).
 
-        
         Returns
         -------
         None.
         """
+
+        # Check input.
+        if companions is not None:
+            if not isinstance(companions[0], list):
+                if len(companions) == 3:
+                    companions = [companions]
+            for i in range(len(companions)):
+                if len(companions[i]) != 3:
+                    raise UserWarning('There should be three elements for each companion in the companions list')
 
         # Set output directory.
         output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
-        # Load in raw contrast file without contrast correction
+        # Get raw contrast directory 
         rawcon_dir = os.path.join(self.database.output_dir, rawcon_subdir)
         if not os.path.exists(rawcon_dir):
             raise TypeError('Raw contrast must be calculated first. "rawcon" subdirectory not found.')
@@ -396,17 +433,43 @@ class AnalysisTools():
                 maskfile = self.database.red[key]['MASKFILE'][j]
                 mask = ut.read_msk(maskfile)
 
-                # Get the raw contrast information
+                # Get the raw contrast information without mask correction
                 file_str = fitsfile.split('/')[-1]
                 seps_file = file_str.replace('.fits', '_seps.npy') #Arcseconds
                 rawcons_file = file_str.replace('.fits', '_cons.npy')
 
                 rawseps = np.load(os.path.join(rawcon_dir,seps_file))
                 rawcons = np.load(os.path.join(rawcon_dir,rawcons_file))
-                
+
                 # Read Stage 2 files and make pyKLIP dataset
                 filepaths, psflib_filepaths = get_pyklip_filepaths(self.database, key)
                 pyklip_dataset = JWSTData(filepaths, psflib_filepaths)
+
+                # Compute the resolution element. Account for possible blurring.
+                pxsc_arcsec = self.database.red[key]['PIXSCALE'][j] / 1000.  # arcsec
+                pxsc_rad = pxsc_arcsec / 3600. / 180. * np.pi  # rad
+                if self.database.red[key]['TELESCOP'][j] == 'JWST':
+                    if self.database.red[key]['EXP_TYPE'][j] in ['NRC_CORON']:
+                        diam = 5.2
+                    else:
+                        diam = 6.5
+                else:
+                    raise UserWarning('Data originates from unknown telescope')
+                resolution = 1e-6 * self.database.red[key]['CWAVEL'][j] / diam / pxsc_rad  # pix
+                if not np.isnan(self.database.obs[key]['BLURFWHM'][j]):
+                    resolution *= self.database.obs[key]['BLURFWHM'][j]
+                resolution_fwhm = 1.025*resolution
+
+                # Get stellar magnitudes and filter zero points, but use the same file as rawcon
+                starfile = os.path.join(rawcon_dir, 'user_starfile.txt')
+                with open(starfile) as sf:
+                    spectral_type = sf.readline().strip('\n').split(' /// ')[-1]
+                mstar, fzero = get_stellar_magnitudes(starfile, 
+                                                      spectral_type, 
+                                                      self.database.red[key]['INSTRUME'][j], 
+                                                      output_dir=output_dir)  # vegamag, Jy
+                filt = self.database.red[key]['FILTER'][j]
+                fstar = fzero[filt] / 10.**(mstar[filt] / 2.5) / 1e6 * np.max(offsetpsf)  # MJy
 
                 ### Now want to perform the injection and recovery of companions. 
                 # Define the seps and PAs to inject companions at
@@ -419,15 +482,42 @@ class AnalysisTools():
                         inj_seps = [3.0, 4.0, 5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 25., 30.0, 35.0, 40.0]
                 else:
                     inj_seps = injection_seps
+                inj_seps_pix = inj_seps / pxsc_arcsec #Convert separation to pixels
                 if injection_pas == 'default':
                     if '4QPM' in self.database.red[key]['CORONMSK'][j]:
                         inj_pas = [57.5,147.5,237.5,320.5]
                     elif 'WB' in self.database.red[key]['CORONMSK'][j]:
-                        inj_pas = [45., 135., 225., 315.]
+                        inj_pas = [45.,135.,225.,315.]
                     else:
-                        inj_pas = [0, 60, 120, 180, 240, 300]
+                        inj_pas = [0,60,120,180,240,300]
                 else:
                     inj_pas = injection_pas
+
+                # Determine the fluxes we want to inject the companions at. 
+                # Base it on the contrast for the desired separations. Use the
+                # contrast with the highest KL modes. 
+                contrast_interp = interp1d(rawseps[-1], rawcons[-1])
+                inj_cons = contrast_interp(inj_seps)
+                inj_fluxes = inj_cons*fstar*((180./np.pi)*3600.)**2/pxsc_arcsec**2 # MJy/sr
+                inj_fluxes *= injection_flux_sigma/5 # Scale to an N sigma peak flux
+
+                # Going to redefine companion locations in terms of pixels
+                companions_pix = []
+                if companions is not None:
+                    for k in range(len(companions)):
+                        ra, dec, rad = companions[k]  # arcsec, arcsec, lambda/D
+                        ra_pix = ra / pxsc_arcsec
+                        dec_pix = dec / pxsc_arcsec
+                        rad_pix = rad * resolution  # pix
+                        companions_pix.append([ra_pix, dec_pix, rad_pix])
+                else:
+                    companions_pix = None
+
+                # Redefine the multi_injection_spacing in terms of pixels
+                if multi_injection_spacing is not None:
+                    injection_spacing_pix = multi_injection_spacing*resolution
+                else:
+                    injection_spacing_pix = multi_injection_spacing
 
                 # Need to get exactly the same KLIP arguments that were used for this subtraction.
                 klip_args = {}
@@ -450,10 +540,13 @@ class AnalysisTools():
 
                 inj_rec = inject_and_recover(pyklip_dataset, 
                                              injection_psf=offsetpsf,
-                                             injection_seps=inj_seps,
+                                             injection_seps=inj_seps_pix,
                                              injection_pas=inj_pas,
-                                             injection_spacing=injection_spacing,
-                                             klip_args=klip_args)
+                                             injection_spacing=injection_spacing_pix,
+                                             injection_fluxes=inj_fluxes, 
+                                             klip_args=klip_args,
+                                             retrieve_fwhm=resolution_fwhm,
+                                             true_companions=companions_pix)
 
                 # Routine to average / median the calibrated flux losses.
 
@@ -627,7 +720,7 @@ class AnalysisTools():
                 ww_sci = np.where(self.database.obs[key]['TYPE'] == 'SCI')[0]
                 if date is not None:
                     if date == 'auto':
-                        date = pyfits.getheader(self.database.obs[key]['FITSFILE'][ww_sci[0]], 0)['DATE-BEG']
+                        date = fits.getheader(self.database.obs[key]['FITSFILE'][ww_sci[0]], 0)['DATE-BEG']
                 offsetpsf_func = JWST_PSF(inst,
                                           filt,
                                           image_mask,
@@ -884,11 +977,11 @@ class AnalysisTools():
                                         mute_progression=True)
                     
                     # Open the FM dataset.
-                    with pyfits.open(fmdataset) as hdul:
+                    with fits.open(fmdataset) as hdul:
                         fm_frame = hdul[0].data[klindex]
                         fm_centx = hdul[0].header['PSFCENTX']
                         fm_centy = hdul[0].header['PSFCENTY']
-                    with pyfits.open(klipdataset) as hdul:
+                    with fits.open(klipdataset) as hdul:
                         data_frame = hdul[0].data[klindex]
                         data_centx = hdul[0].header['PSFCENTX']
                         data_centy = hdul[0].header['PSFCENTY']
@@ -1174,7 +1267,7 @@ class AnalysisTools():
                         for filepath in filepaths:
                             ww_file = filenames == os.path.split(filepath)[1]
                             file = os.path.join(output_dir_pk, os.path.split(filepath)[1])
-                            hdul = pyfits.open(file)
+                            hdul = fits.open(file)
                             hdul['SCI'].data = dataset.input[ww_file]
                             hdul.writeto(file, output_verify='fix', overwrite=True)
                             hdul.close()
@@ -1207,9 +1300,9 @@ class AnalysisTools():
                                                   psf_library=dataset.psflib,
                                                   highpass=False,
                                                   verbose=False)
-                        head = pyfits.getheader(self.database.red[key]['FITSFILE'][j], 0)
+                        head = fits.getheader(self.database.red[key]['FITSFILE'][j], 0)
                         temp = os.path.join(output_dir_fm, fileprefix + '-KLmodes-all.fits')
-                        hdul = pyfits.open(temp)
+                        hdul = fits.open(temp)
                         hdul[0].header = head
                         hdul.writeto(temp, output_verify='fix', overwrite=True)
                         hdul.close()
@@ -1223,12 +1316,15 @@ class AnalysisTools():
         
         pass
 
-def inject_and_recover(raw_dataset, 
+def inject_and_recover(raw_dataset,
                        injection_psf, 
                        injection_seps,
                        injection_pas,
                        injection_spacing,
-                       klip_args):
+                       injection_fluxes,
+                       klip_args,
+                       retrieve_fwhm,
+                       true_companions=None):
     '''
     Function to inject synthetic PSFs into a pyKLIP dataset, then perform
     KLIP subtraction, then calculate the flux losses from the KLIP process. 
@@ -1238,6 +1334,7 @@ def inject_and_recover(raw_dataset,
     raw_dataset : pyKLIP dataset
         A pyKLIP dataset which companions will be injected into and KLIP
         will be performed on. 
+    true_companions :
     injection_psf : 2D-array
         The PSF of the companion to be injected. 
     injection_seps : 1D-array
@@ -1248,8 +1345,19 @@ def inject_and_recover(raw_dataset,
         Spacing between companions injected in a single image. If companions
         are too close then it can pollute the recovered flux. Set to 'None'
         to inject only one companion at a time (pixels).
+    injection_fluxes : 1D-array
+        Same size as injection_seps, units should correspond to the image
+        units. This is the *peak* flux of the injection. 
     klip_args : dict
         Arguments to be passed into the KLIP subtraction process
+    retrieve_fwhm : float
+        Full-Width Half-Maximum value to estimate the 2D gaussian fit when
+        retrieving the companion fluxes. 
+    true_companions : list of list of three float, optional
+        List of real companions to be masked before computing the raw contrast.
+        For each companion, there should be a three element list containing
+        [RA offset (pixels), Dec offset (pixels), mask radius (pixels)].
+        The default is None.
 
     Returns
     -------
@@ -1262,9 +1370,34 @@ def inject_and_recover(raw_dataset,
     Npa = len(injection_pas)
     list_of_injected = []
     all_injected = False
+    all_seps = []
+    all_pas = []
+    all_inj_fluxes = []
+    all_retr_fluxes = []
 
+    # Ensure provided PSF is normalised to a peak intensity of 1
+    injection_psf_norm = injection_psf / np.max(injection_psf)
+
+    # Don't want to inject near any known companions, eliminate any
+    # of these positions straight away. 
+    if true_companions is not None:
+        for tcomp in true_companions:
+            tcomp_ra, tcomp_de, tcomp_rad = tcomp
+            for i in range(Nsep):
+                for j in range(Npa):
+                    pos_id = i*Npa+j
+                    # Convert position to x-y (RA-DEC) offset in pixels
+                    inj_ra = injection_seps[i]*np.sin(np.deg2rad(injection_pas[j])) # pixels
+                    inj_de = injection_seps[i]*np.cos(np.deg2rad(injection_pas[j])) # pixels
+                    # Calculate distance to companion
+                    dist = np.sqrt((tcomp_ra-inj_ra)**2+(tcomp_de-inj_de)**2)
+                    #Check if too close, if so, lie to the code and say its already injected
+                    if dist < tcomp_rad:
+                        list_of_injected += [pos_id]
+                
     # Want to keep going until a companion has been injected and recovered
     # at each given separation and position angle.
+    counter = 1
     while all_injected == False:
         # Make a copy of the dataset
         dataset = copy.deepcopy(raw_dataset)
@@ -1272,10 +1405,11 @@ def inject_and_recover(raw_dataset,
         current_injected = [] 
         # Loop over separations
         for i in range(Nsep):
-            sep = injection_seps[i]
+            new_sep = injection_seps[i]
+            new_flux = injection_fluxes[i]
             # Loop over position angles
             for j in range(Npa):
-                pa = injection_pas[j]
+                new_pa = injection_pas[j]
 
                 # Get specific id for this position
                 pos_id = i*Npa+j
@@ -1309,8 +1443,8 @@ def inject_and_recover(raw_dataset,
                     # and the new position we'd also like to inject at.
                     # If object is too close to something that's already
                     # injected, we don't want to inject.
-                    dist = np.sqrt(sep**2+inj_sep**2
-                            -2*sep*inj_sep*np.cos(np.deg2rad(inj_pa-pa)))
+                    dist = np.sqrt(new_sep**2+inj_sep**2
+                            -2*new_sep*inj_sep*np.cos(np.deg2rad(inj_pa-new_pa)))
                     if dist < injection_spacing:
                         inject_flag = False
                         break
@@ -1322,24 +1456,66 @@ def inject_and_recover(raw_dataset,
                     list_of_injected += [pos_id]
                     
                     # Injected PSF needs to be a 3D array that matches dataset
-                    inj_psf_3d = np.array([injection_psf*1000 for k in range(dataset.input.shape[0])])
-                    
+                    inj_psf_3d = np.array([injection_psf_norm*new_flux for k in range(dataset.input.shape[0])])
+          
                     # Inject the PSF
                     fakes.inject_planet(frames=dataset.input, centers=dataset.centers, inputflux=inj_psf_3d,
-                        astr_hdrs=dataset.wcs, radius=sep, pa=pa, stampsize=65)
+                        astr_hdrs=dataset.wcs, radius=new_sep, pa=new_pa, stampsize=65)
 
         # Still in the while loop, need to run KLIP on the dataset we
         # have injected companions into. 
+        Ninjected = len(current_injected)
+        fileprefix = 'INJ_ITER{}_{}COMP'.format(counter, Ninjected)
         parallelized.klip_dataset(dataset=dataset,
                                   psf_library=dataset.psflib,
-                                  fileprefix='INJ_SEP{:.1f}_PA{:.1f}'.format(sep, pa),
+                                  fileprefix=fileprefix,
                                   **klip_args)
 
-        print(current_injected)
+        # Now need to recover the flux by fitting a 2D Gaussian, mainly interested in the peak
+        # flux so this is an okay approximation. Could improve in the future. 
+        klipped_file = klip_args['outputdir'] + fileprefix + '-KLmodes-all.fits'
+        with fits.open(klipped_file) as hdul:
+            klipped_data = hdul[0].data
+            frame_ids = range(klipped_data.shape[0])
+            centers = [[hdul[0].header['PSFCENTX'], hdul[0].header['PSFCENTY']] for c in frame_ids]
+            # Get fluxes for all companions that were injected, for all KL modes used. 
+            for inj_id in current_injected:
+                inj_j = inj_id % Npa 
+                inj_i = (inj_id - inj_j) // Npa 
+                inj_sep = injection_seps[inj_i]
+                inj_pa = injection_pas[inj_j]
+                inj_flux = injection_fluxes[inj_i]
+                retrieved_fluxes = fakes.retrieve_planet_flux(frames=klipped_data, 
+                                                              centers=centers, 
+                                                              astr_hdrs=dataset.output_wcs, 
+                                                              sep=inj_sep, 
+                                                              pa=inj_pa,
+                                                              searchrad=5, 
+                                                              guessfwhm=retrieve_fwhm,
+                                                              guesspeak=inj_flux, 
+                                                              refinefit=True)
+                
+                # Flux should never be negative, if it is, assume zero flux retrieved
+                neg_mask = np.where(retrieved_fluxes < 0)
+                retrieved_fluxes[neg_mask]=0
+                
+                # Need to save things to some arrays
+                all_seps += [inj_sep]
+                all_pas += [inj_pa]
+                all_inj_fluxes += [inj_flux]
+                all_retr_fluxes += [retrieved_fluxes]
 
+        # If a companion has been injected and retrieved at every input position then
+        # flag to exit the loop. If not increment the counter and continue.
         if len(list_of_injected) == Nsep*Npa:
             all_injected = True
-    exit()
+        else:
+            counter += 1
 
+    # Return as numpy arrays
+    all_seps = np.array(all_seps)
+    all_pas = np.array(all_pas)
+    all_inj_fluxes = np.array(all_inj_fluxes)
+    all_retr_fluxes = np.squeeze(all_retr_fluxes)
 
-    return 0,0,0,0
+    return all_seps, all_pas, all_inj_fluxes, all_retr_fluxes
