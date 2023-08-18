@@ -14,6 +14,7 @@ import sys
 
 import astropy.io.fits as fits
 import matplotlib.pyplot as plt
+from cycler import cycler
 import numpy as np
 
 import copy
@@ -362,6 +363,8 @@ class AnalysisTools():
                            injection_pas='default',
                            injection_flux_sigma=20,
                            multi_injection_spacing=None,
+                           use_saved=False,
+                           thrput_fit_method='median'
                            ):
         """ 
         Compute a calibrated contrast curve relative to the host star flux. 
@@ -379,18 +382,25 @@ class AnalysisTools():
             For each companion, there should be a three element list containing
             [RA offset (arcsec), Dec offset (arcsec), mask radius (lambda/D)].
             The default is None.
-        injection_seps : 1D-array
+        injection_seps : 1D-array, optional
             List of separations to inject companions at (arcsec). 
-        injection_pas : 1D-array
+        injection_pas : 1D-array, optional
             List of position angles to inject companions at (degrees).  
-        injection_flux_sigma : float
+        injection_flux_sigma : float, optional
             The peak flux of all injected companions in units of sigma, relative 
             to the 1sigma contrast at the injected separation. 
-        multi_injection_spacing : int, None
+        multi_injection_spacing : int, None, optional
             Spacing between companions injected in a single image. If companions
             are too close then it can pollute the recovered flux. Set to 'None'
             to inject only one companion at a time (lambda/D).
-
+        use_saved : bool, optional
+            Toggle to use existing saved injected and recovered fluxes instead of
+            repeating the process. 
+        thrput_fit_method : str, optional
+            Method to use when fitting/interpolating the measure KLIP throughputs 
+            across all of the injection positions. 'median' for a median of PAs at
+            with the same separation. 'log_grow' for a logistic growth function.  
+            
         Returns
         -------
         None.
@@ -420,8 +430,12 @@ class AnalysisTools():
             log.info('--> Concatenation ' + key)
 
             # Need to generate the offset PSF we'll be injecting. Best to do
-            # this per concatenation to save time. 
-            offsetpsf = get_offsetpsf(self.database.obs[key])
+            # this per concatenation to save time.
+            if use_saved == True:
+                # Don't need to bother generating the PSF, use dummy value
+                offsetpsf = 1
+            else:
+                offsetpsf = get_offsetpsf(self.database.obs[key])
 
             # Loop through FITS files.
             nfitsfiles = len(self.database.red[key])
@@ -433,13 +447,15 @@ class AnalysisTools():
                 maskfile = self.database.red[key]['MASKFILE'][j]
                 mask = ut.read_msk(maskfile)
 
-                # Get the raw contrast information without mask correction
+                # Get the raw contrast information with and without mask correction
                 file_str = fitsfile.split('/')[-1]
                 seps_file = file_str.replace('.fits', '_seps.npy') #Arcseconds
                 rawcons_file = file_str.replace('.fits', '_cons.npy')
+                maskcons_file = file_str.replace('.fits', '_cons_mask.npy')
 
                 rawseps = np.load(os.path.join(rawcon_dir,seps_file))
                 rawcons = np.load(os.path.join(rawcon_dir,rawcons_file))
+                maskcons = np.load(os.path.join(rawcon_dir,maskcons_file))
 
                 # Read Stage 2 files and make pyKLIP dataset
                 filepaths, psflib_filepaths = get_pyklip_filepaths(self.database, key)
@@ -470,22 +486,19 @@ class AnalysisTools():
                                                       output_dir=output_dir)  # vegamag, Jy
                 filt = self.database.red[key]['FILTER'][j]
                 fstar = fzero[filt] / 10.**(mstar[filt] / 2.5) / 1e6 * np.max(offsetpsf)  # MJy
+                fstar *= ((180./np.pi)*3600.)**2/pxsc_arcsec**2 # MJy/sr
 
                 ### Now want to perform the injection and recovery of companions. 
                 # Define the seps and PAs to inject companions at
                 if injection_seps == 'default':
-                    if '4QPM' in self.database.red[key]['CORONMSK'][j]:
-                        inj_seps = [3.0, 4.0, 5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 25., 30.0, 35.0, 40.0]
-                    elif 'WB' in self.database.red[key]['CORONMSK'][j]:
-                        inj_seps = [2.0, 4.0, 6.0, 8.0, 10.0, 12.5, 15.0, 17.5, 20.0, 25.0, 30.0]
-                    else:
-                        inj_seps = [3.0, 4.0, 5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 25., 30.0, 35.0, 40.0]
+                    inj_seps = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 
+                                1.2, 1.4, 1.6, 1.8, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0]
                 else:
                     inj_seps = injection_seps
                 inj_seps_pix = inj_seps / pxsc_arcsec #Convert separation to pixels
                 if injection_pas == 'default':
                     if '4QPM' in self.database.red[key]['CORONMSK'][j]:
-                        inj_pas = [57.5,147.5,237.5,320.5]
+                        inj_pas = [57.5,147.5,237.5,327.5]
                     elif 'WB' in self.database.red[key]['CORONMSK'][j]:
                         inj_pas = [45.,135.,225.,315.]
                     else:
@@ -495,10 +508,16 @@ class AnalysisTools():
 
                 # Determine the fluxes we want to inject the companions at. 
                 # Base it on the contrast for the desired separations. Use the
-                # contrast with the highest KL modes. 
-                contrast_interp = interp1d(rawseps[-1], rawcons[-1])
+                # contrast with the ~median KL modes. 
+                median_KL_index = int(len(rawseps)/2)
+                cons_cleaned = np.nan_to_num(rawcons[median_KL_index], nan=1)
+                contrast_interp = interp1d(rawseps[median_KL_index], 
+                                           cons_cleaned,
+                                           kind='linear',
+                                           bounds_error=False,
+                                           fill_value=(1, cons_cleaned[-1]))
                 inj_cons = contrast_interp(inj_seps)
-                inj_fluxes = inj_cons*fstar*((180./np.pi)*3600.)**2/pxsc_arcsec**2 # MJy/sr
+                inj_fluxes = inj_cons*fstar #MJy/sr
                 inj_fluxes *= injection_flux_sigma/5 # Scale to an N sigma peak flux
 
                 # Going to redefine companion locations in terms of pixels
@@ -538,21 +557,151 @@ class AnalysisTools():
                     os.makedirs(inj_output_dir)
                 klip_args['outputdir'] = inj_output_dir
 
-                inj_rec = inject_and_recover(pyklip_dataset, 
-                                             injection_psf=offsetpsf,
-                                             injection_seps=inj_seps_pix,
-                                             injection_pas=inj_pas,
-                                             injection_spacing=injection_spacing_pix,
-                                             injection_fluxes=inj_fluxes, 
-                                             klip_args=klip_args,
-                                             retrieve_fwhm=resolution_fwhm,
-                                             true_companions=companions_pix)
+                save_string = output_dir+'/'+file_str[:-5]
+                if use_saved:
+                    all_inj_seps = np.load(save_string + '_injrec_seps.npy')
+                    all_inj_pas = np.load(save_string+'_injrec_pas.npy')
+                    all_inj_fluxes = np.load(save_string+'_injrec_inj_fluxes.npy')
+                    all_retr_fluxes = np.load(save_string+'_injrec_retr_fluxes.npy')
+                else:
+                    # Run the injection and recovery process
+                    inj_rec = inject_and_recover(pyklip_dataset, 
+                                                 injection_psf=offsetpsf,
+                                                 injection_seps=inj_seps_pix,
+                                                 injection_pas=inj_pas,
+                                                 injection_spacing=injection_spacing_pix,
+                                                 injection_fluxes=inj_fluxes, 
+                                                 klip_args=klip_args,
+                                                 retrieve_fwhm=resolution_fwhm,
+                                                 true_companions=companions_pix)
 
-                # Routine to average / median the calibrated flux losses.
+                    # Unpack everything from the injection and recovery
+                    all_inj_seps, all_inj_pas, all_inj_fluxes, all_retr_fluxes = inj_rec
 
-                # Save contrast files
+                    # Save these arrays
+                    np.save(save_string+'_injrec_seps.npy', all_inj_seps)
+                    np.save(save_string+'_injrec_pas.npy', all_inj_pas)
+                    np.save(save_string+'_injrec_inj_fluxes.npy', all_inj_fluxes)
+                    np.save(save_string+'_injrec_retr_fluxes.npy', all_retr_fluxes)
 
-                # Create plot of everything
+                # Need to add a point at a separation of zero pixels, assume
+                # basically no flux retrieved at zero separation. 
+                all_inj_seps = np.append([0],all_inj_seps)
+                all_inj_pas = np.append([0],all_inj_pas)
+                all_inj_fluxes = np.append([1],all_inj_fluxes)
+                zero_sep_retr_flux = 1e-10*np.ones_like(all_retr_fluxes[0])
+                all_retr_fluxes = np.vstack([zero_sep_retr_flux,all_retr_fluxes])
+
+                # Separation returned in pixels but we want arcseconds
+                all_inj_seps *= pxsc_arcsec
+
+                # Need to loop over each KL mode used to compute a correction
+                # for each.
+                rawcons_corr = []
+                maskcons_corr = []
+                all_corrections = []
+                for k in range(len(rawseps)): 
+                    # Get the raw separation and contrast for this KL mode
+                    this_KL_rawseps = rawseps[k]
+                    this_KL_rawcons = rawcons[k]
+                    this_KL_maskcons = maskcons[k]
+
+                    # Get fluxes for this KL mode subtracted image
+                    this_KL_retr_fluxes = all_retr_fluxes[:,k]
+
+                    # Make a table to make things easier
+                    results = Table([all_inj_seps, all_inj_pas, all_inj_fluxes, this_KL_retr_fluxes], 
+                                    names=('inj_seps', 'inj_pas', 'inj_fluxes', 'retr_fluxes'))
+
+                    # Determine throughput of klip process on the injected flux
+                    results['klip_thrputs'] = np.divide(results['retr_fluxes'], results['inj_fluxes'])
+
+                    # Calculate the median across all position angles
+                    med_results = results.group_by('inj_seps').groups.aggregate(np.nanmedian)
+
+                    # Need to interpolate or model to determine throughput at actual 
+                    # separations of the contrast curve.
+                    if thrput_fit_method == 'median':
+                        med_interp = interp1d(med_results['inj_seps'], 
+                                              med_results['klip_thrputs'],
+                                              fill_value=(1e-10, med_results['klip_thrputs'][-1]), 
+                                              bounds_error=False,
+                                              kind='slinear')
+                        contrast_correction = med_interp(this_KL_rawseps)
+                    elif thrput_fit_method == 'log_grow':
+                        raise NotImplementedError()
+                    else:
+                        raise ValueError("Invalid thrput_fit_method: " +\
+                                "{}, options are 'median' or 'log_grow'".format(thrput_fit_method))
+
+                    # Apply contrast correction
+                    rawcons_corr.append(rawcons[k] / contrast_correction)
+                    maskcons_corr.append(maskcons[k] / contrast_correction)
+                    all_corrections.append(contrast_correction)
+
+                all_corrections = np.squeeze(all_corrections) #Tidy array
+
+                # Save the corrected contrasts, as well as the separations for convenience. 
+                np.save(save_string+'_cal_seps.npy', rawseps)
+                np.save(save_string+'_cal_cons.npy', rawcons_corr)
+                np.save(save_string+'_cal_maskcons.npy', rawcons_corr)
+
+                # Plot measured KLIP throughputs
+                fig = plt.figure(figsize=(6.4, 4.8))
+                ax = plt.gca()
+                color = plt.cm.tab10(np.linspace(0, 1, 10))
+                cc = (cycler(linestyle=['-', ':', '--'])*cycler(color=color))
+                ax.set_prop_cycle(cc)
+                for ci, corr in enumerate(all_corrections):
+                    KLmodes = klip_args['numbasis'][ci]
+                    ax.plot(rawseps[ci], corr, label='KL = {}'.format(KLmodes))
+                ax.legend(ncol=3, fontsize=10)
+                ax.set_xlabel('Separation (")')
+                ax.set_ylabel('Throughput')
+                ax.grid(axis='both', alpha=0.15)
+                plt.savefig(save_string + '_allKL_throughput.pdf', 
+                            bbox_inches='tight', dpi=300)
+
+                # Plot individual measurements for median KL mode
+                fig = plt.figure(figsize=(6.4, 4.8))
+                ax = plt.gca()
+
+                ax.plot(rawseps[median_KL_index], 
+                        all_corrections[median_KL_index],
+                        label='Applied Correction',
+                        color='#0B5345', zorder=100)
+                ax.scatter(all_inj_seps, 
+                           all_retr_fluxes[:,median_KL_index]/all_inj_fluxes, 
+                           s=75, 
+                           color='mediumaquamarine', 
+                           alpha=0.5,
+                           label='Individual Injections')
+                ax.legend(ncol=3, fontsize=10)
+                ax.set_xlabel('Separation (")')
+                ax.set_ylabel('Throughput')
+                ax.grid(axis='both', alpha=0.15)
+                plt.savefig(save_string + '_medKL_throughput.pdf', 
+                            bbox_inches='tight', dpi=300)
+
+                # Plot calibrated contrast curves
+                fig = plt.figure(figsize=(6.4, 4.8))
+                ax = plt.gca()
+                ax.set_prop_cycle(cc)
+                for si, seps in enumerate(rawseps):
+                    KLmodes = klip_args['numbasis'][si]
+                    ax.plot(seps, maskcons_corr[si], 
+                            label='KL = {}'.format(KLmodes))
+                    ax.plot(seps, rawcons_corr[si], alpha=0.3)
+                ax.set_yscale('log')
+                ax.set_ylim([None,1])
+                ax.set_xlabel('Separation [arcsec]')
+                ax.set_ylabel(r'5-$\sigma$ contrast')
+                ax.legend(loc='upper right', ncols=3, fontsize=10)
+                ax.set_title('Calibrated contrast (transparent lines excl. mask TP)',
+                             fontsize=11)
+                plt.savefig(save_string + '_calcon.pdf', 
+                            bbox_inches='tight', dpi=300)
+        
         pass
     
     def extract_companions(self,
@@ -1432,6 +1581,7 @@ def inject_and_recover(raw_dataset,
                     inj_i = (inj_id - inj_j) // Npa 
                     inj_sep = injection_seps[inj_i]
                     inj_pa = injection_pas[inj_j]
+                    inj_flux = injection_fluxes[inj_i]
 
                     # If something was injected close to the coronagraph
                     # don't inject anything else in this image. 
@@ -1446,6 +1596,13 @@ def inject_and_recover(raw_dataset,
                     dist = np.sqrt(new_sep**2+inj_sep**2
                             -2*new_sep*inj_sep*np.cos(np.deg2rad(inj_pa-new_pa)))
                     if dist < injection_spacing:
+                        inject_flag = False
+                        break
+
+                    # If the difference in fluxes is too large, don't inject
+                    # as this can really affect things. 
+                    flux_factor = max(inj_flux, new_flux) / min(inj_flux, new_flux)
+                    if flux_factor > 10:
                         inject_flag = False
                         break
 
@@ -1495,9 +1652,9 @@ def inject_and_recover(raw_dataset,
                                                               guesspeak=inj_flux, 
                                                               refinefit=True)
                 
-                # Flux should never be negative, if it is, assume zero flux retrieved
+                # Flux should never be negative, if it is, assume ~=zero flux retrieved
                 neg_mask = np.where(retrieved_fluxes < 0)
-                retrieved_fluxes[neg_mask]=0
+                retrieved_fluxes[neg_mask]=1e-10 
                 
                 # Need to save things to some arrays
                 all_seps += [inj_sep]
