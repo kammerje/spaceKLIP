@@ -2002,7 +2002,7 @@ class ImageTools():
             f = plt.figure(figsize=(6.4, 4.8))
             ax = plt.gca()
             for index, j in enumerate(ww_sci):
-                ax.scatter(shifts_all[index][:, 0] * self.database.obs[key]['PIXSCALE'][j], shifts_all[index][:, 1] * self.database.obs[key]['PIXSCALE'][j], s=5, color=colors[index], marker='o', label='PA = %.0f deg' % self.database.obs[key]['ROLL_REF'][j])
+                ax.scatter(shifts_all[index][:, 0] * self.database.obs[key]['PIXSCALE'][j], shifts_all[index][:, 1] * self.database.obs[key]['PIXSCALE'][j], s=5, color=colors[index%10], marker='o', label='PA = %.0f deg' % self.database.obs[key]['ROLL_REF'][j])
             ax.axhline(0., color='gray', lw=1)
             ax.axvline(0., color='gray', lw=1)
             ax.set_aspect('equal')
@@ -2035,14 +2035,14 @@ class ImageTools():
             for index, j in enumerate(ww_ref):
                 this = '%.0f_%.0f' % (database_temp[key]['XOFFSET'][j], database_temp[key]['YOFFSET'][j])
                 if this not in seen:
-                    ax.scatter(shifts_all[index + add][:, 0] * self.database.obs[key]['PIXSCALE'][j], shifts_all[index + add][:, 1] * self.database.obs[key]['PIXSCALE'][j], s=5, color=colors[len(seen)], marker=syms[0], label='dpos %.0f' % (len(seen) + 1))
-                    ax.hlines(-database_temp[key]['YOFFSET'][j] + yoffset, -database_temp[key]['XOFFSET'][j] + xoffset - 4., -database_temp[key]['XOFFSET'][j] + xoffset + 4., color=colors[len(seen)], lw=1)
-                    ax.vlines(-database_temp[key]['XOFFSET'][j] + xoffset, -database_temp[key]['YOFFSET'][j] + yoffset - 4., -database_temp[key]['YOFFSET'][j] + yoffset + 4., color=colors[len(seen)], lw=1)
+                    ax.scatter(shifts_all[index + add][:, 0] * self.database.obs[key]['PIXSCALE'][j], shifts_all[index + add][:, 1] * self.database.obs[key]['PIXSCALE'][j], s=5, color=colors[len(seen)%10], marker=syms[0], label='dpos %.0f' % (len(seen) + 1))
+                    ax.hlines(-database_temp[key]['YOFFSET'][j] + yoffset, -database_temp[key]['XOFFSET'][j] + xoffset - 4., -database_temp[key]['XOFFSET'][j] + xoffset + 4., color=colors[len(seen)%10], lw=1)
+                    ax.vlines(-database_temp[key]['XOFFSET'][j] + xoffset, -database_temp[key]['YOFFSET'][j] + yoffset - 4., -database_temp[key]['YOFFSET'][j] + yoffset + 4., color=colors[len(seen)%10], lw=1)
                     seen += [this]
                     reps += [1]
                 else:
                     ww = np.where(np.array(seen) == this)[0][0]
-                    ax.scatter(shifts_all[index + add][:, 0] * self.database.obs[key]['PIXSCALE'][j], shifts_all[index + add][:, 1] * self.database.obs[key]['PIXSCALE'][j], s=5, color=colors[ww], marker=syms[reps[ww]])
+                    ax.scatter(shifts_all[index + add][:, 0] * self.database.obs[key]['PIXSCALE'][j], shifts_all[index + add][:, 1] * self.database.obs[key]['PIXSCALE'][j], s=5, color=colors[ww%10], marker=syms[reps[ww]])
                     reps[ww] += 1
             ax.set_aspect('equal')
             xlim = ax.get_xlim()
