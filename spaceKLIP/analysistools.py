@@ -676,7 +676,7 @@ class AnalysisTools():
                            color='mediumaquamarine', 
                            alpha=0.5,
                            label='Individual Injections')
-                ax.legend(ncol=3, fontsize=10)
+                ax.legend(fontsize=10)
                 ax.set_xlabel('Separation (")')
                 ax.set_ylabel('Throughput')
                 ax.grid(axis='both', alpha=0.15)
