@@ -515,6 +515,7 @@ def run_obs(database,
         kwargs_temp['verbose'] = database.verbose
     if 'save_rolls' not in kwargs_temp.keys():
         kwargs_temp['save_ints'] = False
+        kwargs_temp['save_rolls'] = False
     else:
         kwargs_temp['save_ints'] = kwargs_temp['save_rolls']
     
