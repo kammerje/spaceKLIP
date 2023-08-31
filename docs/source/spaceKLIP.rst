@@ -1,8 +1,5 @@
-spaceKLIP package
-=================
-
-Submodules
-----------
+spaceKLIP detailed API
+======================
 
 spaceKLIP.analysistools module
 ------------------------------
