@@ -491,7 +491,7 @@ class ImageTools():
                 self.database.update_obs(key, j, fitsfile, maskfile)
     
     def subtract_background(self,
-                            nints_per_med=999,
+                            nints_per_med=None,
                             subdir='bgsub'):
         """
         Median subtract the corresponding background observations from the SCI and REF
@@ -503,7 +503,7 @@ class ImageTools():
             Number of integrations per median. For example, if you have a target
             + background dataset with 20 integrations each and nints_per_med is
             set to 5, a median of every 5 background images will be subtracted from
-            the corresponding 5 target images. The default is 999 (i.e. a median 
+            the corresponding 5 target images. The default is None (i.e. a median 
             across all images).
         subdir : str, optional
             Name of the directory where the data products shall be saved. The
@@ -519,6 +519,9 @@ class ImageTools():
         output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
+
+        # Store the nints_per_med parameter
+        orig_nints_per_med = deepcopy(nints_per_med)
         
         # Loop through concatenations.
         for i, key in enumerate(self.database.obs.keys()):
@@ -543,6 +546,8 @@ class ImageTools():
 
                     # Determine split indices
                     nints = data.shape[0]
+                    if orig_nints_per_med == None:
+                        nints_per_med = nints
                     indxs = np.arange(nints)
                     split_inds = [x+1 for x in indxs if (x+1)%nints_per_med == 0 
                                               and x < (nints-nints_per_med)]
@@ -578,6 +583,8 @@ class ImageTools():
 
                     # Determine split indices
                     nints = data.shape[0]
+                    if orig_nints_per_med == None:
+                        nints_per_med = nints
                     indxs = np.arange(nints)
                     split_inds = [x+1 for x in indxs if (x+1)%nints_per_med == 0 
                                                   and x < (nints-nints_per_med)]
@@ -619,6 +626,8 @@ class ImageTools():
 
                 # Determine split indices
                 nints = data.shape[0]
+                if orig_nints_per_med == None:
+                        nints_per_med = nints
                 indxs = np.arange(nints)
                 split_inds = [x+1 for x in indxs if (x+1)%nints_per_med == 0 
                                           and x < (nints-nints_per_med)]
