@@ -144,7 +144,7 @@ class AnalysisTools():
                 mask = ut.read_msk(maskfile)
                 
                 # Compute the pixel area in steradian.
-                pxsc_arcsec = self.database.red[key]['PIXSCALE'][j] / 1000.  # arcsec
+                pxsc_arcsec = self.database.red[key]['PIXSCALE'][j] # arcsec
                 pxsc_rad = pxsc_arcsec / 3600. / 180. * np.pi  # rad
                 pxar = pxsc_rad**2  # sr
                 
@@ -219,7 +219,7 @@ class AnalysisTools():
                 cons = []
                 for k in range(data.shape[0]):
                     sep, con = klip.meas_contrast(dat=data[k] * pxar / fstar, iwa=iwa, owa=owa, resolution=resolution, center=center, low_pass_filter=False)
-                    seps += [sep * self.database.red[key]['PIXSCALE'][j] / 1000.]   # arcsec
+                    seps += [sep * self.database.red[key]['PIXSCALE'][j]]   # arcsec
                     cons += [con]
                 seps = np.array(seps)
                 cons = np.array(cons)
@@ -411,7 +411,7 @@ class AnalysisTools():
                                                  self.database.red[key]['FILTER'][j])
                 
                 # Compute the pixel area in steradian.
-                pxsc_arcsec = self.database.red[key]['PIXSCALE'][j] / 1000.  # arcsec
+                pxsc_arcsec = self.database.red[key]['PIXSCALE'][j] # arcsec
                 pxsc_rad = pxsc_arcsec / 3600. / 180. * np.pi  # rad
                 pxar = pxsc_rad**2  # sr
                 

@@ -191,7 +191,7 @@ class SpaceTelescope(Data):
         PAs_all = []  # deg
         wvs_all = []  # m
         wcs_all = []
-        PIXSCALE = []  # mas
+        PIXSCALE = []  # arcsec
         for i, filepath in enumerate(filepaths):
             
             # Read science file.
@@ -237,9 +237,9 @@ class SpaceTelescope(Data):
         if len(PIXSCALE) != 1:
             raise UserWarning('Some science files do not have matching pixel scales')
         if TELESCOP == 'JWST' and obs['EXP_TYPE'][ww] in ['NRC_CORON', 'MIR_LYOT']:
-            iwa_all = np.min(wvs_all) / 6.5 * 180. / np.pi * 3600. * 1000. / PIXSCALE[0]  # pix
+            iwa_all = np.min(wvs_all) / 6.5 * 180. / np.pi * 3600. / PIXSCALE[0]  # pix
         elif TELESCOP == 'JWST' and obs['EXP_TYPE'][ww] in ['MIR_4QPM']:
-            iwa_all = 0.5 * np.min(wvs_all) / 6.5 * 180. / np.pi * 3600. * 1000. / PIXSCALE[0]  # pix
+            iwa_all = 0.5 * np.min(wvs_all) / 6.5 * 180. / np.pi * 3600. / PIXSCALE[0]  # pix
         else:
             iwa_all = 1.  # pix
         

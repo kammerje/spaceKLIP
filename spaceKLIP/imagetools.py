@@ -1309,7 +1309,7 @@ class ImageTools():
                     if fact_temp is not None:
                         if str(fact_temp) == 'auto':
                             wave_min = self.database.obs[key]['CWAVEL'][j] - self.database.obs[key]['DWAVEL'][j]
-                            nyquist = wave_min * 1e-6 / diam * 180. / np.pi * 3600. * 1000. / 2.3  # see, e.g., Pawley 2006
+                            nyquist = wave_min * 1e-6 / diam * 180. / np.pi * 3600. / 2.3  # see, e.g., Pawley 2006
                             fact_temp = self.database.obs[key]['PIXSCALE'][j] / nyquist
                             fact_temp /= np.sqrt(8. * np.log(2.))  # fix from Marshall
                         log.info('  --> Frame blurring: factor = %.3f' % fact_temp)
@@ -1598,8 +1598,8 @@ class ImageTools():
                         if mask is not None:
                             # mask = ut.imshift(mask, [shifts[k][0], shifts[k][1]], method=method, kwargs=kwargs)
                             mask = spline_shift(mask, [shifts[k][1], shifts[k][0]], order=0, mode='constant', cval=np.nanmedian(mask))
-                        xoffset = self.database.obs[key]['XOFFSET'][j] - self.database.obs[key]['XOFFSET'][ww_sci[0]]  # mas
-                        yoffset = self.database.obs[key]['YOFFSET'][j] - self.database.obs[key]['YOFFSET'][ww_sci[0]]  # mas
+                        xoffset = self.database.obs[key]['XOFFSET'][j] - self.database.obs[key]['XOFFSET'][ww_sci[0]]  # arcsec
+                        yoffset = self.database.obs[key]['YOFFSET'][j] - self.database.obs[key]['YOFFSET'][ww_sci[0]]  # arcsec
                         crpix1 = data.shape[-1]//2 + 1  # 1-indexed
                         crpix2 = data.shape[-2]//2 + 1  # 1-indexed
                     
@@ -1611,8 +1611,8 @@ class ImageTools():
                             # Do nothing.
                             shifts += [np.array([0., 0.])]
                             maskoffs_temp += [np.array([0., 0.])]
-                        xoffset = self.database.obs[key]['XOFFSET'][j]  # mas
-                        yoffset = self.database.obs[key]['YOFFSET'][j]  # mas
+                        xoffset = self.database.obs[key]['XOFFSET'][j]  # arcsec
+                        yoffset = self.database.obs[key]['YOFFSET'][j]  # arcsec
                         crpix1 = self.database.obs[key]['CRPIX1'][j]  # 1-indexed
                         crpix2 = self.database.obs[key]['CRPIX2'][j]  # 1-indexed
                     
@@ -1642,8 +1642,8 @@ class ImageTools():
                                 shifts[-1][1] += dy
                                 data[k] = np.roll(np.roll(data[k], dx, axis=1), dy, axis=0)
                                 erro[k] = np.roll(np.roll(erro[k], dx, axis=1), dy, axis=0)
-                        xoffset = 0.  # mas
-                        yoffset = 0.  # mas
+                        xoffset = 0.  # arcsec
+                        yoffset = 0.  # arcsec
                         crpix1 = data.shape[-1]//2 + 1  # 1-indexed
                         crpix2 = data.shape[-2]//2 + 1  # 1-indexed
                 
@@ -1673,8 +1673,8 @@ class ImageTools():
                             shifts[-1][1] += dy
                             data[k] = np.roll(np.roll(data[k], dx, axis=1), dy, axis=0)
                             erro[k] = np.roll(np.roll(erro[k], dx, axis=1), dy, axis=0)
-                    xoffset = 0.  # mas
-                    yoffset = 0.  # mas
+                    xoffset = 0.  # arcsec
+                    yoffset = 0.  # arcsec
                     crpix1 = data.shape[-1]//2 + 1  # 1-indexed
                     crpix2 = data.shape[-2]//2 + 1  # 1-indexed
                 shifts = np.array(shifts)
@@ -1691,14 +1691,14 @@ class ImageTools():
                 
                 # Compute shift distances.
                 dist = np.sqrt(np.sum(shifts[:, :2]**2, axis=1))  # pix
-                dist *= self.database.obs[key]['PIXSCALE'][j]  # mas
+                dist *= self.database.obs[key]['PIXSCALE'][j] * 1000  # mas
                 head, tail = os.path.split(self.database.obs[key]['FITSFILE'][j])
                 log.info('  --> Recenter frames: ' + tail)
                 log.info('  --> Recenter frames: median required shift = %.2f mas' % np.median(dist))
                 
                 # Write FITS file and PSF mask.
-                head_pri['XOFFSET'] = xoffset
-                head_pri['YOFFSET'] = yoffset
+                head_pri['XOFFSET'] = xoffset #arcsec
+                head_pri['YOFFSET'] = yoffset #arcsec
                 head_sci['CRPIX1'] = crpix1
                 head_sci['CRPIX2'] = crpix2
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs)
@@ -1932,16 +1932,28 @@ class ImageTools():
                     if j == ww_sci[0] and k == 0:
                         ref_image = data[k].copy()
                         pp = np.array([0., 0., 1.])
-                        xoffset = self.database.obs[key]['XOFFSET'][j]
-                        yoffset = self.database.obs[key]['YOFFSET'][j]
-                        crpix1 = self.database.obs[key]['CRPIX1'][j]
-                        crpix2 = self.database.obs[key]['CRPIX2'][j]
+                        xoffset = self.database.obs[key]['XOFFSET'][j] #arcsec
+                        yoffset = self.database.obs[key]['YOFFSET'][j] #arcsec
+                        crpix1 = self.database.obs[key]['CRPIX1'][j] #pixels
+                        crpix2 = self.database.obs[key]['CRPIX2'][j] #pixels
+                        pxsc = self.database.obs[key]['PIXSCALE'][j] #arcsec
                     
                     # Align all other SCI and REF frames to the first science
                     # frame.
                     else:
-                        # Calculate shifts relative to first frame. 
-                        p0 = np.array([((crpix1 + xoffset) - (self.database.obs[key]['CRPIX1'][j] + self.database.obs[key]['XOFFSET'][j])) / self.database.obs[key]['PIXSCALE'][j], ((crpix2 + yoffset) - (self.database.obs[key]['CRPIX2'][j] + self.database.obs[key]['YOFFSET'][j])) / self.database.obs[key]['PIXSCALE'][j], 1.])
+                        # Calculate shifts relative to first frame, work in pixels
+                        xfirst = crpix1 + (xoffset/pxsc)
+                        xoff_curr_pix = self.database.obs[key]['XOFFSET'][j]/self.database.obs[key]['PIXSCALE'][j]
+                        xcurrent = self.database.obs[key]['CRPIX1'][j] + xoff_curr_pix
+                        xshift = xfirst - xcurrent
+
+                        yfirst = crpix2 + (yoffset/pxsc)
+                        yoff_curr_pix = self.database.obs[key]['YOFFSET'][j]/self.database.obs[key]['PIXSCALE'][j]
+                        ycurrent = self.database.obs[key]['CRPIX2'][j] + yoff_curr_pix
+                        yshift = yfirst - ycurrent
+
+                        p0 = np.array([xshift, yshift, 1.])
+                        # p0 = np.array([((crpix1 + xoffset) - (self.database.obs[key]['CRPIX1'][j] + self.database.obs[key]['XOFFSET'][j])) / self.database.obs[key]['PIXSCALE'][j], ((crpix2 + yoffset) - (self.database.obs[key]['CRPIX2'][j] + self.database.obs[key]['YOFFSET'][j])) / self.database.obs[key]['PIXSCALE'][j], 1.])
                         if align_algo == 'leastsq':
                             # Use header values to initiate least squares fit
                             pp = leastsq(ut.alignlsq,
@@ -1975,7 +1987,7 @@ class ImageTools():
                 
                 # Compute shift distances.
                 dist = np.sqrt(np.sum(shifts[:, :2]**2, axis=1))  # pix
-                dist *= self.database.obs[key]['PIXSCALE'][j]  # mas
+                dist *= self.database.obs[key]['PIXSCALE'][j]*1000  # mas
                 if j == ww_sci[0]:
                     dist = dist[1:]
                 log.info('  --> Align frames: median required shift = %.2f mas' % np.median(dist))
@@ -2006,7 +2018,10 @@ class ImageTools():
             f = plt.figure(figsize=(6.4, 4.8))
             ax = plt.gca()
             for index, j in enumerate(ww_sci):
-                ax.scatter(shifts_all[index][:, 0] * self.database.obs[key]['PIXSCALE'][j], shifts_all[index][:, 1] * self.database.obs[key]['PIXSCALE'][j], s=5, color=colors[index], marker='o', label='PA = %.0f deg' % self.database.obs[key]['ROLL_REF'][j])
+                ax.scatter(shifts_all[index][:, 0] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
+                           shifts_all[index][:, 1] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
+                           s=5, color=colors[index], marker='o', 
+                           label='PA = %.0f deg' % self.database.obs[key]['ROLL_REF'][j])
             ax.axhline(0., color='gray', lw=1, zorder=-1)  # set zorder to ensure lines are drawn behind all the scatter points
             ax.axvline(0., color='gray', lw=1, zorder=-1)
             ax.set_aspect('equal')
@@ -2040,14 +2055,25 @@ class ImageTools():
             for index, j in enumerate(ww_ref):
                 this = '%.0f_%.0f' % (database_temp[key]['XOFFSET'][j], database_temp[key]['YOFFSET'][j])
                 if this not in seen:
-                    ax.scatter(shifts_all[index + add][:, 0] * self.database.obs[key]['PIXSCALE'][j], shifts_all[index + add][:, 1] * self.database.obs[key]['PIXSCALE'][j], s=5, color=colors[len(seen)], marker=syms[0], label='dither %.0f' % (len(seen) + 1))
-                    ax.hlines(-database_temp[key]['YOFFSET'][j] + yoffset, -database_temp[key]['XOFFSET'][j] + xoffset - 4., -database_temp[key]['XOFFSET'][j] + xoffset + 4., color=colors[len(seen)], lw=1)
-                    ax.vlines(-database_temp[key]['XOFFSET'][j] + xoffset, -database_temp[key]['YOFFSET'][j] + yoffset - 4., -database_temp[key]['YOFFSET'][j] + yoffset + 4., color=colors[len(seen)], lw=1)
+                    ax.scatter(shifts_all[index + add][:, 0] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
+                               shifts_all[index + add][:, 1] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
+                               s=5, color=colors[len(seen)], marker=syms[0], 
+                               label='dither %.0f' % (len(seen) + 1))
+                    ax.hlines((-database_temp[key]['YOFFSET'][j] + yoffset)*1000, 
+                              (-database_temp[key]['XOFFSET'][j] + xoffset - 4.)*1000, 
+                              (-database_temp[key]['XOFFSET'][j] + xoffset + 4.)*1000,
+                              color=colors[len(seen)], lw=1)
+                    ax.vlines((-database_temp[key]['XOFFSET'][j] + xoffset)*1000, 
+                              (-database_temp[key]['YOFFSET'][j] + yoffset - 4.)*1000, 
+                              (-database_temp[key]['YOFFSET'][j] + yoffset + 4.)*1000, 
+                              color=colors[len(seen)], lw=1)
                     seen += [this]
                     reps += [1]
                 else:
                     ww = np.where(np.array(seen) == this)[0][0]
-                    ax.scatter(shifts_all[index + add][:, 0] * self.database.obs[key]['PIXSCALE'][j], shifts_all[index + add][:, 1] * self.database.obs[key]['PIXSCALE'][j], s=5, color=colors[ww], marker=syms[reps[ww]])
+                    ax.scatter(shifts_all[index + add][:, 0] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
+                               shifts_all[index + add][:, 1] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
+                               s=5, color=colors[ww], marker=syms[reps[ww]])
                     reps[ww] += 1
             ax.set_aspect('equal')
             xlim = ax.get_xlim()
