@@ -1325,7 +1325,7 @@ class ImageTools():
                 if fact_temp is None:
                     pass
                 else:
-                    head_pri['BLURFWHM'] = fact_temp
+                    head_pri['BLURFWHM'] = fact_temp * np.sqrt(8. * np.log(2.)) # Factor to convert from sigma to FWHM
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs)
                 maskfile = ut.write_msk(maskfile, mask, fitsfile)
                 
@@ -1793,7 +1793,8 @@ class ImageTools():
         # model_psf = psf.gen_psf_idl(crtel, coord_frame='tel', return_oversample=False)
         model_psf = psf.gen_psf_idl((0, 0), coord_frame='idl', return_oversample=False)  # using this instead after discussing with Jarron
         if not np.isnan(self.database.obs[key]['BLURFWHM'][j]):
-            model_psf = gaussian_filter(model_psf, self.database.obs[key]['BLURFWHM'][j])
+            gauss_sigma = self.database.obs[key]['BLURFWHM'][j] / np.sqrt(8. * np.log(2.))
+            model_psf = gaussian_filter(model_psf, gauss_sigma)
         
         # Get transmission mask.
         yi, xi = np.indices(data0.shape)

@@ -169,7 +169,7 @@ class AnalysisTools():
                     raise UserWarning('Data originates from unknown telescope')
                 resolution = 1e-6 * self.database.red[key]['CWAVEL'][j] / diam / pxsc_rad  # pix
                 if not np.isnan(self.database.obs[key]['BLURFWHM'][j]):
-                    resolution *= self.database.obs[key]['BLURFWHM'][j]
+                    resolution = np.hypot(resolution, self.database.obs[key]['BLURFWHM'][j])
                 
                 # Get the star position.
                 if overwrite_crpix is None:
@@ -426,7 +426,7 @@ class AnalysisTools():
                     raise UserWarning('Data originates from unknown telescope')
                 resolution = 1e-6 * self.database.red[key]['CWAVEL'][j] / diam / pxsc_rad  # pix
                 if not np.isnan(self.database.obs[key]['BLURFWHM'][j]):
-                    resolution *= self.database.obs[key]['BLURFWHM'][j]
+                    resolution = np.hypot(resolution, self.database.obs[key]['BLURFWHM'][j])
                 
                 # Find science and reference files.
                 filepaths = []
@@ -669,7 +669,8 @@ class AnalysisTools():
                         
                         # Blur frames with a Gaussian filter.
                         if not np.isnan(self.database.obs[key]['BLURFWHM'][ww]):
-                            offsetpsf = gaussian_filter(offsetpsf, self.database.obs[key]['BLURFWHM'][ww])
+                            gauss_sigma = self.database.obs[key]['BLURFWHM'][j] / np.sqrt(8. * np.log(2.))
+                            offsetpsf = gaussian_filter(offsetpsf, gauss_sigma)
                         
                         # Apply high-pass filter.
                         offsetpsf_nohpf = copy.deepcopy(offsetpsf)
