@@ -2054,19 +2054,19 @@ class ImageTools():
             syms = ['o', 'v', '^', '<', '>'] * (1 + len(ww_ref) // 5)
             add = len(ww_sci)
             for index, j in enumerate(ww_ref):
-                this = '%.0f_%.0f' % (database_temp[key]['XOFFSET'][j], database_temp[key]['YOFFSET'][j])
+                this = '%.3f_%.3f' % (database_temp[key]['XOFFSET'][j], database_temp[key]['YOFFSET'][j])
                 if this not in seen:
                     ax.scatter(shifts_all[index + add][:, 0] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
                                shifts_all[index + add][:, 1] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
                                s=5, color=colors[len(seen)], marker=syms[0], 
                                label='dither %.0f' % (len(seen) + 1))
                     ax.hlines((-database_temp[key]['YOFFSET'][j] + yoffset)*1000, 
-                              (-database_temp[key]['XOFFSET'][j] + xoffset - 4.)*1000, 
-                              (-database_temp[key]['XOFFSET'][j] + xoffset + 4.)*1000,
+                              (-database_temp[key]['XOFFSET'][j] + xoffset)*1000 - 4., 
+                              (-database_temp[key]['XOFFSET'][j] + xoffset)*1000 + 4.,
                               color=colors[len(seen)], lw=1)
                     ax.vlines((-database_temp[key]['XOFFSET'][j] + xoffset)*1000, 
-                              (-database_temp[key]['YOFFSET'][j] + yoffset - 4.)*1000, 
-                              (-database_temp[key]['YOFFSET'][j] + yoffset + 4.)*1000, 
+                              (-database_temp[key]['YOFFSET'][j] + yoffset)*1000 - 4., 
+                              (-database_temp[key]['YOFFSET'][j] + yoffset)*1000 + 4., 
                               color=colors[len(seen)], lw=1)
                     seen += [this]
                     reps += [1]
