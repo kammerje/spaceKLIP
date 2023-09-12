@@ -607,3 +607,105 @@ def get_tp_comsubst(instrume,
     
     # Return.
     return tp_comsubst
+
+def get_filter_info(instrument, timeout=1, do_svo=True, return_more=False):
+    """ Load filter information from the SVO Filter Profile Service or webbpsf
+
+    Load NIRCam, NIRISS, and MIRI filters from the SVO Filter Profile Service.
+    http://svo2.cab.inta-csic.es/theory/fps/
+
+    If timeout to server, then use local copy of filter list and load through webbpsf.
+
+    Parameters
+    ----------
+    instrument : str
+        Name of instrument to load filter list for. 
+        Must be one of 'NIRCam', 'NIRISS', or 'MIRI'.
+    timeout : float
+        Timeout in seconds for connection to SVO Filter Profile Service.
+    do_svo : bool
+        If True, try to load filter list from SVO Filter Profile Service. 
+        If False, use webbpsf without first check web server.
+    return_more : bool
+        If True, also return `do_svo` variable, whether SVO was used or not.
+    """
+
+    from astroquery.svo_fps import SvoFps
+    import webbpsf
+
+    iname_upper = instrument.upper()
+
+    # Try to get filter list from SVO
+    if do_svo:
+        try:
+            filter_list = SvoFps.get_filter_list(facility='JWST', instrument=iname_upper, timeout=timeout)
+        except:
+            log.warning('Using SVO Filter Profile Service timed out. Using WebbPSF instead.')
+            do_svo = False
+
+    # If unsuccessful, use webbpsf to get filter list
+    if not do_svo:
+        inst_func = {
+            'NIRCAM': webbpsf.NIRCam,
+            'NIRISS': webbpsf.NIRISS,
+            'MIRI'  : webbpsf.MIRI,
+        }
+        inst = inst_func[iname_upper]()
+        filter_list = inst.filter_list
+
+    wave, weff = ({}, {})
+    if do_svo:
+        for i in range(len(filter_list)):
+            name = filter_list['filterID'][i]
+            name = name[name.rfind('.') + 1:]
+            wave[name] = filter_list['WavelengthMean'][i] / 1e4  # micron
+            weff[name] = filter_list['WidthEff'][i] / 1e4  # micron
+    else:
+        for filt in filter_list:
+            bp = inst._get_synphot_bandpass(filt)
+            wave[filt] = bp.avgwave().to_value('micron')
+            weff[filt] = bp.equivwidth().to_value('micron')
+
+    if return_more:
+        return wave, weff, do_svo
+    else:
+        return wave, weff
+
+
+
+def expand_mask(bpmask, npix, grow_diagonal=False):
+    """Expand bad pixel mask by npix pixels
+    
+    Parameters
+    ==========
+    bpmask : 2D array
+        Boolean bad pixel mask
+    npix : int
+        Number of pixels to expand mask by
+    diagonal : bool
+        Expand mask by npix pixels in all directions, including diagonals
+    in_place : bool
+        Modify the original mask (True) or return a copy (False)
+
+    Returns
+    =======
+    bpmask : 2D array of booleans
+        Expanded bad pixel mask
+    """
+    from scipy.ndimage import binary_dilation, generate_binary_structure
+
+    if npix==0:
+        return bpmask
+
+    # Expand mask by npix pixels, including corners
+    if grow_diagonal:
+        # Perform normal dilation without corners (just left, right, up, down)
+        if npix>1:
+            bpmask = binary_dilation(bpmask, iterations=npix-1)
+        # Add corners in final iteration
+        struct2 = generate_binary_structure(2, 2)
+        bpmask = binary_dilation(bpmask, structure=struct2)
+    else: # No corners
+        bpmask = binary_dilation(bpmask, iterations=npix)
+
+    return bpmask

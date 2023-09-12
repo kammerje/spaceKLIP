@@ -21,8 +21,9 @@ import json
 import webbpsf, webbpsf_ext
 
 from astropy.table import Table
-from astroquery.svo_fps import SvoFps
 from jwst.pipeline import Detector1Pipeline, Image2Pipeline, Coron3Pipeline
+
+from .utils import get_filter_info
 
 import logging
 log = logging.getLogger(__name__)
@@ -38,66 +39,6 @@ webbpsf_ext.setup_logging('WARN', verbose=False)
 nircam = webbpsf.NIRCam()
 niriss = webbpsf.NIRISS()
 miri   = webbpsf.MIRI()
-
-def get_filter_info(instrument, timeout=1, do_svo=True, return_more=False):
-    """ Load filter information from the SVO Filter Profile Service or webbpsf
-
-    Load NIRCam, NIRISS, and MIRI filters from the SVO Filter Profile Service.
-    http://svo2.cab.inta-csic.es/theory/fps/
-
-    If timeout to server, then use local copy of filter list and load through webbpsf.
-
-    Parameters
-    ----------
-    instrument : str
-        Name of instrument to load filter list for. 
-        Must be one of 'NIRCam', 'NIRISS', or 'MIRI'.
-    timeout : float
-        Timeout in seconds for connection to SVO Filter Profile Service.
-    do_svo : bool
-        If True, try to load filter list from SVO Filter Profile Service. 
-        If False, use webbpsf without first check web server.
-    return_more : bool
-        If True, also return `do_svo` variable, whether SVO was used or not.
-    """
-
-    iname_upper = instrument.upper()
-    if iname_upper == 'NIRCAM':
-        inst = nircam
-    elif iname_upper == 'NIRISS':
-        inst = niriss
-    elif iname_upper == 'MIRI':
-        inst = miri
-
-    # Try to get filter list from SVO
-    if do_svo:
-        try:
-            filter_list = SvoFps.get_filter_list(facility='JWST', instrument=iname_upper, timeout=timeout)
-        except:
-            log.warning('Using SVO Filter Profile Service timed out. Using WebbPSF instead.')
-            do_svo = False
-
-    # If unsuccessful, use webbpsf to get filter list
-    if not do_svo:
-        filter_list = inst.filter_list
-
-    wave, weff = ({}, {})
-    if do_svo:
-        for i in range(len(filter_list)):
-            name = filter_list['filterID'][i]
-            name = name[name.rfind('.') + 1:]
-            wave[name] = filter_list['WavelengthMean'][i] / 1e4  # micron
-            weff[name] = filter_list['WidthEff'][i] / 1e4  # micron
-    else:
-        for filt in filter_list:
-            bp = inst._get_synphot_bandpass(filt)
-            wave[filt] = bp.avgwave().to_value('micron')
-            weff[filt] = bp.equivwidth().to_value('micron')
-
-    if return_more:
-        return wave, weff, do_svo
-    else:
-        return wave, weff
 
 # Load NIRCam, NIRISS, and MIRI filters
 wave_nircam, weff_nircam, do_svo = get_filter_info('NIRCAM', return_more=True)
