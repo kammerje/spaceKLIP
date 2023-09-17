@@ -2107,11 +2107,11 @@ def cube_outlier_detection(data, sigma_cut=5, nint_min=5):
     return indbad
 
 
-# Fit unsaturated data and return coefficients
 def cube_fit(tarr, data, sat_vals, sat_frac=0.95, bias=None, 
              deg=1, bpmask_arr=None, fit_zero=False, verbose=False,
              use_legendre=False, lxmap=None, return_lxmap=False,
              return_chired=False):
+    """Fit unsaturated data and return coefficients"""
         
     from webbpsf_ext.maths import jl_poly_fit, jl_poly
 
