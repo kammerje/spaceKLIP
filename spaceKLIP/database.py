@@ -80,6 +80,11 @@ class Database():
         
         # Output directory for saving reduction products.
         self.output_dir = output_dir
+
+        # Check if output directory exists
+        if not os.path.isdir(self.output_dir):
+            log.warning(f'Output directory does not exist. Creating {self.output_dir}.')
+            os.makedirs(self.output_dir)
         
         # Initialize observations dictionary which contains the individual
         # concatenations.
@@ -1245,3 +1250,66 @@ class Database():
                         summarystr += (', ' if i>0 else '') + f'{ntype} {typestr}'
                     print(summarystr)
 
+def create_database(output_dir, 
+                    pid, 
+                    input_dir=None,
+                    psflibpaths=None, 
+                    bgpaths=None,
+                    **kwargs):
+
+    """ Create a spaceKLIP database from JWST data
+
+    Parameters
+    ----------
+    output_dir : str
+        Directory to save the database.
+    pid : str
+        Program ID.
+    input_dir : str
+        Directory containing the JWST data. If not set, will search for
+        MAST directory.
+    psflibpaths : list of paths, optional
+        List of paths of the input PSF references. Make sure that they are
+        NOT duplicated in the 'datapaths'. The default is None.
+    bgpaths : list of paths, optional
+        List of paths of the input MIRI background observations. Make sure
+        that they ARE duplicated in the 'datapaths' or 'psflibpaths'. The
+        default is None.
+    
+    Keyword Arguments
+    -----------------
+    obsid : int
+        Observation number.
+    sca : str
+        Name of detector (e.g., 'along' or 'a3')
+    filt : str
+        Return files observed in given filter.
+    file_type : str
+        uncal.fits or rate.fits, etc
+    exp_type : str
+        Exposure type such as NRC_TACQ, NRC_TACONFIRM
+    act_id : str
+        Activity ID. The <aa> in _<gg><s><aa>_ portion of the file name.
+    apername : str
+        Name of aperture (e.g., NRCA5_FULL)
+    apername_pps : str
+        Name of aperture from PPS (e.g., NRCA5_FULL)
+    """
+
+    from webbpsf_ext.imreg_tools import get_files, get_detname
+    from webbpsf_ext.analysis_tools import nrc_ref_info
+
+    if input_dir is None:
+        mast_dir = os.getenv('JWSTDOWNLOAD_OUTDIR')
+        input_dir = os.path.join(mast_dir, f'{pid:05d}')
+
+
+    fitsfiles = get_files(input_dir, pid, **kwargs)
+
+    # Initialize the spaceKLIP database and read the input FITS files.
+    db = Database(output_dir=output_dir)
+    db.read_jwst_s012_data(datapaths=fitsfiles,
+                           psflibpaths=psflibpaths,
+                           bgpaths=bgpaths)
+    
+    return db
