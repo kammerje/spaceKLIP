@@ -1303,7 +1303,6 @@ def create_database(output_dir,
         mast_dir = os.getenv('JWSTDOWNLOAD_OUTDIR')
         input_dir = os.path.join(mast_dir, f'{pid:05d}')
 
-
     fitsfiles = get_files(input_dir, pid, **kwargs)
 
     # Initialize the spaceKLIP database and read the input FITS files.

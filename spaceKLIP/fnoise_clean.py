@@ -81,9 +81,9 @@ class CleanSubarray:
         if savgol:
             self.fit_savgol(**kwargs)
         else:
-            self.fit_median(**kwargs)
+            self.fit_median()
 
-    def fit_median(self, **kwargs):
+    def fit_median(self):
         """ Return the model which is just median of each row"""
 
         # Fit the model

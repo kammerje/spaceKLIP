@@ -22,7 +22,10 @@ from jwst.lib import reffile_utils
 from jwst.datamodels import dqflags, RampModel, SaturationModel
 from jwst.pipeline import Detector1Pipeline, Image2Pipeline, Coron3Pipeline
 
+from webbpsf_ext import robust
+
 from .imagetools import cube_outlier_detection
+from .utils import expand_mask
 
 import logging
 log = logging.getLogger(__name__)
@@ -51,7 +54,9 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
 
     spec = """
         save_intermediates = boolean(default=False) # Save all intermediate step results
-        rate_int_outliers  = boolean(default=True) # Flag outlier pixels in rateints
+        rate_int_outliers  = boolean(default=True)  # Flag outlier pixels in rateints
+        remove_ktc         = boolean(default=False) # Remove kTC noise from data
+        remove_fnoise      = boolean(default=False) # Remove 1/f noise from data
     """
 
     def __init__(self,
@@ -131,7 +136,10 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
             input = self.run_step(self.dark_current, input)
             input = self.run_step(self.charge_migration, input)
             input = self.run_step(self.jump, input)
-            input = self.subtract_ktc(input)
+            if self.remove_ktc or self.remove_fnoise:
+                input = self.subtract_ktc(input)
+            if self.remove_fnoise:
+                input = self.subtract_fnoise(input)
 
         # save the corrected ramp data, if requested
         if self.ramp_fit.save_calibrated_ramp or self.save_calibrated_ramp or self.save_intermediates:
@@ -454,12 +462,12 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
             it2 = None if nrow_off == 0 else -1 * nrow_off
             input.pixeldq[it1:it2,:] = input.pixeldq[it1:it2,:] | dqflags.pixel['REFERENCE_PIXEL']
         if nleft>0:
-            il1 = 0
+            il1 = ncol_off
             il2 = il1 + nleft
             input.pixeldq[:,il1:il2] = input.pixeldq[:,il1:il2] | dqflags.pixel['REFERENCE_PIXEL']
         if nright>0:
-            ir1 = -nright
-            ir2 = None
+            ir1 = -1 * (nright + ncol_off)
+            ir2 = None if ncol_off == 0 else -1 * ncol_off
             input.pixeldq[:,ir1:ir2] = input.pixeldq[:,ir1:ir2] | dqflags.pixel['REFERENCE_PIXEL']
 
         # Turn off side reference pixels?
@@ -486,11 +494,11 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
 
         return res
     
-    def subtract_ktc(self,
-                     input,
-                     sat_frac=0.5):
-        
-        from .imagetools import cube_fit
+    def fit_slopes(self,
+                   input,
+                   sat_frac=0.5):
+
+        from .utils import cube_fit
 
         # Get saturation reference file
         # Get the name of the saturation reference file
@@ -516,6 +524,9 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         nints = input.meta.exposure.nints
         tarr = np.arange(1, ngroups+1) * group_time
         data = input.data
+
+        bias_arr = []
+        slope_arr = []
         for i in range(nints):
             # Get group-level bpmask for this integration
             groupdq = input.groupdq[i,:,:,:]
@@ -523,8 +534,76 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
             bpmask_arr = np.cumsum(groupdq, axis=0) > 0
             cf = cube_fit(tarr, data[i,:,:,:], bpmask_arr=bpmask_arr,
                           sat_vals=sat_thresh, sat_frac=sat_frac)
-            bias, slope = cf
-            data[i,:,:,:] -= bias
+            bias_arr.append(cf[0])
+            slope_arr.append(cf[1])
+        bias_arr = np.asarray(bias_arr)
+        slope_arr = np.asarray(slope_arr)
+
+        return bias_arr, slope_arr
+
+    def subtract_ktc(self,
+                     input,
+                     sat_frac=0.5):
+        
+        bias_arr, _ = self.fit_slopes(input, sat_frac=sat_frac)
+
+        # Subtract bias from each integration
+        nints = input.meta.exposure.nints
+        for i in range(nints):
+            input.data[i] -= bias_arr[i]
+
+        return input
+    
+    def subtract_fnoise(self,
+                        input):
+        
+        from .fnoise_clean import CleanSubarray
+
+        is_full_frame = 'FULL' in input.meta.subarray.name.upper()
+        nints    = input.meta.exposure.nints
+        ngroups  = input.meta.exposure.ngroups
+        noutputs = input.meta.exposure.noutputs
+
+        if is_full_frame:
+            assert noutputs == 4, 'Full frame data must have 4 outputs'
+        else:
+            assert noutputs == 1, 'Subarray data must have 1 output'
+
+        ny, nx = input.data.shape[-2:]
+        chsize = ny // noutputs
+
+        # Fit slopes
+        _, slope_arr = self.fit_slopes(input)
+        slope_mean = robust.mean(slope_arr, axis=0)
+        signal_mask = robust.mean(slope_mean, Cut=5, return_mask=True)
+
+        # Subtract 1/f noise from each integration
+        data = input.data
+        for i in range(nints):
+            cube = data[i]
+            groupdq = input.groupdq[i]
+            bpmask_arr = np.cumsum(groupdq, axis=0) > 0
+            for j in range(ngroups):
+                # Get mask of background regions
+                mask = signal_mask & ~bpmask_arr[j]
+                # Expand bad pixels by 1 pixel
+                mask = ~expand_mask(~mask, 2, grow_diagonal=True)
+                for ch in range(noutputs):
+                    # Get channel x-indices
+                    x1 = int(ch*chsize)
+                    x2 = int(x1 + chsize)
+
+                    # Channel subarrays
+                    imch = cube[j, :, x1:x2]
+                    good_mask = mask[:, x1:x2]
+
+                    # Subtract 1/f noise
+                    nf_clean = CleanSubarray(imch, good_mask)
+                    nf_clean.fit()
+
+                    # Subtract model from data
+                    data[i,j,:,x1:x2] -= nf_clean.model
+                    del nf_clean
 
         return input
 
@@ -576,6 +655,10 @@ def run_single_file(fitspath, output_dir, steps={}, **kwargs):
     pipeline.saturation.flag_rcsat     = kwargs.get('flag_rcsat', True)
     pipeline.rate_int_outliers         = kwargs.get('rate_int_outliers', True)
 
+    # 1/f noise correction
+    pipeline.remove_ktc    = kwargs.get('remove_ktc', False)
+    pipeline.remove_fnoise = kwargs.get('remove_fnoise', False)
+
     # Skip pixels with only 1 group in ramp_fit?
     pipeline.ramp_fit.suppress_one_group = kwargs.get('suppress_one_group', False)
     # Number of processor cores to use during ramp fitting process
@@ -619,7 +702,7 @@ def run_obs(database,
       edge rows and columns as reference pixels, run the JWST stage 1 refpix
       step, and unflag the pseudo reference pixels again. Only applicable for
       subarray data.
-    - Remove vertical striping in NIRCam data.
+    - Remove horizontal 1/f noise spatial striping in NIRCam data.
 
     
     Parameters
@@ -650,7 +733,7 @@ def run_obs(database,
             reference pixels. The default is 0.
         - ramp_fit/save_calibrated_ramp : bool, optional
             Save the calibrated ramp? The default is False.
-        Other useful step parameters:
+        Additional useful step parameters:
         - saturation/n_pix_grow_sat : int, optional
             Number of pixels to grow for saturation flagging. Default is 1.
         - ramp_fit/suppress_one_group : bool, optional
@@ -678,6 +761,12 @@ def run_obs(database,
         a minimum of 5 integrations.
     save_calibrate_ramp : bool
         Save intermediate step that is the calibrated ramp? 
+        Default is False.
+    remove_ktc : bool, optional
+        Remove kTC noise by fitting ramp data to get bias? 
+        Default is False.
+    remove_fnoise : bool, optional
+        Remove 1/f noise from data at group level? 
         Default is False.
     skip_charge : bool, optional
         Skip charge migration flagging step? Default: False.
