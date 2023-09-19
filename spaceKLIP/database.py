@@ -186,6 +186,7 @@ class Database():
         XOFFSET = []  # mas
         YOFFSET = []  # mas
         APERNAME = []
+        PPS_APER = []
         PIXSCALE = []  # mas
         BUNIT = []
         CRPIX1 = []  # pix
@@ -252,6 +253,7 @@ class Database():
             XOFFSET += [1e3 * head.get('XOFFSET', 0.)]
             YOFFSET += [1e3 * head.get('YOFFSET', 0.)]
             APERNAME += [head.get('APERNAME', 'UNKNOWN')]
+            PPS_APER += [head.get('PPS_APER', 'UNKNOWN')]
             if TELESCOP[-1] == 'JWST':
                 if INSTRUME[-1] == 'NIRCAM':
                     if 'LONG' in DETECTOR[-1] or '5' in DETECTOR[-1]:
@@ -301,6 +303,7 @@ class Database():
         XOFFSET = np.array(XOFFSET)
         YOFFSET = np.array(YOFFSET)
         APERNAME = np.array(APERNAME)
+        PPS_APER = np.array(PPS_APER)
         PIXSCALE = np.array(PIXSCALE)
         BUNIT = np.array(BUNIT)
         CRPIX1 = np.array(CRPIX1)
@@ -325,6 +328,7 @@ class Database():
                 HASH_i_split = HASH_unique[i].split('_')
                 for j in range(NHASH_unique):
                     HASH_j_split = HASH_unique[j].split('_')
+                    print(HASH_j_split)
                     if HASH_j_split[0] == HASH_i_split[0] and HASH_j_split[1] == HASH_i_split[1] and HASH_j_split[2] == HASH_i_split[2] and HASH_j_split[4] == HASH_i_split[4] and HASH_j_split[5] != 'NONE' and HASH_j_split[6][-4:] in HASH_i_split[6]:
                         ww[-1] = i
                         break
@@ -397,6 +401,7 @@ class Database():
                                'XOFFSET',
                                'YOFFSET',
                                'APERNAME',
+                               'PPS_APER',
                                'PIXSCALE',
                                'BUNIT',
                                'CRPIX1',
@@ -428,6 +433,7 @@ class Database():
                                'int',
                                'float',
                                'float',
+                               'object',
                                'object',
                                'float',
                                'object',
@@ -506,6 +512,7 @@ class Database():
                              XOFFSET[ww][j],
                              YOFFSET[ww][j],
                              APERNAME[ww][j],
+                             PPS_APER[ww][j],
                              PIXSCALE[ww][j],
                              BUNIT[ww][j],
                              CRPIX1[ww][j],
@@ -610,6 +617,7 @@ class Database():
         EFFINTTM = []  # s
         SUBARRAY = []
         APERNAME = []
+        PPS_APER = []
         PIXSCALE = []  # mas
         MODE = []
         ANNULI = []
@@ -664,6 +672,7 @@ class Database():
             EFFINTTM += [head.get('EFFINTTM', np.nan)]
             SUBARRAY += [head.get('SUBARRAY', 'UNKNOWN')]
             APERNAME += [head.get('APERNAME', 'UNKNOWN')]
+            PPS_APER += [head.get('PPS_APER', 'UNKNOWN')]
             if TELESCOP[-1] == 'JWST':
                 if INSTRUME[-1] == 'NIRCAM':
                     if 'LONG' in DETECTOR[-1] or '5' in DETECTOR[-1]:
@@ -729,6 +738,7 @@ class Database():
         EFFINTTM = np.array(EFFINTTM)
         SUBARRAY = np.array(SUBARRAY)
         APERNAME = np.array(APERNAME)
+        PPS_APER = np.array(PPS_APER)
         PIXSCALE = np.array(PIXSCALE)
         MODE = np.array(MODE)
         ANNULI = np.array(ANNULI)
@@ -769,6 +779,7 @@ class Database():
                                    'EFFINTTM',
                                    'SUBARRAY',
                                    'APERNAME',
+                                   'PPS_APER',
                                    'PIXSCALE',
                                    'MODE',
                                    'ANNULI',
@@ -831,6 +842,7 @@ class Database():
                              EFFINTTM[ww[j]],
                              SUBARRAY[ww[j]],
                              APERNAME[ww[j]],
+                             PPS_APER[ww[j]],
                              PIXSCALE[ww[j]],
                              MODE[ww[j]],
                              ANNULI[ww[j]],
@@ -990,9 +1002,9 @@ class Database():
             log.info('  --> Concatenation %.0f: ' % (i + 1) + key)
             print_tab = copy.deepcopy(self.obs[key])
             if include_fitsfiles:
-                print_tab.remove_columns(['TARG_RA', 'TARG_DEC', 'EXPSTART', 'APERNAME', 'CRPIX1', 'CRPIX2', 'RA_REF', 'DEC_REF'])
+                print_tab.remove_columns(['TARG_RA', 'TARG_DEC', 'EXPSTART', 'APERNAME', 'PPS_APER', 'CRPIX1', 'CRPIX2', 'RA_REF', 'DEC_REF'])
             else:
-                print_tab.remove_columns(['TARG_RA', 'TARG_DEC', 'EXPSTART', 'APERNAME', 'CRPIX1', 'CRPIX2', 'RA_REF', 'DEC_REF', 'FITSFILE', 'MASKFILE'])
+                print_tab.remove_columns(['TARG_RA', 'TARG_DEC', 'EXPSTART', 'APERNAME', 'PPS_APER', 'CRPIX1', 'CRPIX2', 'RA_REF', 'DEC_REF', 'FITSFILE', 'MASKFILE'])
             print_tab['XOFFSET'] = np.round(print_tab['XOFFSET'])
             print_tab['XOFFSET'][print_tab['XOFFSET'] == 0.] = 0.
             print_tab['YOFFSET'] = np.round(print_tab['YOFFSET'])
@@ -1024,9 +1036,9 @@ class Database():
             log.info('  --> Concatenation %.0f: ' % (i + 1) + key)
             print_tab = copy.deepcopy(self.red[key])
             if include_fitsfiles:
-                print_tab.remove_columns(['TARG_RA', 'TARG_DEC', 'EXPSTART', 'APERNAME'])
+                print_tab.remove_columns(['TARG_RA', 'TARG_DEC', 'EXPSTART', 'APERNAME', 'PPS_APER'])
             else:
-                print_tab.remove_columns(['TARG_RA', 'TARG_DEC', 'EXPSTART', 'APERNAME', 'FITSFILE', 'MASKFILE'])
+                print_tab.remove_columns(['TARG_RA', 'TARG_DEC', 'EXPSTART', 'APERNAME', 'PPS_APER', 'FITSFILE', 'MASKFILE'])
             print_tab.pprint()
         
         pass
