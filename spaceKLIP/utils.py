@@ -23,6 +23,8 @@ from scipy.integrate import simps
 from scipy.ndimage import fourier_shift, gaussian_filter
 from scipy.ndimage import shift as spline_shift
 
+from webbpsf_ext.imreg_tools import get_coron_apname as nircam_apname
+
 import logging
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -574,10 +576,13 @@ def get_tp_comsubst(instrume,
     
     """
     
+    from webbpsf_ext.bandpasses import nircam_filter, nircam_com_th
+
     # Default return.
     tp_comsubst = 1.
     
     # If NIRCam.
+    instrume = instrume.upper()
     if instrume == 'NIRCAM':
         
         # If coronagraphy subarray.
@@ -585,25 +590,17 @@ def get_tp_comsubst(instrume,
             
             # Read bandpass.
             try:
-                with importlib.resources.open_text(f'spaceKLIP.resources.PCEs.{instrume}', f'{filt}.txt') as bandpass_file:
-                    bandpass_data = np.genfromtxt(bandpass_file).transpose()
-                    bandpass_wave = bandpass_data[0]  # micron
-                    bandpass_throughput = bandpass_data[1]
+                bp = nircam_filter(filt)
+                bandpass_wave = bp.wave / 1e4  # micron
+                bandpass_throughput = bp.throughput
             except FileNotFoundError:
                 log.error('--> Filter ' + filt + ' not found for instrument ' + instrume)
             
-            # Read COM substrate transmission.
-            with importlib.resources.open_text(f'spaceKLIP.resources.transmissions', f'ModA_COM_Substrate_Transmission_20151028_JKrist.dat') as comsubst_file:
-                comsubst_data = np.genfromtxt(comsubst_file).transpose()
-                comsubst_wave = comsubst_data[0][1:]  # micron
-                comsubst_throughput = comsubst_data[1][1:]
-            
-            # Compute COM substrate transmission averaged over the respective
-            # filter profile.
-            bandpass_throughput = np.interp(comsubst_wave, bandpass_wave, bandpass_throughput)
-            int_tp_bandpass = simps(bandpass_throughput, comsubst_wave)
-            int_tp_bandpass_comsubst = simps(bandpass_throughput * comsubst_throughput, comsubst_wave)
-            tp_comsubst = int_tp_bandpass_comsubst / int_tp_bandpass
+            # Read COM substrate transmission interpolated at bandpass wavelengths.
+            comsubst_throughput = nircam_com_th(bandpass_wave)
+
+            # Compute weighted average of COM substrate transmission.
+            tp_comsubst = np.average(comsubst_throughput, weights=bandpass_throughput)
     
     # Return.
     return tp_comsubst
