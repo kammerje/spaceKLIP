@@ -447,9 +447,10 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         self.refpix.log.info(f'Flagging [{nlower}, {nupper}] references rows at [bottom, top] of array')
         self.refpix.log.info(f'Flagging [{nleft}, {nright}] references columns at [left, right] of array')
 
-        is_full_frame = 'FULL' in input.meta.subarray.name.upper()
-        if (nleft + nright > 0) and not is_full_frame:
-            self.refpix.log.warning('1/f Noise row-by-row correction is not supported for subarray data')
+        # 
+        # is_full_frame = 'FULL' in input.meta.subarray.name.upper()
+        # if (nleft + nright > 0) and not is_full_frame:
+        #     self.refpix.log.warning('1/f Noise row-by-row correction is not supported for subarray data')
 
         # Update pixel DQ mask to manually set reference pixels
         log.info(f'Flagging [{nlower}, {nupper}] references rows at [bottom, top] of array')
@@ -674,12 +675,113 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
 
         return input
 
-def run_single_file(fitspath, output_dir, steps={}, **kwargs):
+def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
+    """Run the JWST stage 1 detector pipeline on a single file.
+    
+    WARNING: Will overwrite exiting files.
+
+    This customized implementation can:
+    - Do a custom saturation correction where only the bottom/top/left/right
+      and not the diagonal pixels next to a saturated pixel are flagged.
+    - Do a pseudo reference pixel correction. Therefore, flag the requested
+      edge rows and columns as reference pixels, run the JWST stage 1 refpix
+      step, and unflag the pseudo reference pixels again. Only applicable for
+      subarray data.
+    - Remove horizontal 1/f noise spatial striping in NIRCam data.
+    
+    Parameters
+    ----------
+    fitspath : str
+        Path to the input FITS file (uncal.fits).
+    output_dir : str
+        Path to the output directory to save the resulting data products.
+    steps : dict, optional
+        See here for how to use the steps parameter:
+        https://jwst-pipeline.readthedocs.io/en/latest/jwst/user_documentation/running_pipeline_python.html#configuring-a-pipeline-step-in-python
+        Custom step parameters are:
+        - saturation/grow_diagonal : bool, optional
+            Flag also diagonal pixels (or only bottom/top/left/right)? 
+            The default is True.
+        - saturation/flag_rcsat : bool, optional
+            Flag RC pixels as saturated? The default is True.
+        - refpix/nlower : int, optional
+            Number of rows at frame bottom that shall be used as additional
+            reference pixels. The default is 0.
+        - refpix/nupper : int, optional
+            Number of rows at frame top that shall be used as additional
+            reference pixels. The default is 0.
+        - refpix/nleft : int, optional
+            Number of rows at frame left side that shall be used as additional
+            reference pixels. The default is 0.
+        - refpix/nright : int, optional
+            Number of rows at frame right side that shall be used as additional
+            reference pixels. The default is 0.
+        - ramp_fit/save_calibrated_ramp : bool, optional
+            Save the calibrated ramp? The default is False.
+
+        Additional useful step parameters:
+        - saturation/n_pix_grow_sat : int, optional
+            Number of pixels to grow for saturation flagging. Default is 1.
+        - ramp_fit/suppress_one_group : bool, optional
+            If True, skips slope calc for pixels with only 1 available group. 
+            Default: False.
+        - ramp_fit/maximum_cores : str, optional
+            max number of parallel processes to create during ramp fitting.
+            'none', 'quarter', 'half', or 'all'. Default: 'quarter'.
+        The default is {}. 
+        Each of these parameters can be passed directly through `kwargs`.
+    subdir : str, optional
+        Name of the directory where the data products shall be saved. The
+        default is 'stage1'.
+    
+    Keyword Args
+    ------------
+    save_results : bool, optional
+        Save the JWST pipeline step products? The default is True.
+    save_calibrate_ramp : bool
+        Save intermediate step that is the calibrated ramp? 
+        Default is False.
+    save_intermediates : bool, optional
+        Save intermediate steps, such as dq_init, saturation, refpix,
+        jump, linearity, ramp, etc. Default is False.
+    rate_int_outliers : bool, optional
+        Flag outlier pixels in rateints? Default is True.
+        Uses the `cube_outlier_detection` function and requires
+        a minimum of 5 integrations.
+    remove_ktc : bool, optional
+        Remove kTC noise by fitting ramp data to get bias? 
+        Default is True.
+    remove_fnoise : bool, optional
+        Remove 1/f noise from data at group level? 
+        Default is True.
+    skip_charge : bool, optional
+        Skip charge migration flagging step? Default: False.
+    skip_jump : bool, optional
+        Skip jump detection step? Default: False.
+    skip_dark : bool, optional
+        Skip dark current subtraction step? Default: True.
+        Dark current cal files are really low SNR.
+    skip_ipc : bool, optional
+        Skip IPC correction step? Default: True.
+    skip_persistence : bool, optional
+        Skip persistence correction step? Default: True.
+        Doesn't currently do anything.
+
+    Returns
+    -------
+    None.
+    
+    """
 
     from webbpsf_ext.analysis_tools import nrc_ref_info
+    from .logging_tools import all_logging_disabled
+
+    # Print all info message if verbose, otherwise only errors or critical.
+    log_level = logging.INFO if verbose else logging.ERROR
 
     # Initialize Coron1Pipeline.
-    pipeline = Coron1Pipeline_spaceKLIP(output_dir=output_dir)
+    with all_logging_disabled(log_level):
+        pipeline = Coron1Pipeline_spaceKLIP(output_dir=output_dir)
 
     # Options for saving results
     pipeline.save_results         = kwargs.get('save_results', True)
@@ -740,7 +842,8 @@ def run_single_file(fitspath, output_dir, steps={}, **kwargs):
     # Run Coron1Pipeline. Raise exception on error.
     # Ensure that pipeline is closed out.
     try:
-        res = pipeline.run(fitspath)
+        with all_logging_disabled(log_level):
+            res = pipeline.run(fitspath)
     except Exception as e:
         raise RuntimeError(
             'Caught exception during pipeline processing.'
@@ -758,6 +861,7 @@ def run_single_file(fitspath, output_dir, steps={}, **kwargs):
 def run_obs(database,
             steps={},
             subdir='stage1',
+            overwrite=False,
             verbose=False,
             **kwargs):
     """
@@ -814,6 +918,10 @@ def run_obs(database,
     subdir : str, optional
         Name of the directory where the data products shall be saved. The
         default is 'stage1'.
+    overwrite : bool, optional
+        Overwrite existing files? Default is False.
+    verbose : bool, optional
+        Print all info messages? Default is False.
     
     Keyword Args
     ------------
@@ -853,13 +961,6 @@ def run_obs(database,
     None.
     
     """
-    
-    from .logging_tools import all_logging_disabled
-
-    if verbose:
-        log_level = logging.DEBUG
-    else:
-        log_level = logging.WARNING
 
     # Set output directory.
     output_dir = os.path.join(database.output_dir, subdir)
@@ -880,17 +981,19 @@ def run_obs(database,
             if database.obs[key]['DATAMODL'][j] != 'STAGE0':
                 log.info('  --> Coron1Pipeline: skipping non-stage 0 file ' + tail)
                 continue
-            log.info('  --> Coron1Pipeline: processing ' + tail)
 
-            with all_logging_disabled(log_level):
-                res = run_single_file(fitspath, output_dir, steps=steps, **kwargs)
+            log.info('  --> Coron1Pipeline: processing ' + tail)
+            # Get expected ouput file name
+            outfile_name = tail.replace('uncal.fits', 'rateints.fits')
+            fitsout_path = os.path.join(output_dir, outfile_name)
+
+            # Skip if file already exists and overwrite is False.
+            if os.path.isfile(fitsout_path) and not overwrite:
+                log.warning('  --> Coron1Pipeline: File already processed. Re-init database and use `overwrite=True` to overwrite.')
+            else:
+                res = run_single_file(fitspath, output_dir, steps=steps, 
+                                      verbose=verbose, **kwargs)
             
             # Update spaceKLIP database.
-            fitsout_path = os.path.join(output_dir, res.meta.filename)
-            if fitsout_path.endswith('rate.fits'):
-                fileout_new = fitsout_path.replace('rate.fits', 'rateints.fits')
-                if os.path.isfile(fileout_new):
-                    fitsout_path = fileout_new
-            log.info('  --> Coron1Pipeline: database updated to ' + fitsout_path.split('/')[-1])
+            # log.info('  --> Coron1Pipeline: database updated to ' + fitsout_path.split('/')[-1])
             database.update_obs(key, j, fitsout_path)
-    
