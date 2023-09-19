@@ -12,16 +12,17 @@ class CleanSubarray:
     read noise from generic JWST near-IR Subarray images.  It is
     intended for use on Level 1 pipeline products.
 
-    Adapted from NSClean by Bernie Rauscher (https://arxiv.org/abs/2306.03250),
+    Inspired by NSClean by Bernie Rauscher (https://arxiv.org/abs/2306.03250),
     however instead of using FFTs and Matrix multiplication, this class uses
     Savitzky-Golay filtering to model the 1/f noise and subtract it from the
-    data.  This is much faster than the FFT approach. 
+    data. This is much faster than the FFT approach and provides similar
+    results. 
     """
     
     # Class variables. These are the same for all instances.
     nloh = np.int32(12)       # New line overhead in pixels
     tpix = np.float32(10.e-6) # Pixel dwell time in seconds
-    sigrej = np.float32(4.0)  # Standard deviation threshold for flagging
+    sigrej = np.float32(3.0)  # Standard deviation threshold for flagging
                               #   statistical outliers.
         
     def __init__(self, data, mask, exclude_outliers=True):
@@ -58,44 +59,72 @@ class CleanSubarray:
         # The mask potentially contains statistical outliers.
         # Optionally exclude them.
         if exclude_outliers is True:
-            # Compute median and median absolute deviation
-            m = np.nanmedian(self.D[self.M])
-            s = robust.medabsdev(self.D[self.M]) 
-            vmin = m - self.sigrej*s # Minimum value to keep
-            vmax = m + self.sigrej*s # Maximum value to keep
-
-            bdpx = np.isnan(self.D) | (self.D<vmin) | (self.D>vmax) # Flag statistical outliers
+            gdpx = robust.mean(self.D, Cut=self.sigrej, return_mask=True)
+            bdpx = ~gdpx # Bad pixel mask
             bdpx = expand_mask(bdpx, 1, grow_diagonal=False) # Also flag 4 nearest neighbors
-
-            # bdpx now contains the pixels to exclude from the background pixels
-            # mask. Exclude them.
-            self.M[bdpx] = False
+            gdpx = ~bdpx # Good pixel mask
+            self.M = self.M & gdpx
 
         # Median subtract
         self.D = self.D - np.nanmedian(self.D[self.M]) 
 
-    def fit(self, savgol=False, **kwargs):
-        """ Return the model which is just median of each row"""
+    def fit(self, model_type='mean', **kwargs):
+        """ Return the model which is just median of each row
+        
+        Parameters
+        ==========
+        model_type : str
+            Must be 'median', 'mean', or 'savgol'. For 'mean' case,
+            it uses a robust mean that ignores outliers and NaNs.
+            The 'median' case uses `np.nanmedian`. The 'savgol' case
+            uses a Savitzky-Golay filter to model the 1/f noise, 
+            iteratively rejecting outliers from the model fit relative
+            to the median model. The default is 'savgol'.
+        """
 
         # Fit the model
-        if savgol:
-            self.fit_savgol(**kwargs)
-        else:
-            self.fit_median()
+        if 'median' in model_type:
+            self.model = self._fit_median(robust_mean=False)
+        elif 'mean' in model_type:
+            self.model = self._fit_median(robust_mean=True)
+        elif 'savgol' in model_type:
+            # Do savgol model
+            model_savgol = self._fit_savgol(**kwargs)
 
-    def fit_median(self):
-        """ Return the model which is just median of each row"""
+            # Replace masked regions with median model
+            # model_mean = self._fit_median(robust_mean=True)
+            # model_savgol[~self.M] = model_mean[~self.M]
+
+            self.model = model_savgol
+        else:
+            raise ValueError(f"Do not recognize model_type={model_type}")
+
+    def _fit_median(self, robust_mean=False):
+        """ Return the model which is just median of each row
+        
+        Option to use robust mean instead of median.
+        """
+
+        mean_func = robust.mean if robust_mean else np.nanmedian
 
         # Fit the model
         data = self.D.copy()
         data[~self.M] = np.nan
-        self.model = np.nanmedian(data, axis=1).repeat(self.nx).reshape(data.shape)
+        return mean_func(data, axis=1).repeat(self.nx).reshape(data.shape)
         
-    def fit_savgol(self, **kwargs):
-        """ Use a Savitzky-Golay filter to smooth the data
+    def _fit_savgol(self, niter=10, **kwargs):
+        """ Use a Savitzky-Golay filter to smooth the masked row data
 
         Parameters
         ==========
+        niter : int
+            Number of iterations to use for rejecting outliers during
+            the model fit. If the number of rejected pixels does not
+            change between iterations, then the fit is considered
+            converged and the loop is broken.
+
+        Keyword Args
+        ============
         winsize : int
             Size of the window filter. Should be an odd number.
         order : int
@@ -123,7 +152,29 @@ class CleanSubarray:
         """
 
         bpmask = ~self.M # Bad pixel mask
-        self.model = channel_smooth_savgol(self.D, mask=bpmask, **kwargs)
+        model = channel_smooth_savgol(self.D, mask=bpmask, **kwargs)
+
+        for i in range(niter):
+            # Get median model
+            model_med = self._fit_median(robust_mean=False)
+
+            # Find standard deviation of difference between model and median values
+            bpmask = ~self.M 
+            diff = model - model_med
+            diff[bpmask] = np.nan
+            sig = np.nanstd(diff, ddof=1)
+
+            # Flag new outliers
+            bp_sig = np.abs(diff) > 2*sig
+            bpmask_new = bpmask | bp_sig
+            if bpmask_new.sum() == bpmask.sum():
+                break
+
+            # Update mask and refit model
+            self.M = ~bpmask_new
+            model = channel_smooth_savgol(self.D, mask=bpmask_new, **kwargs)
+
+        return model
         
     def clean(self, weight_fit=True):
         """
@@ -137,6 +188,20 @@ class CleanSubarray:
         self.fit(weight_fit=weight_fit)           # Fit the background model
         self.D -= self.model # Overwrite data with cleaned data
         return(self.D)
+
+def mask_helper():
+    """Helper to handle indices and logical indices of a mask
+
+    Output: index, a function, with signature indices = index(logical_indices),
+    to convert logical indices of a mask to 'equivalent' indices
+
+    Example:
+        >>> # linear interpolation of NaNs
+        >>> mask = np.isnan(y)
+        >>> x = mask_helper(y)
+        >>> y[mask]= np.interp(x(mask), x(~mask), y[~mask])
+    """
+    return lambda z: np.nonzero(z)[0]
 
 def channel_smooth_savgol(im_arr, winsize=127, order=3, per_line=False, 
     mask=None, **kwargs):
@@ -182,20 +247,6 @@ def channel_smooth_savgol(im_arr, winsize=127, order=3, per_line=False,
         Default is 0.0.
     """
 
-    def mask_helper():
-        """Helper to handle indices and logical indices of a mask
-
-        Output: index, a function, with signature indices = index(logical_indices),
-        to convert logical indices of a mask to 'equivalent' indices
-
-        Example:
-            >>> # linear interpolation of NaNs
-            >>> mask = np.isnan(y)
-            >>> x = mask_helper(y)
-            >>> y[mask]= np.interp(x(mask), x(~mask), y[~mask])
-        """
-        return lambda z: np.nonzero(z)[0]
-
     sh = im_arr.shape
     if len(sh)==2:
         nz = 1
@@ -224,7 +275,7 @@ def channel_smooth_savgol(im_arr, winsize=127, order=3, per_line=False,
 
             # Use a savgol filter to smooth out any outliers
             res = im.copy()
-            res[~im_mask] = savgol_filter(im[~im_mask], 31, 3, mode='interp')
+            res[~im_mask] = savgol_filter(im[~im_mask], 33, 3, mode='interp')
 
             # Replace masked pixels with linear interpolation
             x = mask_helper() # Returns the nonzero (True) indices of a mask
