@@ -11,17 +11,21 @@ def all_logging_disabled(highest_level=logging.CRITICAL):
     A context manager that will prevent any logging messages
     triggered during the body from being processed.
 
-    param highest_level : the maximum logging level in use.
-      This would only need to be changed if a custom level greater than CRITICAL
-      is defined.
-    """
-    # two kind-of hacks here:
-    #    * can't get the highest logging level in effect => delegate to the user
-    #    * can't get the current module-level override => use an undocumented
-    #       (but non-private!) interface
+    Usage to suppress levels up to INFO:
 
+        >>> with all_logging_disabled(logging.INFO):
+        >>>     do_something()
+
+    Parameters
+    ----------
+    highest_level : int
+        The highest logging level that will be let through. Any
+        logging messages at this level or above will be processed
+        as normal. The default is CRITICAL, which will allow only
+        CRITICAL messages through.
+    """
     previous_level = logging.root.manager.disable
-    logging.disable(highest_level)
+    logging.disable(highest_level-1)
 
     try:
         yield
