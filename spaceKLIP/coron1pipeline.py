@@ -57,8 +57,8 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
     spec = """
         save_intermediates = boolean(default=False) # Save all intermediate step results
         rate_int_outliers  = boolean(default=True)  # Flag outlier pixels in rateints
-        remove_ktc         = boolean(default=False) # Remove kTC noise from data
-        remove_fnoise      = boolean(default=False) # Remove 1/f noise from data
+        remove_ktc         = boolean(default=True) # Remove kTC noise from data
+        remove_fnoise      = boolean(default=True) # Remove 1/f noise from data
     """
 
     def __init__(self,
@@ -496,9 +496,25 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
 
         return res
     
-    def fit_slopes(self,
-                   input,
-                   sat_frac=0.5):
+    def _fit_slopes(self,
+                    input,
+                    sat_frac=0.5):
+        """Fit slopes to each integration
+        
+        Uses custom `cube_fit` function to fit slopes to each integration.
+        Returns aray of slopes and bias values for each integration.
+        Bias and slope arrays have shape (nints, ny, nx).
+
+        Parameters
+        ----------
+        input : jwst.datamodel
+            Input JWST datamodel housing the data to be fit.
+        sat_frac : float
+            Saturation threshold for fitting. Values above
+            this fraction of the saturation level are ignored.
+            Default is 0.5 to ensure that the fit is within 
+            the linear range.
+        """
 
         from .utils import cube_fit
 
@@ -531,23 +547,25 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         slope_arr = []
         for i in range(nints):
             # Get group-level bpmask for this integration
-            groupdq = input.groupdq[i,:,:,:]
+            groupdq = input.groupdq[i]
             # Make sure to accumulate the group-level dq mask
             bpmask_arr = np.cumsum(groupdq, axis=0) > 0
-            cf = cube_fit(tarr, data[i,:,:,:], bpmask_arr=bpmask_arr,
+            cf = cube_fit(tarr, data[i], bpmask_arr=bpmask_arr,
                           sat_vals=sat_thresh, sat_frac=sat_frac)
             bias_arr.append(cf[0])
             slope_arr.append(cf[1])
         bias_arr = np.asarray(bias_arr)
         slope_arr = np.asarray(slope_arr)
 
+        # bias and slope arrays have shape [nints, ny, nx]
+        # bias values are in units of DN and slope in DN/sec
         return bias_arr, slope_arr
 
     def subtract_ktc(self,
                      input,
                      sat_frac=0.5):
         
-        bias_arr, _ = self.fit_slopes(input, sat_frac=sat_frac)
+        bias_arr, _ = self._fit_slopes(input, sat_frac=sat_frac)
 
         # Subtract bias from each integration
         nints = input.meta.exposure.nints
@@ -559,6 +577,25 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
     def subtract_fnoise(self,
                         input,
                         **kwargs):
+        """Model and subtract 1/f noise from each integration
+        
+        TODO: Make this into a Step class
+
+        Parameters
+        ----------
+        input : jwst.datamodel
+            Input JWST datamodel to be processed.
+
+        Keyword Args
+        ------------
+        model_type : str
+            Must be 'median', 'mean', or 'savgol'. For 'mean' case,
+            it uses a robust mean that ignores outliers and NaNs.
+            The 'median' case uses `np.nanmedian`. The 'savgol' case
+            uses a Savitzky-Golay filter to model the 1/f noise, 
+            iteratively rejecting outliers from the model fit relative
+            to the median model. The default is 'savgol'.
+        """
         
         from .fnoise_clean import CleanSubarray
         from webbpsf_ext.imreg_tools import get_coron_apname
@@ -581,7 +618,7 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         chsize = ny // noutputs
 
         # Fit slopes to get signal mask
-        _, slope_arr = self.fit_slopes(input)
+        _, slope_arr = self._fit_slopes(input)
         slope_mean = robust.mean(slope_arr, axis=0)
         signal_mask = robust.mean(slope_mean, Cut=2, return_mask=True)
         signal_mask = ~expand_mask(~signal_mask, 1, grow_diagonal=True)
@@ -686,8 +723,8 @@ def run_single_file(fitspath, output_dir, steps={}, **kwargs):
     pipeline.rate_int_outliers         = kwargs.get('rate_int_outliers', True)
 
     # 1/f noise correction
-    pipeline.remove_ktc    = kwargs.get('remove_ktc', False)
-    pipeline.remove_fnoise = kwargs.get('remove_fnoise', False)
+    pipeline.remove_ktc    = kwargs.get('remove_ktc', True)
+    pipeline.remove_fnoise = kwargs.get('remove_fnoise', True)
 
     # Skip pixels with only 1 group in ramp_fit?
     pipeline.ramp_fit.suppress_one_group = kwargs.get('suppress_one_group', False)
@@ -782,6 +819,9 @@ def run_obs(database,
     ------------
     save_results : bool, optional
         Save the JWST pipeline step products? The default is True.
+    save_calibrate_ramp : bool
+        Save intermediate step that is the calibrated ramp? 
+        Default is False.
     save_intermediates : bool, optional
         Save intermediate steps, such as dq_init, saturation, refpix,
         jump, linearity, ramp, etc. Default is False.
@@ -789,15 +829,12 @@ def run_obs(database,
         Flag outlier pixels in rateints? Default is True.
         Uses the `cube_outlier_detection` function and requires
         a minimum of 5 integrations.
-    save_calibrate_ramp : bool
-        Save intermediate step that is the calibrated ramp? 
-        Default is False.
     remove_ktc : bool, optional
         Remove kTC noise by fitting ramp data to get bias? 
-        Default is False.
+        Default is True.
     remove_fnoise : bool, optional
         Remove 1/f noise from data at group level? 
-        Default is False.
+        Default is True.
     skip_charge : bool, optional
         Skip charge migration flagging step? Default: False.
     skip_jump : bool, optional
