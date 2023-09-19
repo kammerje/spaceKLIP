@@ -2087,6 +2087,10 @@ def cube_outlier_detection(data, sigma_cut=5, nint_min=5):
     nint_min : int
         Minimum number of integrations required for outlier detection.
         Default is 5.
+
+    Returns
+    -------
+    Mask of bad pixels with same shape as input cube.
     """
 
     # Get bad pixels
