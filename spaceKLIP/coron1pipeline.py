@@ -23,6 +23,8 @@ from jwst.datamodels import dqflags, RampModel, SaturationModel
 from jwst.pipeline import Detector1Pipeline, Image2Pipeline, Coron3Pipeline
 
 from webbpsf_ext import robust
+from webbpsf_ext.webbpsf_ext_core import NIRCam_ext
+from webbpsf_ext.imreg_tools import get_coron_apname
 
 from .imagetools import cube_outlier_detection
 from .utils import expand_mask
@@ -139,7 +141,7 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
             if self.remove_ktc or self.remove_fnoise:
                 input = self.subtract_ktc(input)
             if self.remove_fnoise:
-                input = self.subtract_fnoise(input)
+                input = self.subtract_fnoise(input, model_type='savgol')
 
         # save the corrected ramp data, if requested
         if self.ramp_fit.save_calibrated_ramp or self.save_calibrated_ramp or self.save_intermediates:
@@ -555,9 +557,15 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         return input
     
     def subtract_fnoise(self,
-                        input):
+                        input,
+                        **kwargs):
         
         from .fnoise_clean import CleanSubarray
+        from webbpsf_ext.imreg_tools import get_coron_apname
+        from webbpsf_ext.coron_masks import gen_coron_mask_ndonly
+        from webbpsf_ext.utils import siaf_nrc
+        from webbpsf_ext.coords import dist_image
+
 
         is_full_frame = 'FULL' in input.meta.subarray.name.upper()
         nints    = input.meta.exposure.nints
@@ -572,10 +580,31 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         ny, nx = input.data.shape[-2:]
         chsize = ny // noutputs
 
-        # Fit slopes
+        # Fit slopes to get signal mask
         _, slope_arr = self.fit_slopes(input)
         slope_mean = robust.mean(slope_arr, axis=0)
-        signal_mask = robust.mean(slope_mean, Cut=5, return_mask=True)
+        signal_mask = robust.mean(slope_mean, Cut=2, return_mask=True)
+        signal_mask = ~expand_mask(~signal_mask, 1, grow_diagonal=True)
+
+        # Mask out ND squares and mask holder
+        apname = get_coron_apname(input)
+        if 'MASK' in apname:
+            # ND squares
+            ndmask = gen_coron_mask_ndonly(apname) < 0.5
+            ndmask = expand_mask(ndmask, 10, grow_diagonal=True)
+
+            # Mask out stellar position within some radius
+            ap = siaf_nrc[apname]
+            x0, y0 = ap.reference_point('sci')
+            rho = dist_image(ndmask, center=(x0, y0))
+            cmask = rho < np.min([50, chsize / 5])
+
+            mask = signal_mask & ~ndmask & ~cmask
+        else:
+            mask = signal_mask
+
+        # Expand mask
+        # mask = ~expand_mask(~mask, 3, grow_diagonal=True)
 
         # Subtract 1/f noise from each integration
         data = input.data
@@ -584,10 +613,8 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
             groupdq = input.groupdq[i]
             bpmask_arr = np.cumsum(groupdq, axis=0) > 0
             for j in range(ngroups):
-                # Get mask of background regions
-                mask = signal_mask & ~bpmask_arr[j]
-                # Expand bad pixels by 1 pixel
-                mask = ~expand_mask(~mask, 2, grow_diagonal=True)
+                # Exclude bad pixels
+                im_mask = mask & ~bpmask_arr[j]
                 for ch in range(noutputs):
                     # Get channel x-indices
                     x1 = int(ch*chsize)
@@ -595,14 +622,17 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
 
                     # Channel subarrays
                     imch = cube[j, :, x1:x2]
-                    good_mask = mask[:, x1:x2]
+                    good_mask = im_mask[:, x1:x2]
 
                     # Subtract 1/f noise
                     nf_clean = CleanSubarray(imch, good_mask)
-                    nf_clean.fit()
-
+                    nf_clean.fit(**kwargs)
                     # Subtract model from data
                     data[i,j,:,x1:x2] -= nf_clean.model
+
+                    # if i==0 and j==ngroups-1 and ch==0:
+                    #     plt.imshow(nf_clean.M, origin='lower')
+
                     del nf_clean
 
         return input
