@@ -16,15 +16,16 @@ import astropy.io.fits as pyfits
 import matplotlib.pyplot as plt
 import numpy as np
 
+from tqdm.auto import tqdm, trange
+
 from astropy.io import fits
 
 from jwst.lib import reffile_utils
 from jwst.datamodels import dqflags, RampModel, SaturationModel
-from jwst.pipeline import Detector1Pipeline, Image2Pipeline, Coron3Pipeline
+from jwst.pipeline import Detector1Pipeline
 
 from webbpsf_ext import robust
 from webbpsf_ext.webbpsf_ext_core import NIRCam_ext
-from webbpsf_ext.imreg_tools import get_coron_apname
 
 from .imagetools import cube_outlier_detection
 from .utils import expand_mask
@@ -677,7 +678,7 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         return input
 
 def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
-    """Run the JWST stage 1 detector pipeline on a single file.
+    """ Run the JWST stage 1 detector pipeline on a single file.
     
     WARNING: Will overwrite exiting files.
 
@@ -775,9 +776,9 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     """
 
     from webbpsf_ext.analysis_tools import nrc_ref_info
-    from .logging_tools import all_logging_disabled
 
     # Print all info message if verbose, otherwise only errors or critical.
+    from .logging_tools import all_logging_disabled
     log_level = logging.INFO if verbose else logging.ERROR
 
     # Initialize Coron1Pipeline.
@@ -863,6 +864,7 @@ def run_obs(database,
             steps={},
             subdir='stage1',
             overwrite=False,
+            quiet=False,
             verbose=False,
             **kwargs):
     """
@@ -921,6 +923,9 @@ def run_obs(database,
         default is 'stage1'.
     overwrite : bool, optional
         Overwrite existing files? Default is False.
+    quiet : bool, optional
+        Use progress bar to track progress instead of messages. 
+        Overrides verbose and sets it to False. Default is False.
     verbose : bool, optional
         Print all info messages? Default is False.
     
@@ -968,33 +973,43 @@ def run_obs(database,
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     
+    # Get list of concatenation keys.
+    keys = list(database.obs.keys())
+    nkeys = len(keys)
+    if quiet:
+        verbose = False
+        itervals = trange(nkeys, desc='Concatenations')
+    else:
+        itervals = range(nkeys)
+
     # Loop through concatenations.
-    for i, key in enumerate(database.obs.keys()):
-        log.info('--> Concatenation ' + key)
+    for i in itervals:
+        key = keys[i]
+        if not quiet: log.info('--> Concatenation ' + key)
         
         # Loop through FITS files.
         nfitsfiles = len(database.obs[key])
-        for j in range(nfitsfiles):
+        jtervals = trange(nfitsfiles, desc='FITS files', leave=False) if quiet else range(nfitsfiles)
+        for j in jtervals:
 
             # Skip non-stage 0 files.
             head, tail = os.path.split(database.obs[key]['FITSFILE'][j])
             fitspath = os.path.abspath(database.obs[key]['FITSFILE'][j])
             if database.obs[key]['DATAMODL'][j] != 'STAGE0':
-                log.info('  --> Coron1Pipeline: skipping non-stage 0 file ' + tail)
+                if not quiet: log.info('  --> Coron1Pipeline: skipping non-stage 0 file ' + tail)
                 continue
 
-            # Get expected ouput file name
+            # Get expected output file name
             outfile_name = tail.replace('uncal.fits', 'rateints.fits')
             fitsout_path = os.path.join(output_dir, outfile_name)
 
             # Skip if file already exists and overwrite is False.
             if os.path.isfile(fitsout_path) and not overwrite:
-                log.info('  --> Coron1Pipeline: skipping already processed file ' + tail)
+                if not quiet: log.info('  --> Coron1Pipeline: skipping already processed file ' + tail)
             else:
-                log.info('  --> Coron1Pipeline: processing ' + tail)
+                if not quiet: log.info('  --> Coron1Pipeline: processing ' + tail)
                 res = run_single_file(fitspath, output_dir, steps=steps, 
                                       verbose=verbose, **kwargs)
             
             # Update spaceKLIP database.
-            # log.info('  --> Coron1Pipeline: database updated to ' + fitsout_path.split('/')[-1])
             database.update_obs(key, j, fitsout_path)
