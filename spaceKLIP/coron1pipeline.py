@@ -580,7 +580,8 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
                         **kwargs):
         """Model and subtract 1/f noise from each integration
         
-        TODO: Make this into a Step class
+        TODO: Make this into a Step class.
+        TODO: Automatic function to determine if correction is necessary.
 
         Parameters
         ----------
@@ -982,15 +983,15 @@ def run_obs(database,
                 log.info('  --> Coron1Pipeline: skipping non-stage 0 file ' + tail)
                 continue
 
-            log.info('  --> Coron1Pipeline: processing ' + tail)
             # Get expected ouput file name
             outfile_name = tail.replace('uncal.fits', 'rateints.fits')
             fitsout_path = os.path.join(output_dir, outfile_name)
 
             # Skip if file already exists and overwrite is False.
             if os.path.isfile(fitsout_path) and not overwrite:
-                log.warning('  --> Coron1Pipeline: File already processed. Re-init database and use `overwrite=True` to overwrite.')
+                log.info('  --> Coron1Pipeline: skipping already processed file ' + tail)
             else:
+                log.info('  --> Coron1Pipeline: processing ' + tail)
                 res = run_single_file(fitspath, output_dir, steps=steps, 
                                       verbose=verbose, **kwargs)
             
