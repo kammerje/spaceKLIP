@@ -23,7 +23,7 @@ import webbpsf, webbpsf_ext
 from astropy.table import Table
 from jwst.pipeline import Detector1Pipeline, Image2Pipeline, Coron3Pipeline
 
-from .utils import get_filter_info
+from .utils import get_filter_info, nircam_apname, get_mask_from_apname
 
 import logging
 log = logging.getLogger(__name__)
@@ -241,7 +241,6 @@ class Database():
                     raise UserWarning('Data originates from unknown JWST instrument')
             else:
                 raise UserWarning('Data originates from unknown telescope')
-            CORONMSK += [head.get('CORONMSK', 'NONE')]
             EXP_TYPE += [head.get('EXP_TYPE', 'UNKNOWN')]
             EXPSTART += [head.get('EXPSTART', np.nan)]
             NINTS += [head.get('NINTS', data.shape[0] if data.ndim == 3 else 1)]
@@ -252,8 +251,11 @@ class Database():
             NUMDTHPT += [head.get('NUMDTHPT', 1)]
             XOFFSET += [1e3 * head.get('XOFFSET', 0.)]
             YOFFSET += [1e3 * head.get('YOFFSET', 0.)]
-            APERNAME += [head.get('APERNAME', 'UNKNOWN')]
+            apname = nircam_apname(head) if INSTRUME[-1] == 'NIRCAM' else head.get('APERNAME', 'UNKNOWN')
+            APERNAME += [apname]
             PPS_APER += [head.get('PPS_APER', 'UNKNOWN')]
+            coronmask = get_mask_from_apname(APERNAME[-1]) if INSTRUME[-1] == 'NIRCAM' else head.get('CORONMSK', 'NONE')
+            CORONMSK += [coronmask]
             if TELESCOP[-1] == 'JWST':
                 if INSTRUME[-1] == 'NIRCAM':
                     if 'LONG' in DETECTOR[-1] or '5' in DETECTOR[-1]:
@@ -324,11 +326,12 @@ class Database():
         ww = []
         for i in range(NHASH_unique):
             if 'MASKRND_NONE' in HASH_unique[i] or 'MASKBAR_NONE' in HASH_unique[i] or 'NONE_MASK1065' in HASH_unique[i] or 'NONE_MASK1140' in HASH_unique[i] or 'NONE_MASK1550' in HASH_unique[i] or 'NONE_MASKLYOT' in HASH_unique[i]:
+                print('   ', HASH_unique[i])
                 ww += [-1]
                 HASH_i_split = HASH_unique[i].split('_')
                 for j in range(NHASH_unique):
                     HASH_j_split = HASH_unique[j].split('_')
-                    print(HASH_j_split)
+                    print(HASH_i_split, HASH_j_split)
                     if HASH_j_split[0] == HASH_i_split[0] and HASH_j_split[1] == HASH_i_split[1] and HASH_j_split[2] == HASH_i_split[2] and HASH_j_split[4] == HASH_i_split[4] and HASH_j_split[5] != 'NONE' and HASH_j_split[6][-4:] in HASH_i_split[6]:
                         ww[-1] = i
                         break
@@ -665,14 +668,16 @@ class Database():
                     raise UserWarning('Data originates from unknown JWST instrument')
             else:
                 raise UserWarning('Data originates from unknown telescope')
-            CORONMSK += [head.get('CORONMSK', 'NONE')]
             EXP_TYPE += [head.get('EXP_TYPE', 'UNKNOWN')]
             EXPSTART += [head.get('EXPSTART', np.nan)]
             NINTS += [head.get('NINTS', 1)]
             EFFINTTM += [head.get('EFFINTTM', np.nan)]
             SUBARRAY += [head.get('SUBARRAY', 'UNKNOWN')]
-            APERNAME += [head.get('APERNAME', 'UNKNOWN')]
+            apname = nircam_apname(head) if INSTRUME[-1] == 'NIRCAM' else head.get('APERNAME', 'UNKNOWN')
+            APERNAME += [apname]
             PPS_APER += [head.get('PPS_APER', 'UNKNOWN')]
+            coronmask = get_mask_from_apname(APERNAME[-1]) if INSTRUME[-1] == 'NIRCAM' else head.get('CORONMSK', 'NONE')
+            CORONMSK += [coronmask]
             if TELESCOP[-1] == 'JWST':
                 if INSTRUME[-1] == 'NIRCAM':
                     if 'LONG' in DETECTOR[-1] or '5' in DETECTOR[-1]:
@@ -1264,12 +1269,17 @@ class Database():
 
 def create_database(output_dir, 
                     pid, 
+                    obsids=None,
                     input_dir=None,
                     psflibpaths=None, 
                     bgpaths=None,
+                    assoc_using_targname=True,
+                    verbose=True,
                     **kwargs):
 
     """ Create a spaceKLIP database from JWST data
+
+    Automatically searches for 
 
     Parameters
     ----------
@@ -1277,6 +1287,9 @@ def create_database(output_dir,
         Directory to save the database.
     pid : str
         Program ID.
+    obsids : list of ints, optional
+        List of observation numbers. If not set, will search for all
+        observations in the input directory.
     input_dir : str
         Directory containing the JWST data. If not set, will search for
         MAST directory.
@@ -1290,8 +1303,6 @@ def create_database(output_dir,
     
     Keyword Arguments
     -----------------
-    obsid : int
-        Observation number.
     sca : str
         Name of detector (e.g., 'along' or 'a3')
     filt : str
@@ -1315,12 +1326,21 @@ def create_database(output_dir,
         mast_dir = os.getenv('JWSTDOWNLOAD_OUTDIR')
         input_dir = os.path.join(mast_dir, f'{pid:05d}')
 
-    fitsfiles = get_files(input_dir, pid, **kwargs)
+    # Check if obsids is not a list, tuple, or numpy array
+    if (obsids is not None) and not isinstance(obsids, (list, tuple, np.ndarray)):
+        obsids = [obsids]
+
+    # Cycle through all obsids and get the files in a single list
+    fitsfiles = [get_files(input_dir, pid, obsid=oid, **kwargs) for oid in obsids]
+    fitsfiles = [f for sublist in fitsfiles for f in sublist]
+    datapaths = [os.path.join(input_dir, f) for f in fitsfiles]
 
     # Initialize the spaceKLIP database and read the input FITS files.
     db = Database(output_dir=output_dir)
-    db.read_jwst_s012_data(datapaths=fitsfiles,
+    db.verbose = verbose
+    db.read_jwst_s012_data(datapaths=datapaths,
                            psflibpaths=psflibpaths,
-                           bgpaths=bgpaths)
+                           bgpaths=bgpaths,
+                           assoc_using_targname=assoc_using_targname)
     
     return db
