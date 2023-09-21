@@ -10,7 +10,10 @@ class CleanSubarray:
     """
     CleanSubarray is the base class for removing residual correlated
     read noise from generic JWST near-IR Subarray images.  It is
-    intended for use on Level 1 pipeline products.
+    intended for use on Level 1 or 2 pipeline products on any type of
+    image product (group data, rateint, calint, rate, cal, etc). 
+    Suggest removing average signal levels from data and running
+    this on the residuals, which better reveal the 1/f noise structure.
 
     Inspired by NSClean by Bernie Rauscher (https://arxiv.org/abs/2306.03250),
     however instead of using FFTs and Matrix multiplication, this class uses
@@ -51,7 +54,6 @@ class CleanSubarray:
         self.M = np.array(mask, dtype=np.bool_)
         self.ny = np.int32(data.shape[0]) # Number of pixels in slow scan direction
         self.nx = np.int32(data.shape[1]) # Number of pixels in fast scan direction
-        self.n = np.int32(self.ny * (self.nx + self.nloh)) # Number of ticks in clocking pattern
         
         # The mask potentially contains NaNs. Exclude them.
         self.M[np.isnan(self.D)] = False
@@ -112,7 +114,7 @@ class CleanSubarray:
         data[~self.M] = np.nan
         return mean_func(data, axis=1).repeat(self.nx).reshape(data.shape)
         
-    def _fit_savgol(self, niter=10, **kwargs):
+    def _fit_savgol(self, niter=5, **kwargs):
         """ Use a Savitzky-Golay filter to smooth the masked row data
 
         Parameters
@@ -165,7 +167,7 @@ class CleanSubarray:
             sig = np.nanstd(diff, ddof=1)
 
             # Flag new outliers
-            bp_sig = np.abs(diff) > 2*sig
+            bp_sig = np.abs(diff) > 3*sig
             bpmask_new = bpmask | bp_sig
             if bpmask_new.sum() == bpmask.sum():
                 break
