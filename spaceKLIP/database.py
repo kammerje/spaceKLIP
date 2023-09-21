@@ -103,6 +103,11 @@ class Database():
         
         # Output directory for saving reduction products.
         self.output_dir = output_dir
+
+        # Check if output directory exists
+        if not os.path.isdir(self.output_dir):
+            log.warning(f'Output directory does not exist. Creating {self.output_dir}.')
+            os.makedirs(self.output_dir)
         
         # Initialize observations dictionary which contains the individual
         # concatenations.
