@@ -1268,3 +1268,84 @@ class Database():
                         summarystr += (', ' if i>0 else '') + f'{ntype} {typestr}'
                     print(summarystr)
 
+def create_database(output_dir, 
+                    pid, 
+                    obsids=None,
+                    input_dir=None,
+                    psflibpaths=None, 
+                    bgpaths=None,
+                    assoc_using_targname=True,
+                    verbose=True,
+                    **kwargs):
+
+    """ Create a spaceKLIP database from JWST data
+
+    Automatically searches for uncal.fits in the input directory and creates 
+    a database of the JWST data. Only works for stage0, stage1, or stage2 data.
+
+    Parameters
+    ----------
+    output_dir : str
+        Directory to save the database.
+    pid : str
+        Program ID.
+    obsids : list of ints, optional
+        List of observation numbers. If not set, will search for all
+        observations in the input directory.
+    input_dir : str
+        Directory containing the JWST data. If not set, will search for
+        MAST directory.
+    psflibpaths : list of paths, optional
+        List of paths of the input PSF references. Make sure that they are
+        NOT duplicated in the 'datapaths'. The default is None.
+    bgpaths : list of paths, optional
+        List of paths of the input MIRI background observations. Make sure
+        that they ARE duplicated in the 'datapaths' or 'psflibpaths'. The
+        default is None.
+    assoc_using_targname : bool, optional
+        Associate observations using the TARGNAME keyword. The default is True.
+    verbose : bool, optional
+        Print information to the screen. The default is True.
+    
+    Keyword Arguments
+    -----------------
+    sca : str
+        Name of detector (e.g., 'along' or 'a3')
+    filt : str
+        Return files observed in given filter.
+    file_type : str
+        uncal.fits or rate.fits, etc
+    exp_type : str
+        Exposure type such as NRC_TACQ, NRC_TACONFIRM
+    act_id : str
+        Activity ID. The <aa> in _<gg><s><aa>_ portion of the file name.
+    apername : str
+        Name of aperture (e.g., NRCA5_FULL)
+    apername_pps : str
+        Name of aperture from PPS (e.g., NRCA5_FULL)
+    """
+
+    from webbpsf_ext.imreg_tools import get_files
+
+    if input_dir is None:
+        mast_dir = os.getenv('JWSTDOWNLOAD_OUTDIR')
+        input_dir = os.path.join(mast_dir, f'{pid:05d}')
+
+    # Check if obsids is not a list, tuple, or numpy array
+    if (obsids is not None) and not isinstance(obsids, (list, tuple, np.ndarray)):
+        obsids = [obsids]
+
+    # Cycle through all obsids and get the files in a single list
+    fitsfiles = [get_files(input_dir, pid, obsid=oid, **kwargs) for oid in obsids]
+    fitsfiles = [f for sublist in fitsfiles for f in sublist]
+    datapaths = [os.path.join(input_dir, f) for f in fitsfiles]
+
+    # Initialize the spaceKLIP database and read the input FITS files.
+    db = Database(output_dir=output_dir)
+    db.verbose = verbose
+    db.read_jwst_s012_data(datapaths=datapaths,
+                           psflibpaths=psflibpaths,
+                           bgpaths=bgpaths,
+                           assoc_using_targname=assoc_using_targname)
+    
+    return db
