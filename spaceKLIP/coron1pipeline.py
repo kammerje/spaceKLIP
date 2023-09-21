@@ -402,7 +402,7 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         
         """
         
-       # Is this a full frame observation?
+        # Is this a full frame observation?
         is_full_frame = 'FULL' in input.meta.subarray.name.upper()
 
         # Get number of reference pixels explicitly specified
@@ -577,8 +577,9 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     skip_jump : bool, optional
         Skip jump detection step? Default: False.
     skip_dark : bool, optional
-        Skip dark current subtraction step? Default: True.
-        Dark current cal files are really low SNR.
+        Skip dark current subtraction step? Default is True for 
+        subarrays and False for full frame data.
+        Dark current cal files for subarrays are really low SNR.
     skip_ipc : bool, optional
         Skip IPC correction step? Default: True.
     skip_persistence : bool, optional
@@ -610,9 +611,15 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     # Skip certain steps?
     pipeline.charge_migration.skip = kwargs.get('skip_charge', False)
     pipeline.jump.skip             = kwargs.get('skip_jump', False)
-    pipeline.dark_current.skip     = kwargs.get('skip_dark', True)
     pipeline.ipc.skip              = kwargs.get('skip_ipc', True)
     pipeline.persistence.skip      = kwargs.get('skip_persistence', True)
+    # Skip dark current for subarray by default, but not full frame
+    skip_dark     = kwargs.get('skip_dark', None)
+    if skip_dark is None:
+        hdr0 = pyfits.getheader(fitspath, ext=0)
+        is_full_frame = 'FULL' in hdr0['SUBARRAY']
+        skip_dark = not is_full_frame  # False if full frame, otherwise True
+    pipeline.dark_current.skip = skip_dark
 
     # Determine reference pixel correction parameters based on
     # instrument aperture name for NIRCam
@@ -762,8 +769,9 @@ def run_obs(database,
     skip_jump : bool, optional
         Skip jump detection step? Default: False.
     skip_dark : bool, optional
-        Skip dark current subtraction step? Default: True.
-        Dark current cal files are really low SNR.
+        Skip dark current subtraction step? Default is True for 
+        subarrays and False for full frame data.
+        Dark current cal files for subarrays are really low SNR.
     skip_ipc : bool, optional
         Skip IPC correction step? Default: True.
     skip_persistence : bool, optional
