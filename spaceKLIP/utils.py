@@ -618,6 +618,9 @@ def get_tp_comsubst(instrume,
     """
     Get the COM substrate transmission averaged over the respective filter
     profile.
+
+    TODO: Spot check the COM throughput using photometric calibration data,
+    assuming there are stellar offsets on and off the COM substrate.
     
     Parameters
     ----------
