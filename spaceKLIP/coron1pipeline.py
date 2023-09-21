@@ -498,6 +498,181 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
 
         return res
 
+def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
+    """ Run the JWST stage 1 detector pipeline on a single file.
+    
+    WARNING: Will overwrite exiting files.
+
+    This customized implementation can:
+    - Do a custom saturation correction where only the bottom/top/left/right
+      and not the diagonal pixels next to a saturated pixel are flagged.
+    - Do a pseudo reference pixel correction. Therefore, flag the requested
+      edge rows and columns as reference pixels, run the JWST stage 1 refpix
+      step, and unflag the pseudo reference pixels again. Only applicable for
+      subarray data.
+    - Remove horizontal 1/f noise spatial striping in NIRCam data.
+    
+    Parameters
+    ----------
+    fitspath : str
+        Path to the input FITS file (uncal.fits).
+    output_dir : str
+        Path to the output directory to save the resulting data products.
+    steps : dict, optional
+        See here for how to use the steps parameter:
+        https://jwst-pipeline.readthedocs.io/en/latest/jwst/user_documentation/running_pipeline_python.html#configuring-a-pipeline-step-in-python
+        Custom step parameters are:
+        - saturation/grow_diagonal : bool, optional
+            Flag also diagonal pixels (or only bottom/top/left/right)? 
+            The default is True.
+        - saturation/flag_rcsat : bool, optional
+            Flag RC pixels as saturated? The default is True.
+        - refpix/nlower : int, optional
+            Number of rows at frame bottom that shall be used as additional
+            reference pixels. The default is 0.
+        - refpix/nupper : int, optional
+            Number of rows at frame top that shall be used as additional
+            reference pixels. The default is 0.
+        - refpix/nleft : int, optional
+            Number of rows at frame left side that shall be used as additional
+            reference pixels. The default is 0.
+        - refpix/nright : int, optional
+            Number of rows at frame right side that shall be used as additional
+            reference pixels. The default is 0.
+        - ramp_fit/save_calibrated_ramp : bool, optional
+            Save the calibrated ramp? The default is False.
+
+        Additional useful step parameters:
+        - saturation/n_pix_grow_sat : int, optional
+            Number of pixels to grow for saturation flagging. Default is 1.
+        - ramp_fit/suppress_one_group : bool, optional
+            If True, skips slope calc for pixels with only 1 available group. 
+            Default: False.
+        - ramp_fit/maximum_cores : str, optional
+            max number of parallel processes to create during ramp fitting.
+            'none', 'quarter', 'half', or 'all'. Default: 'quarter'.
+        The default is {}. 
+    subdir : str, optional
+        Name of the directory where the data products shall be saved. The
+        default is 'stage1'.
+    
+    Keyword Args
+    ------------
+    save_results : bool, optional
+        Save the JWST pipeline step products? The default is True.
+    save_calibrate_ramp : bool
+        Save intermediate step that is the calibrated ramp? 
+        Default is False.
+    save_intermediates : bool, optional
+        Save intermediate steps, such as dq_init, saturation, refpix,
+        jump, linearity, ramp, etc. Default is False.
+    return_rateints : bool, optional
+        Return the rateints model instead of rate? Default is False.
+    rate_int_outliers : bool, optional
+        Flag outlier pixels in rateints? Default is True.
+        Uses the `cube_outlier_detection` function and requires
+        a minimum of 5 integrations.
+    skip_charge : bool, optional
+        Skip charge migration flagging step? Default: False.
+    skip_jump : bool, optional
+        Skip jump detection step? Default: False.
+    skip_dark : bool, optional
+        Skip dark current subtraction step? Default: True.
+        Dark current cal files are really low SNR.
+    skip_ipc : bool, optional
+        Skip IPC correction step? Default: True.
+    skip_persistence : bool, optional
+        Skip persistence correction step? Default: True.
+        Doesn't currently do anything.
+
+    Returns
+    -------
+    None.
+    
+    """
+
+    from webbpsf_ext.analysis_tools import nrc_ref_info
+    from astropy.io import fits
+
+    # Print all info message if verbose, otherwise only errors or critical.
+    from .logging_tools import all_logging_disabled
+    log_level = logging.INFO if verbose else logging.ERROR
+
+    # Initialize Coron1Pipeline.
+    with all_logging_disabled(log_level):
+        pipeline = Coron1Pipeline_spaceKLIP(output_dir=output_dir)
+
+    # Options for saving results
+    pipeline.save_results         = kwargs.get('save_results', True)
+    pipeline.save_calibrated_ramp = kwargs.get('save_calibrated_ramp', False)
+    pipeline.save_intermediates   = kwargs.get('save_intermediates', False)
+    pipeline.return_rateints      = kwargs.get('return_rateints', False)
+
+    # Skip certain steps?
+    pipeline.charge_migration.skip = kwargs.get('skip_charge', False)
+    pipeline.jump.skip             = kwargs.get('skip_jump', False)
+    pipeline.dark_current.skip     = kwargs.get('skip_dark', True)
+    pipeline.ipc.skip              = kwargs.get('skip_ipc', True)
+    pipeline.persistence.skip      = kwargs.get('skip_persistence', True)
+
+    # Determine reference pixel correction parameters based on
+    # instrument aperture name for NIRCam
+    hdr0 = fits.getheader(fitspath, 0)
+    if hdr0['INSTRUME'] == 'NIRCAM':
+        # Array of reference pixel borders [lower, upper, left, right]
+        nb, nt, nl, nr = nrc_ref_info(hdr0['APERNAME'], orientation='sci')
+    else:
+        nb, nt, nl, nr = (0, 0, 0, 0)
+    # If everything is 0, set to defult to 4 around the edges
+    if nb + nt == 0:
+        nb = nt = 4
+    if nl + nr == 0:
+        nl = nr = 4
+    pipeline.refpix.nlower   = kwargs.get('nlower', nb)
+    pipeline.refpix.nupper   = kwargs.get('nupper', nt)
+    pipeline.refpix.nleft    = kwargs.get('nleft',  nl)
+    pipeline.refpix.nright   = kwargs.get('nright', nr)
+    pipeline.refpix.nrow_off = kwargs.get('nrow_off', 0)
+    pipeline.refpix.ncol_off = kwargs.get('ncol_off', 0)
+
+    # Set some Step parameters
+    pipeline.jump.rejection_threshold              = kwargs.get('rejection_threshold', 4)
+    pipeline.jump.three_group_rejection_threshold  = kwargs.get('three_group_rejection_threshold', 4)
+    pipeline.jump.four_group_rejection_threshold   = kwargs.get('four_group_rejection_threshold', 4)
+    pipeline.saturation.n_pix_grow_sat = kwargs.get('n_pix_grow_sat', 1)
+    pipeline.saturation.grow_diagonal  = kwargs.get('grow_diagonal', False)
+    pipeline.saturation.flag_rcsat     = kwargs.get('flag_rcsat', True)
+    pipeline.rate_int_outliers         = kwargs.get('rate_int_outliers', True)
+
+    # Skip pixels with only 1 group in ramp_fit?
+    pipeline.ramp_fit.suppress_one_group = kwargs.get('suppress_one_group', False)
+    # Number of processor cores to use during ramp fitting process
+    # 'none', 'quarter', 'half', or 'all'
+    pipeline.ramp_fit.maximum_cores      = kwargs.get('maximum_cores', 'quarter')
+
+    # Set parameters in step dictionary
+    for key1 in steps.keys():
+        for key2 in steps[key1].keys():
+            setattr(getattr(pipeline, key1), key2, steps[key1][key2])
+    
+    # Run Coron1Pipeline. Raise exception on error.
+    # Ensure that pipeline is closed out.
+    try:
+        with all_logging_disabled(log_level):
+            res = pipeline.run(fitspath)
+    except Exception as e:
+        raise RuntimeError(
+            'Caught exception during pipeline processing.'
+            '\nException: {}'.format(e)
+        )
+    finally:
+        pipeline.closeout()
+
+    if isinstance(res, list):
+        res = res[0]
+
+    return res
+
 def run_obs(database,
             steps={},
             subdir='stage1'):
