@@ -24,6 +24,8 @@ from astropy.table import Table
 from astroquery.svo_fps import SvoFps
 from jwst.pipeline import Detector1Pipeline, Image2Pipeline, Coron3Pipeline
 
+from .utils import nircam_apname, get_nrcmask_from_apname
+
 import logging
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -209,6 +211,7 @@ class Database():
         XOFFSET = []  # arcsec
         YOFFSET = []  # arcsec
         APERNAME = []
+        PPS_APER = []
         PIXSCALE = []  # arcsec
         BUNIT = []
         CRPIX1 = []  # pix
@@ -263,7 +266,6 @@ class Database():
                     raise UserWarning('Data originates from unknown JWST instrument')
             else:
                 raise UserWarning('Data originates from unknown telescope')
-            CORONMSK += [head.get('CORONMSK', 'NONE')]
             EXP_TYPE += [head.get('EXP_TYPE', 'UNKNOWN')]
             EXPSTART += [head.get('EXPSTART', np.nan)]
             NINTS += [head.get('NINTS', data.shape[0] if data.ndim == 3 else 1)]
@@ -274,7 +276,11 @@ class Database():
             NUMDTHPT += [head.get('NUMDTHPT', 1)]
             XOFFSET += [head.get('XOFFSET', 0.)]
             YOFFSET += [head.get('YOFFSET', 0.)]
-            APERNAME += [head.get('APERNAME', 'UNKNOWN')]
+            apname = nircam_apname(head) if INSTRUME[-1] == 'NIRCAM' else head.get('APERNAME', 'UNKNOWN')
+            APERNAME += [apname]
+            PPS_APER += [head.get('PPS_APER', 'UNKNOWN')]
+            coronmask = get_nrcmask_from_apname(APERNAME[-1]) if INSTRUME[-1] == 'NIRCAM' else head.get('CORONMSK', 'NONE')
+            CORONMSK += [coronmask]
             if TELESCOP[-1] == 'JWST':
                 if INSTRUME[-1] == 'NIRCAM':
                     if 'LONG' in DETECTOR[-1] or '5' in DETECTOR[-1]:
@@ -324,6 +330,7 @@ class Database():
         XOFFSET = np.array(XOFFSET)
         YOFFSET = np.array(YOFFSET)
         APERNAME = np.array(APERNAME)
+        PPS_APER = np.array(PPS_APER)
         PIXSCALE = np.array(PIXSCALE)
         BUNIT = np.array(BUNIT)
         CRPIX1 = np.array(CRPIX1)
@@ -420,6 +427,7 @@ class Database():
                                'XOFFSET',
                                'YOFFSET',
                                'APERNAME',
+                               'PPS_APER',
                                'PIXSCALE',
                                'BUNIT',
                                'CRPIX1',
@@ -452,6 +460,7 @@ class Database():
                                'float',
                                'float',
                                'object',
+                               'object', 
                                'float',
                                'object',
                                'float',
@@ -529,6 +538,7 @@ class Database():
                              XOFFSET[ww][j],
                              YOFFSET[ww][j],
                              APERNAME[ww][j],
+                             PPS_APER[ww][j],
                              PIXSCALE[ww][j],
                              BUNIT[ww][j],
                              CRPIX1[ww][j],
@@ -633,6 +643,7 @@ class Database():
         EFFINTTM = []  # s
         SUBARRAY = []
         APERNAME = []
+        PPS_APER = []
         PIXSCALE = []  # arcsec
         MODE = []
         ANNULI = []
@@ -680,13 +691,16 @@ class Database():
                     raise UserWarning('Data originates from unknown JWST instrument')
             else:
                 raise UserWarning('Data originates from unknown telescope')
-            CORONMSK += [head.get('CORONMSK', 'NONE')]
             EXP_TYPE += [head.get('EXP_TYPE', 'UNKNOWN')]
             EXPSTART += [head.get('EXPSTART', np.nan)]
             NINTS += [head.get('NINTS', 1)]
             EFFINTTM += [head.get('EFFINTTM', np.nan)]
             SUBARRAY += [head.get('SUBARRAY', 'UNKNOWN')]
-            APERNAME += [head.get('APERNAME', 'UNKNOWN')]
+            apname = nircam_apname(head) if INSTRUME[-1] == 'NIRCAM' else head.get('APERNAME', 'UNKNOWN')
+            APERNAME += [apname]
+            PPS_APER += [head.get('PPS_APER', 'UNKNOWN')]
+            coronmask = get_nrcmask_from_apname(APERNAME[-1]) if INSTRUME[-1] == 'NIRCAM' else head.get('CORONMSK', 'NONE')
+            CORONMSK += [coronmask]
             if TELESCOP[-1] == 'JWST':
                 if INSTRUME[-1] == 'NIRCAM':
                     if 'LONG' in DETECTOR[-1] or '5' in DETECTOR[-1]:
@@ -752,6 +766,7 @@ class Database():
         EFFINTTM = np.array(EFFINTTM)
         SUBARRAY = np.array(SUBARRAY)
         APERNAME = np.array(APERNAME)
+        PPS_APER = np.array(PPS_APER)
         PIXSCALE = np.array(PIXSCALE)
         MODE = np.array(MODE)
         ANNULI = np.array(ANNULI)
@@ -792,6 +807,7 @@ class Database():
                                    'EFFINTTM',
                                    'SUBARRAY',
                                    'APERNAME',
+                                   'PPS_APER',
                                    'PIXSCALE',
                                    'MODE',
                                    'ANNULI',
@@ -818,6 +834,7 @@ class Database():
                                    'float',
                                    'int',
                                    'float',
+                                   'object',
                                    'object',
                                    'object',
                                    'float',
@@ -854,6 +871,7 @@ class Database():
                              EFFINTTM[ww[j]],
                              SUBARRAY[ww[j]],
                              APERNAME[ww[j]],
+                             PPS_APER[ww[j]],
                              PIXSCALE[ww[j]],
                              MODE[ww[j]],
                              ANNULI[ww[j]],
@@ -1013,9 +1031,11 @@ class Database():
             log.info('  --> Concatenation %.0f: ' % (i + 1) + key)
             print_tab = copy.deepcopy(self.obs[key])
             if include_fitsfiles:
-                print_tab.remove_columns(['TARG_RA', 'TARG_DEC', 'EXPSTART', 'APERNAME', 'CRPIX1', 'CRPIX2', 'RA_REF', 'DEC_REF'])
+                print_tab.remove_columns(['TARG_RA', 'TARG_DEC', 'EXPSTART', 'APERNAME', 'PPS_APER', 
+                                          'CRPIX1', 'CRPIX2', 'RA_REF', 'DEC_REF'])
             else:
-                print_tab.remove_columns(['TARG_RA', 'TARG_DEC', 'EXPSTART', 'APERNAME', 'CRPIX1', 'CRPIX2', 'RA_REF', 'DEC_REF', 'FITSFILE', 'MASKFILE'])
+                print_tab.remove_columns(['TARG_RA', 'TARG_DEC', 'EXPSTART', 'APERNAME', 'PPS_APER', 
+                                          'CRPIX1', 'CRPIX2', 'RA_REF', 'DEC_REF', 'FITSFILE', 'MASKFILE'])
             print_tab['XOFFSET'] = np.round(print_tab['XOFFSET'])
             print_tab['XOFFSET'][print_tab['XOFFSET'] == 0.] = 0.
             print_tab['YOFFSET'] = np.round(print_tab['YOFFSET'])
@@ -1047,9 +1067,9 @@ class Database():
             log.info('  --> Concatenation %.0f: ' % (i + 1) + key)
             print_tab = copy.deepcopy(self.red[key])
             if include_fitsfiles:
-                print_tab.remove_columns(['TARG_RA', 'TARG_DEC', 'EXPSTART', 'APERNAME'])
+                print_tab.remove_columns(['TARG_RA', 'TARG_DEC', 'EXPSTART', 'APERNAME', 'PPS_APER'])
             else:
-                print_tab.remove_columns(['TARG_RA', 'TARG_DEC', 'EXPSTART', 'APERNAME', 'FITSFILE', 'MASKFILE'])
+                print_tab.remove_columns(['TARG_RA', 'TARG_DEC', 'EXPSTART', 'APERNAME', 'PPS_APER', 'FITSFILE', 'MASKFILE'])
             print_tab.pprint()
         
         pass
