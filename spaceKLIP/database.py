@@ -1339,7 +1339,7 @@ def create_database(output_dir,
     filt : str
         Return files observed in given filter.
     file_type : str
-        uncal.fits or rate.fits, etc
+        'uncal.fits', 'rateints.fits', 'calints.fits', etc.
     exp_type : str
         Exposure type such as NRC_TACQ, NRC_TACONFIRM
     act_id : str
