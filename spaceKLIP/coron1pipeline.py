@@ -32,6 +32,21 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
     """
     The spaceKLIP JWST stage 1 pipeline class.
     
+    Apply all calibration steps to raw JWST ramps to produce 
+    a 2-D slope product. Custom sub-class of ``Detector1Pipeline`` 
+    with modifications for coronagraphic data.
+    
+    Included steps are: group_scale, dq_init, saturation, ipc, 
+    superbias, refpix, rscd, firstframe, lastframe, linearity, 
+    dark_current, reset, persistence, jump detection, ramp_fit, 
+    and gain_scale. 
+    """
+    
+    class_alias = "calwebb_coron1"
+
+    spec = """
+        rate_int_outliers  = boolean(default=True)  # Flag outlier pixels in rateints
+        return_rateints    = boolean(default=False) # Return rateints or rate product?
     """
     
     def __init__(self,
@@ -53,14 +68,20 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         # Initialize Detector1Pipeline class.
         super(Coron1Pipeline_spaceKLIP, self).__init__(**kwargs)
         
-        # Set additional step parameters.
+        # Set additional parameters in saturation step
         self.saturation.grow_diagonal = False
+        self.saturation.flag_rcsat = True
+
+        # Initialize reference pixel correction parameters
         self.refpix.nlower = 4
         self.refpix.nupper = 4
         self.refpix.nleft = 4
         self.refpix.nright = 4
         self.refpix.nrow_off = 0
         self.refpix.ncol_off = 0
+
+        # Ramp fit saving options
+        # NOTE: `save_calibrated_ramp` is already a Detector1Pipeline property
         self.ramp_fit.save_calibrated_ramp = False
         
         pass
@@ -100,6 +121,8 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
             input = self.run_step(self.rscd, input)
             input = self.run_step(self.dark_current, input)
             input = self.do_refpix(input)
+            input = self.run_step(self.charge_migration, input)
+            input = self.run_step(self.jump, input)
         else:
             input = self.run_step(self.group_scale, input)
             input = self.run_step(self.dq_init, input)
@@ -110,31 +133,63 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
             input = self.run_step(self.linearity, input)
             input = self.run_step(self.persistence, input)
             input = self.run_step(self.dark_current, input)
-        input = self.run_step(self.jump, input)
+            input = self.run_step(self.charge_migration, input)
+            input = self.run_step(self.jump, input)
         
-        # Save calibrated ramp data.
-        if self.ramp_fit.save_calibrated_ramp:
+        # save the corrected ramp data, if requested
+        if self.ramp_fit.save_calibrated_ramp or self.save_calibrated_ramp:
             self.save_model(input, suffix='ramp')
         
         # Run ramp fitting & gain scale correction.
         res = self.run_step(self.ramp_fit, input, save_results=False)
-        input, ints_model = (res, None) if self.ramp_fit.skip else res
+        rate, rateints = (res, None) if self.ramp_fit.skip else res
+        if self.rate_int_outliers and rateints is not None:
+            # Flag additional outliers by comparing rateints and refit ramp
+            input = self.apply_rateint_outliers(rateints, input)
+            if input is None:
+                input, ints_model = (rate, rateints)
+            else:
+                res = self.run_step(self.ramp_fit, input, save_results=False)
+                input, ints_model = (res, None) if self.ramp_fit.skip else res
+        else:
+            # input is the rate product, ints_model is the rateints product
+            input, ints_model = (rate, rateints)
+
         if input is None:
             self.ramp_fit.log.info('NoneType returned from ramp fitting. Gain scale correction skipped')
         else:
             self.gain_scale.suffix = 'rate'
             input = self.run_step(self.gain_scale, input, save_results=False)
+        
+        # apply the gain scale step to the multi-integration product,
+        # if it exists, and then save it
         if ints_model is not None:
             self.gain_scale.suffix = 'rateints'
             ints_model = self.run_step(self.gain_scale, ints_model, save_results=False)
-            if self.save_results:
+            if self.save_results or self.save_intermediates:
                 self.save_model(ints_model, suffix='rateints')
-        
+
         # Setup output file.
         self.setup_output(input)
+
+        if self.return_rateints:
+            return ints_model
         
         return input
-    
+
+    def setup_output(self, input):
+        """Determine output file name suffix"""
+        if input is None:
+            return None
+        # Determine the proper file name suffix to use later
+        if input.meta.cal_step.ramp_fit == 'COMPLETE':
+            if self.return_rateints:
+                self.suffix = 'rateints'
+            else:
+                self.suffix = 'rate'
+        else:
+            self.suffix = 'ramp'
+
     def run_step(self,
                  step_obj,
                  input,
@@ -178,8 +233,7 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         res = step_obj(input)
         step_obj.save_results = step_save_orig
         
-        # Check if group scale correction or gain scale correction were
-        # skipped.
+        # Check if group scale correction or gain scale correction were skipped.
         if step_obj is self.group_scale:
             if res.meta.cal_step.group_scale == 'SKIPPED':
                 really_save_results = False
@@ -253,6 +307,56 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         
         return res
     
+    def apply_rateint_outliers(self, 
+                               rateints_model, 
+                               ramp_model, 
+                               **kwargs):
+        """Get pixel outliers in rateint model and apply to ramp model DQ
+        
+        Parameters
+        ----------
+        rateints_model : `~jwst.datamodels.CubeModel`
+            Rateints model to use for outlier detection
+        ramp_model : `~jwst.datamodels.RampModel`
+            Ramp model to update with outlier flags
+
+        Keyword Args
+        ------------
+        sigma_cut : float
+            Sigma cut for outlier detection.
+            Default is 5.
+        nint_min : int
+            Minimum number of integrations required for outlier detection.
+            Default is 5.
+        """
+
+        from .imagetools import cube_outlier_detection
+
+        inst = rateints_model.meta.instrument.name
+        data = rateints_model.data[1:] if 'MIRI' in inst else rateints_model.data
+
+        indbad = cube_outlier_detection(data, **kwargs)
+
+        # Reshape outlier mask to match ramp data
+        nint, ng, ny, nx = ramp_model.data.shape
+        bpmask = indbad.reshape([nint, 1, ny, nx])
+        if ng>1:
+            bpmask = np.repeat(bpmask, ng, axis=1)
+
+        # Update DO_NOT_USE and JUMP_DET flags
+        mask_dnu = (ramp_model.groupdq & dqflags.pixel['DO_NOT_USE']) > 0
+        mask_jd  = (ramp_model.groupdq & dqflags.pixel['JUMP_DET']) > 0
+
+        # Update DO_NOT_USE and JUMP_DET flags with outlier mask
+        mask_dnu = mask_dnu | bpmask
+        mask_jd  = mask_jd  | bpmask
+
+        # Update ramp model groupdq
+        ramp_model.groupdq = ramp_model.groupdq | (mask_dnu * dqflags.pixel['DO_NOT_USE'])
+        ramp_model.groupdq = ramp_model.groupdq | (mask_jd  * dqflags.pixel['JUMP_DET'])
+
+        return ramp_model
+
     def do_refpix(self,
                   input,
                   **kwargs):
