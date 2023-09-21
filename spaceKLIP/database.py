@@ -201,10 +201,10 @@ class Database():
         SELFREF = []
         SUBARRAY = []
         NUMDTHPT = []
-        XOFFSET = []  # mas
-        YOFFSET = []  # mas
+        XOFFSET = []  # arcsec
+        YOFFSET = []  # arcsec
         APERNAME = []
-        PIXSCALE = []  # mas
+        PIXSCALE = []  # arcsec
         BUNIT = []
         CRPIX1 = []  # pix
         CRPIX2 = []  # pix
@@ -267,19 +267,19 @@ class Database():
             SELFREF += [str(head.get('SELFREF', 'NONE'))]
             SUBARRAY += [head.get('SUBARRAY', 'UNKNOWN')]
             NUMDTHPT += [head.get('NUMDTHPT', 1)]
-            XOFFSET += [1e3 * head.get('XOFFSET', 0.)]
-            YOFFSET += [1e3 * head.get('YOFFSET', 0.)]
+            XOFFSET += [head.get('XOFFSET', 0.)]
+            YOFFSET += [head.get('YOFFSET', 0.)]
             APERNAME += [head.get('APERNAME', 'UNKNOWN')]
             if TELESCOP[-1] == 'JWST':
                 if INSTRUME[-1] == 'NIRCAM':
                     if 'LONG' in DETECTOR[-1] or '5' in DETECTOR[-1]:
-                        PIXSCALE += [nircam._pixelscale_long * 1e3]
+                        PIXSCALE += [nircam._pixelscale_long]
                     else:
-                        PIXSCALE += [nircam._pixelscale_short * 1e3]
+                        PIXSCALE += [nircam._pixelscale_short]
                 elif INSTRUME[-1] == 'NIRISS':
-                    PIXSCALE += [niriss.pixelscale * 1e3]
+                    PIXSCALE += [niriss.pixelscale]
                 elif INSTRUME[-1] == 'MIRI':
-                    PIXSCALE += [miri.pixelscale * 1e3]
+                    PIXSCALE += [miri.pixelscale]
                 else:
                     raise UserWarning('Data originates from unknown JWST instrument')
             else:
@@ -628,7 +628,7 @@ class Database():
         EFFINTTM = []  # s
         SUBARRAY = []
         APERNAME = []
-        PIXSCALE = []  # mas
+        PIXSCALE = []  # arcsec
         MODE = []
         ANNULI = []
         SUBSECTS = []
@@ -685,13 +685,13 @@ class Database():
             if TELESCOP[-1] == 'JWST':
                 if INSTRUME[-1] == 'NIRCAM':
                     if 'LONG' in DETECTOR[-1] or '5' in DETECTOR[-1]:
-                        PIXSCALE += [nircam._pixelscale_long * 1e3]
+                        PIXSCALE += [nircam._pixelscale_long]
                     else:
-                        PIXSCALE += [nircam._pixelscale_short * 1e3]
+                        PIXSCALE += [nircam._pixelscale_short]
                 elif INSTRUME[-1] == 'NIRISS':
-                    PIXSCALE += [niriss.pixelscale * 1e3]
+                    PIXSCALE += [niriss.pixelscale]
                 elif INSTRUME[-1] == 'MIRI':
-                    PIXSCALE += [miri.pixelscale * 1e3]
+                    PIXSCALE += [miri.pixelscale]
                 else:
                     raise UserWarning('Data originates from unknown JWST instrument')
             else:

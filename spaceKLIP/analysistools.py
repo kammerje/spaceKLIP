@@ -144,7 +144,7 @@ class AnalysisTools():
                 mask = ut.read_msk(maskfile)
                 
                 # Compute the pixel area in steradian.
-                pxsc_arcsec = self.database.red[key]['PIXSCALE'][j] / 1000.  # arcsec
+                pxsc_arcsec = self.database.red[key]['PIXSCALE'][j] # arcsec
                 pxsc_rad = pxsc_arcsec / 3600. / 180. * np.pi  # rad
                 pxar = pxsc_rad**2  # sr
                 
@@ -169,7 +169,7 @@ class AnalysisTools():
                     raise UserWarning('Data originates from unknown telescope')
                 resolution = 1e-6 * self.database.red[key]['CWAVEL'][j] / diam / pxsc_rad  # pix
                 if not np.isnan(self.database.obs[key]['BLURFWHM'][j]):
-                    resolution *= self.database.obs[key]['BLURFWHM'][j]
+                    resolution = np.hypot(resolution, self.database.obs[key]['BLURFWHM'][j])
                 
                 # Get the star position.
                 if overwrite_crpix is None:
@@ -219,7 +219,7 @@ class AnalysisTools():
                 cons = []
                 for k in range(data.shape[0]):
                     sep, con = klip.meas_contrast(dat=data[k] * pxar / fstar, iwa=iwa, owa=owa, resolution=resolution, center=center, low_pass_filter=False)
-                    seps += [sep * self.database.red[key]['PIXSCALE'][j] / 1000.]   # arcsec
+                    seps += [sep * self.database.red[key]['PIXSCALE'][j]]   # arcsec
                     cons += [con]
                 seps = np.array(seps)
                 cons = np.array(cons)
@@ -411,7 +411,7 @@ class AnalysisTools():
                                                  self.database.red[key]['FILTER'][j])
                 
                 # Compute the pixel area in steradian.
-                pxsc_arcsec = self.database.red[key]['PIXSCALE'][j] / 1000.  # arcsec
+                pxsc_arcsec = self.database.red[key]['PIXSCALE'][j] # arcsec
                 pxsc_rad = pxsc_arcsec / 3600. / 180. * np.pi  # rad
                 pxar = pxsc_rad**2  # sr
                 
@@ -426,7 +426,7 @@ class AnalysisTools():
                     raise UserWarning('Data originates from unknown telescope')
                 resolution = 1e-6 * self.database.red[key]['CWAVEL'][j] / diam / pxsc_rad  # pix
                 if not np.isnan(self.database.obs[key]['BLURFWHM'][j]):
-                    resolution *= self.database.obs[key]['BLURFWHM'][j]
+                    resolution = np.hypot(resolution, self.database.obs[key]['BLURFWHM'][j])
                 
                 # Find science and reference files.
                 filepaths = []
@@ -669,7 +669,8 @@ class AnalysisTools():
                         
                         # Blur frames with a Gaussian filter.
                         if not np.isnan(self.database.obs[key]['BLURFWHM'][ww]):
-                            offsetpsf = gaussian_filter(offsetpsf, self.database.obs[key]['BLURFWHM'][ww])
+                            gauss_sigma = self.database.obs[key]['BLURFWHM'][j] / np.sqrt(8. * np.log(2.))
+                            offsetpsf = gaussian_filter(offsetpsf, gauss_sigma)
                         
                         # Apply high-pass filter.
                         offsetpsf_nohpf = copy.deepcopy(offsetpsf)
