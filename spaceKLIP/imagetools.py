@@ -2120,3 +2120,39 @@ def cube_outlier_detection(data, sigma_cut=5, nint_min=5):
 
     return indbad
 
+def expand_mask(bpmask, npix, grow_diagonal=False):
+    """Expand bad pixel mask by npix pixels
+    
+    Parameters
+    ==========
+    bpmask : 2D array
+        Boolean bad pixel mask
+    npix : int
+        Number of pixels to expand mask by
+    diagonal : bool
+        Expand mask by npix pixels in all directions, including diagonals
+    in_place : bool
+        Modify the original mask (True) or return a copy (False)
+
+    Returns
+    =======
+    bpmask : 2D array of booleans
+        Expanded bad pixel mask
+    """
+    from scipy.ndimage import binary_dilation, generate_binary_structure
+
+    if npix==0:
+        return bpmask
+
+    # Expand mask by npix pixels, including corners
+    if grow_diagonal:
+        # Perform normal dilation without corners (just left, right, up, down)
+        if npix>1:
+            bpmask = binary_dilation(bpmask, iterations=npix-1)
+        # Add corners in final iteration
+        struct2 = generate_binary_structure(2, 2)
+        bpmask = binary_dilation(bpmask, structure=struct2)
+    else: # No corners
+        bpmask = binary_dilation(bpmask, iterations=npix)
+
+    return bpmask
