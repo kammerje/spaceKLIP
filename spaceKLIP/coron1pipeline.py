@@ -279,40 +279,50 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
             Output JWST datamodel.
         
         """
+
+        from .imagetools import expand_mask
         
         # Save original step parameter.
         npix_grow = self.saturation.n_pix_grow_sat
         
+        # Flag RC pixels as saturated?
+        flag_rcsat = self.saturation.flag_rcsat
+        if flag_rcsat:
+            mask_rc = (input.pixeldq & dqflags.pixel['RC']) > 0
+            # Do a bitwise OR of RC mask with groupdq to flip saturation bits
+            input.groupdq = input.groupdq | (mask_rc * dqflags.pixel['SATURATED'])
+
         # Run step with default settings.
         if self.saturation.grow_diagonal or npix_grow == 0:
-            return self.run_step(self.saturation, input, **kwargs)
-        
-        # Run step with 1 fewer growth.
-        self.saturation.n_pix_grow_sat = npix_grow - 1
-        res = self.run_step(self.saturation, input, **kwargs)
-        
-        # Get saturated pixels and flag 4 neighbors.
-        mask_sat = res.groupdq & dqflags.pixel['SATURATED'] == dqflags.pixel['SATURATED']
-        mask_vp1 = np.roll(mask_sat, +1, axis=-2)
-        mask_vm1 = np.roll(mask_sat, -1, axis=-2)
-        mask_hp1 = np.roll(mask_sat, +1, axis=-1)
-        mask_hm1 = np.roll(mask_sat, -1, axis=-1)
-        
-        # Ignore pixels which rolled around array border.
-        mask_vp1[:, :,  0, :] = 0
-        mask_vm1[:, :, -1, :] = 0
-        mask_hp1[:, :, :,  0] = 0
-        mask_hm1[:, :, :, -1] = 0
-        
-        # Combine saturation masks.
-        mask_sat = mask_sat | mask_vp1 | mask_vm1 | mask_hp1 | mask_hm1
-        
-        # Flag saturated pixels.
-        res.groupdq = res.groupdq | (mask_sat * dqflags.pixel['SATURATED'])
-        
-        # Delete unused masks.
-        del mask_vp1, mask_vm1, mask_hp1, mask_hm1
-        
+            res = self.run_step(self.saturation, input, **kwargs)
+        else: # No diagonal growth
+            # Initial run with 0 pixel growth
+            self.saturation.n_pix_grow_sat = 0
+            res = self.run_step(self.saturation, input, **kwargs)
+            # Reset to original value
+            self.saturation.n_pix_grow_sat = npix_grow
+
+            self.saturation.log.info(f'Growing saturation flags by {npix_grow} pixels. Ignoring diagonal growth.')
+            # Update saturation dq flags to grow in vertical and horizontal directions
+            # Get saturation mask
+            mask_sat = (input.groupdq & dqflags.pixel['SATURATED']) > 0
+
+            # Expand the mask by npix_grow pixels
+            mask_sat = expand_mask(mask_sat, npix_grow, grow_diagonal=False)
+
+            # Do a bitwise OR of new mask with groupdq to flip saturation bit
+            res.groupdq = res.groupdq | (mask_sat * dqflags.pixel['SATURATED'])
+
+            # Do the same for the zero frames
+            zframes = res.zeroframe if res.meta.exposure.zero_frame else None
+            if zframes is not None:
+                # Saturated zero frames have already been set to 0
+                mask_sat = (zframes==0) | mask_rc if flag_rcsat else (zframes==0)
+                # Expand the mask by npix_grow pixels
+                mask_sat = expand_mask(mask_sat, npix_grow, grow_diagonal=False)
+                # Set saturated pixels to 0 in zero frames
+                res.zeroframe[mask_sat] = 0
+
         return res
     
     def apply_rateint_outliers(self, 
