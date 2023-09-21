@@ -557,6 +557,8 @@ def _get_tp_comsubst(instrume,
     """
     Get the COM substrate transmission averaged over the respective filter
     profile.
+
+    *** Deprecated - use `get_tp_comsubst` instead. ***
     
     Parameters
     ----------
@@ -574,6 +576,8 @@ def _get_tp_comsubst(instrume,
     
     """
     
+    log.warning('This function is deprecated. Use `get_tp_comsubst` instead.')
+
     # Default return.
     tp_comsubst = 1.
     
