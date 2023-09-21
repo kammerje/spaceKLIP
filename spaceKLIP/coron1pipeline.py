@@ -8,13 +8,13 @@ matplotlib.rcParams.update({'font.size': 14})
 # IMPORTS
 # =============================================================================
 
-import os
-import pdb
-import sys
+import os, sys, pdb
+import numpy as np
+import matplotlib.pyplot as plt
+
+from tqdm.auto import trange
 
 import astropy.io.fits as pyfits
-import matplotlib.pyplot as plt
-import numpy as np
 
 from jwst.datamodels import dqflags, RampModel
 from jwst.pipeline import Detector1Pipeline, Image2Pipeline, Coron3Pipeline
@@ -592,7 +592,6 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     """
 
     from webbpsf_ext.analysis_tools import nrc_ref_info
-    from astropy.io import fits
 
     # Print all info message if verbose, otherwise only errors or critical.
     from .logging_tools import all_logging_disabled
@@ -617,7 +616,7 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
 
     # Determine reference pixel correction parameters based on
     # instrument aperture name for NIRCam
-    hdr0 = fits.getheader(fitspath, 0)
+    hdr0 = pyfits.getheader(fitspath, 0)
     if hdr0['INSTRUME'] == 'NIRCAM':
         # Array of reference pixel borders [lower, upper, left, right]
         nb, nt, nl, nr = nrc_ref_info(hdr0['APERNAME'], orientation='sci')
@@ -650,7 +649,7 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     # 'none', 'quarter', 'half', or 'all'
     pipeline.ramp_fit.maximum_cores      = kwargs.get('maximum_cores', 'quarter')
 
-    # Set parameters in step dictionary
+    # Set parameters from step dictionary
     for key1 in steps.keys():
         for key2 in steps[key1].keys():
             setattr(getattr(pipeline, key1), key2, steps[key1][key2])
@@ -675,7 +674,11 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
 
 def run_obs(database,
             steps={},
-            subdir='stage1'):
+            subdir='stage1',
+            overwrite=False,
+            quiet=False,
+            verbose=False,
+            **kwargs):
     """
     Run the JWST stage 1 detector pipeline on the input observations database.
     This customized implementation can:
@@ -683,7 +686,10 @@ def run_obs(database,
       and not the diagonal pixels next to a saturated pixel are flagged.
     - Do a pseudo reference pixel correction. Therefore, flag the requested
       edge rows and columns as reference pixels, run the JWST stage 1 refpix
-      step, and unflag the pseudo reference pixels again.
+      step, and unflag the pseudo reference pixels again. Only applicable for
+      subarray data.
+    - Remove horizontal 1/f noise spatial striping in NIRCam data.
+
     
     Parameters
     ----------
@@ -695,8 +701,10 @@ def run_obs(database,
         https://jwst-pipeline.readthedocs.io/en/latest/jwst/user_documentation/running_pipeline_python.html#configuring-a-pipeline-step-in-python
         Custom step parameters are:
         - saturation/grow_diagonal : bool, optional
-            Flag also diagonal pixels (or only bottom/top/left/right)? The
-            default is True.
+            Flag also diagonal pixels (or only bottom/top/left/right)? 
+            The default is True.
+        - saturation/flag_rcsat : bool, optional
+            Flag RC pixels as saturated? The default is True.
         - refpix/nlower : int, optional
             Number of rows at frame bottom that shall be used as additional
             reference pixels. The default is 0.
@@ -711,57 +719,105 @@ def run_obs(database,
             reference pixels. The default is 0.
         - ramp_fit/save_calibrated_ramp : bool, optional
             Save the calibrated ramp? The default is False.
-        The default is {}.
+        Additional useful step parameters:
+        - saturation/n_pix_grow_sat : int, optional
+            Number of pixels to grow for saturation flagging. Default is 1.
+        - ramp_fit/suppress_one_group : bool, optional
+            If True, skips slope calc for pixels with only 1 available group. 
+            Default: False.
+        - ramp_fit/maximum_cores : str, optional
+            max number of parallel processes to create during ramp fitting.
+            'none', 'quarter', 'half', or 'all'. Default: 'quarter'.
+        The default is {}. 
+        Each of these parameters can be passed directly through `kwargs`.
     subdir : str, optional
         Name of the directory where the data products shall be saved. The
         default is 'stage1'.
+    overwrite : bool, optional
+        Overwrite existing files? Default is False.
+    quiet : bool, optional
+        Use progress bar to track progress instead of messages. 
+        Overrides verbose and sets it to False. Default is False.
+    verbose : bool, optional
+        Print all info messages? Default is False.
     
+    Keyword Args
+    ------------
+    save_results : bool, optional
+        Save the JWST pipeline step products? The default is True.
+    save_calibrate_ramp : bool
+        Save intermediate step that is the calibrated ramp? 
+        Default is False.
+    save_intermediates : bool, optional
+        Save intermediate steps, such as dq_init, saturation, refpix,
+        jump, linearity, ramp, etc. Default is False.
+    return_rateints : bool, optional
+        Return the rateints model instead of rate? Default is False.
+    rate_int_outliers : bool, optional
+        Flag outlier pixels in rateints? Default is True.
+        Uses the `cube_outlier_detection` function and requires
+        a minimum of 5 integrations.
+    skip_charge : bool, optional
+        Skip charge migration flagging step? Default: False.
+    skip_jump : bool, optional
+        Skip jump detection step? Default: False.
+    skip_dark : bool, optional
+        Skip dark current subtraction step? Default: True.
+        Dark current cal files are really low SNR.
+    skip_ipc : bool, optional
+        Skip IPC correction step? Default: True.
+    skip_persistence : bool, optional
+        Skip persistence correction step? Default: True.
+        Doesn't currently do anything.
+
     Returns
     -------
     None.
     
     """
-    
+
     # Set output directory.
     output_dir = os.path.join(database.output_dir, subdir)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     
+    # Get list of concatenation keys.
+    keys = list(database.obs.keys())
+    nkeys = len(keys)
+    if quiet:
+        verbose = False
+        itervals = trange(nkeys, desc='Concatenations')
+    else:
+        itervals = range(nkeys)
+
     # Loop through concatenations.
-    for i, key in enumerate(database.obs.keys()):
-        log.info('--> Concatenation ' + key)
+    for i in itervals:
+        key = keys[i]
+        if not quiet: log.info('--> Concatenation ' + key)
         
         # Loop through FITS files.
         nfitsfiles = len(database.obs[key])
-        for j in range(nfitsfiles):
-            
+        jtervals = trange(nfitsfiles, desc='FITS files', leave=False) if quiet else range(nfitsfiles)
+        for j in jtervals:
+
             # Skip non-stage 0 files.
             head, tail = os.path.split(database.obs[key]['FITSFILE'][j])
-            if database.obs[key]['DATAMODL'][j] != 'STAGE0':
-                log.info('  --> Coron1Pipeline: skipping non-stage 0 file ' + tail)
-                continue
-            log.info('  --> Coron1Pipeline: processing ' + tail)
-            
-            # Initialize Coron1Pipeline.
-            pipeline = Coron1Pipeline_spaceKLIP(output_dir=output_dir)
-            pipeline.save_results = True
-            
-            # Set step parameters.
-            for key1 in steps.keys():
-                for key2 in steps[key1].keys():
-                    setattr(getattr(pipeline, key1), key2, steps[key1][key2])
-            
-            # Run Coron1Pipeline.
             fitspath = os.path.abspath(database.obs[key]['FITSFILE'][j])
-            res = pipeline.run(fitspath)
-            if isinstance(res, list):
-                res = res[0]
+            if database.obs[key]['DATAMODL'][j] != 'STAGE0':
+                if not quiet: log.info('  --> Coron1Pipeline: skipping non-stage 0 file ' + tail)
+                continue
+
+            # Get expected output file name
+            outfile_name = tail.replace('uncal.fits', 'rateints.fits')
+            fitsout_path = os.path.join(output_dir, outfile_name)
+
+            # Skip if file already exists and overwrite is False.
+            if os.path.isfile(fitsout_path) and not overwrite:
+                if not quiet: log.info('  --> Coron1Pipeline: skipping already processed file ' + tail)
+            else:
+                if not quiet: log.info('  --> Coron1Pipeline: processing ' + tail)
+                res = run_single_file(fitspath, output_dir, steps=steps, 
+                                      verbose=verbose, **kwargs)
             
             # Update spaceKLIP database.
-            fitsfile = os.path.join(output_dir, res.meta.filename)
-            if fitsfile.endswith('rate.fits'):
-                if os.path.isfile(fitsfile.replace('rate.fits', 'rateints.fits')):
-                    fitsfile = fitsfile.replace('rate.fits', 'rateints.fits')
-            database.update_obs(key, j, fitsfile)
-    
-    pass
+            database.update_obs(key, j, fitsout_path)
