@@ -45,6 +45,7 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
     class_alias = "calwebb_coron1"
 
     spec = """
+        save_intermediates = boolean(default=False) # Save all intermediate step results
         rate_int_outliers  = boolean(default=True)  # Flag outlier pixels in rateints
         return_rateints    = boolean(default=False) # Return rateints or rate product?
     """
@@ -137,7 +138,7 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
             input = self.run_step(self.jump, input)
         
         # save the corrected ramp data, if requested
-        if self.ramp_fit.save_calibrated_ramp or self.save_calibrated_ramp:
+        if self.ramp_fit.save_calibrated_ramp or self.save_calibrated_ramp or self.save_intermediates:
             self.save_model(input, suffix='ramp')
         
         # Run ramp fitting & gain scale correction.
@@ -217,14 +218,21 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         
         """
         
-        # Check if results shall be saved.
+        # Determine if we're saving results for real
         if step_obj.skip:
+            # Skip save if step is skipped
             really_save_results = False
-        elif save_results is not None:
+        elif (save_results is not None):
+            # Use keyword specifications
             really_save_results = save_results
+        elif self.save_intermediates:
+            # Use save_intermediates attribute
+            really_save_results = True
         elif step_obj.save_results:
+            # Use step attribute
             really_save_results = True
         else:
+            # Saving is unspecified
             really_save_results = False
         
         # Run step. Don't save results yet.
