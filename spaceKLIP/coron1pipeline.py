@@ -60,6 +60,7 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         rate_int_outliers  = boolean(default=True)  # Flag outlier pixels in rateints
         remove_ktc         = boolean(default=True) # Remove kTC noise from data
         remove_fnoise      = boolean(default=True) # Remove 1/f noise from data
+        return_rateints    = boolean(default=False) # Return rateints or rate product
     """
 
     def __init__(self,
@@ -175,12 +176,27 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
             ints_model = self.run_step(self.gain_scale, ints_model, save_results=False)
             if self.save_results or self.save_intermediates:
                 self.save_model(ints_model, suffix='rateints')
-        
+
         # Setup output file.
         self.setup_output(input)
+
+        if self.return_rateints:
+            return ints_model
         
         return input
     
+    def setup_output(self, input):
+        if input is None:
+            return None
+        # Determine the proper file name suffix to use later
+        if input.meta.cal_step.ramp_fit == 'COMPLETE':
+            if self.return_rateints:
+                self.suffix = 'rateints'
+            else:
+                self.suffix = 'rate'
+        else:
+            self.suffix = 'ramp'
+
     def run_step(self,
                  step_obj,
                  input,
@@ -578,6 +594,7 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
     
     def subtract_fnoise(self,
                         input,
+                        sat_frac=0.5,
                         **kwargs):
         """Model and subtract 1/f noise from each integration
         
@@ -621,40 +638,26 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         chsize = ny // noutputs
 
         # Fit slopes to get signal mask
-        _, slope_arr = self._fit_slopes(input)
+        # Grab slopes if they've already been computed
+        _, slope_arr = self._fit_slopes(input, sat_frac=sat_frac)
         slope_mean = robust.mean(slope_arr, axis=0)
-        signal_mask = robust.mean(slope_mean, Cut=2, return_mask=True)
-        signal_mask = ~expand_mask(~signal_mask, 1, grow_diagonal=True)
 
-        # Mask out ND squares and mask holder
-        apname = get_coron_apname(input)
-        if 'MASK' in apname:
-            # ND squares
-            ndmask = gen_coron_mask_ndonly(apname) < 0.5
-            ndmask = expand_mask(ndmask, 10, grow_diagonal=True)
-
-            # Mask out stellar position within some radius
-            ap = siaf_nrc[apname]
-            x0, y0 = ap.reference_point('sci')
-            rho = dist_image(ndmask, center=(x0, y0))
-            cmask = rho < np.min([50, chsize / 5])
-
-            mask = signal_mask & ~ndmask & ~cmask
-        else:
-            mask = signal_mask
-
-        # Expand mask
-        # mask = ~expand_mask(~mask, 3, grow_diagonal=True)
+        # Generate a mean signal ramp to subtract from each group
+        group_time = input.meta.exposure.group_time
+        ngroups = input.meta.exposure.ngroups
+        tarr = np.arange(1, ngroups+1) * group_time
+        signal_mean_ramp = slope_mean * tarr.reshape([-1,1,1])
 
         # Subtract 1/f noise from each integration
         data = input.data
-        for i in range(nints):
+        for i in trange(nints):
             cube = data[i]
             groupdq = input.groupdq[i]
+            # Cumulative sum of group DQ flags
             bpmask_arr = np.cumsum(groupdq, axis=0) > 0
             for j in range(ngroups):
                 # Exclude bad pixels
-                im_mask = mask & ~bpmask_arr[j]
+                im_mask = ~bpmask_arr[j] #& mask
                 for ch in range(noutputs):
                     # Get channel x-indices
                     x1 = int(ch*chsize)
@@ -662,16 +665,35 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
 
                     # Channel subarrays
                     imch = cube[j, :, x1:x2]
+                    sigch = signal_mean_ramp[j, :, x1:x2]
                     good_mask = im_mask[:, x1:x2]
 
+                    # Remove averaged signal goup
+                    imch_diff = imch - sigch
+
                     # Subtract 1/f noise
-                    nf_clean = CleanSubarray(imch, good_mask)
+                    nf_clean = CleanSubarray(imch_diff, good_mask)
                     nf_clean.fit(**kwargs)
                     # Subtract model from data
                     data[i,j,:,x1:x2] -= nf_clean.model
 
-                    # if i==0 and j==ngroups-1 and ch==0:
-                    #     plt.imshow(nf_clean.M, origin='lower')
+                    # if i==0 and j==ngroups//2+1 and ch==0:
+                    #     fig, axes = plt.subplots(2,2, figsize=(8,8), sharex=True, sharey=True)
+                    #     axes = axes.flatten()
+                    #     axes[2].imshow(nf_clean.M)
+
+                    #     med = np.nanmedian(nf_clean.model)
+                    #     sig = robust.medabsdev(nf_clean.model)
+                    #     vmin, vmax = np.array([-1,1])*sig*3 + med
+                    #     axes[3].imshow(nf_clean.model, vmin=vmin, vmax=vmax, cmap='RdBu')
+
+                    #     med = np.nanmedian(imch_diff)
+                    #     sig = robust.medabsdev(imch_diff)
+                    #     vmin, vmax = np.array([-1,1])*sig*3 + med
+                    #     axes[1].imshow(imch_diff, vmin=vmin, vmax=vmax)
+                    #     axes[0].imshow(imch, vmin=vmin, vmax=vmax)
+                        
+                    #     fig.tight_layout()
 
                     del nf_clean
 
@@ -745,6 +767,8 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     save_intermediates : bool, optional
         Save intermediate steps, such as dq_init, saturation, refpix,
         jump, linearity, ramp, etc. Default is False.
+    return_rateints : bool, optional
+        Return the rateints model instead of rate? Default is False.
     rate_int_outliers : bool, optional
         Flag outlier pixels in rateints? Default is True.
         Uses the `cube_outlier_detection` function and requires
@@ -788,6 +812,7 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     pipeline.save_results         = kwargs.get('save_results', True)
     pipeline.save_calibrated_ramp = kwargs.get('save_calibrated_ramp', False)
     pipeline.save_intermediates   = kwargs.get('save_intermediates', False)
+    pipeline.return_rateints      = kwargs.get('return_rateints', False)
 
     # Skip certain steps?
     pipeline.charge_migration.skip = kwargs.get('skip_charge', False)
@@ -938,6 +963,8 @@ def run_obs(database,
     save_intermediates : bool, optional
         Save intermediate steps, such as dq_init, saturation, refpix,
         jump, linearity, ramp, etc. Default is False.
+    return_rateints : bool, optional
+        Return the rateints model instead of rate? Default is False.
     rate_int_outliers : bool, optional
         Flag outlier pixels in rateints? Default is True.
         Uses the `cube_outlier_detection` function and requires
