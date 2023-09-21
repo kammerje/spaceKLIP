@@ -448,23 +448,36 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         nright = self.refpix.nright
         nrow_off = self.refpix.nrow_off
         ncol_off = self.refpix.ncol_off
-        nupper_off = -nrow_off if nrow_off != 0 else None
-        nright_off = -ncol_off if ncol_off != 0 else None
-        
+
         # Flag custom reference pixel rows & columns.
         self.refpix.log.info(f'Flagging [{nlower}, {nupper}] references rows at [bottom, top] of array')
         self.refpix.log.info(f'Flagging [{nleft}, {nright}] references columns at [left, right] of array')
-        input.pixeldq[nrow_off:nrow_off + nlower, ncol_off:nright_off] = input.pixeldq[nrow_off:nrow_off + nlower, ncol_off:nright_off] | dqflags.pixel['REFERENCE_PIXEL']
-        input.pixeldq[-nrow_off - nupper:nupper_off, ncol_off:nright_off] = input.pixeldq[-nrow_off - nupper:nupper_off, ncol_off:nright_off] | dqflags.pixel['REFERENCE_PIXEL']
-        input.pixeldq[nrow_off:nupper_off, ncol_off:ncol_off + nleft] = input.pixeldq[nrow_off:nupper_off, ncol_off:ncol_off + nleft] | dqflags.pixel['REFERENCE_PIXEL']
-        input.pixeldq[nrow_off:nupper_off, -ncol_off - nright:nright_off] = input.pixeldq[nrow_off:nupper_off, -ncol_off - nright:nright_off] | dqflags.pixel['REFERENCE_PIXEL']
-        
-        # Save original step parameter.
-        use_side_orig = self.refpix.use_side_ref_pixels
+
+        # Update pixel DQ mask to manually set reference pixels
+        log.info(f'Flagging [{nlower}, {nupper}] references rows at [bottom, top] of array')
+        log.info(f'Flagging [{nleft}, {nright}] references rows at [left, right] of array')
+        pixeldq_orig = input.pixeldq.copy()
+        if nlower>0:
+            ib1 = nrow_off
+            ib2 = ib1 + nlower
+            input.pixeldq[ib1:ib2,:] = input.pixeldq[ib1:ib2,:]  | dqflags.pixel['REFERENCE_PIXEL']
+        if nupper>0:
+            it1 = -1 * (nupper + nrow_off)
+            it2 = None if nrow_off == 0 else -1 * nrow_off
+            input.pixeldq[it1:it2,:] = input.pixeldq[it1:it2,:] | dqflags.pixel['REFERENCE_PIXEL']
+        if nleft>0:
+            il1 = ncol_off
+            il2 = il1 + nleft
+            input.pixeldq[:,il1:il2] = input.pixeldq[:,il1:il2] | dqflags.pixel['REFERENCE_PIXEL']
+        if nright>0:
+            ir1 = -1 * (nright + ncol_off)
+            ir2 = None if ncol_off == 0 else -1 * ncol_off
+            input.pixeldq[:,ir1:ir2] = input.pixeldq[:,ir1:ir2] | dqflags.pixel['REFERENCE_PIXEL']
+
+        # Turn off side reference pixels?
+        use_side_orig = self.refpix.use_side_ref_pixels 
         if nleft + nright == 0:
             self.refpix.use_side_ref_pixels = False
-        else:
-            self.refpix.use_side_ref_pixels = True
         
         # Run step with custom reference pixel rows & columns.
         res = self.run_step(self.refpix, input, **kwargs)
@@ -474,11 +487,15 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         
         # Unflag custom reference pixel rows & columns.
         self.refpix.log.info('Removing custom reference pixel flags')
-        res.pixeldq[nrow_off:nrow_off + nlower, ncol_off:nright_off] = res.pixeldq[nrow_off:nrow_off + nlower, ncol_off:nright_off] & ~dqflags.pixel['REFERENCE_PIXEL']
-        res.pixeldq[-nrow_off - nupper:nupper_off, ncol_off:nright_off] = res.pixeldq[-nrow_off - nupper:nupper_off, ncol_off:nright_off] & ~dqflags.pixel['REFERENCE_PIXEL']
-        res.pixeldq[nrow_off:nupper_off, ncol_off:ncol_off + nleft] = res.pixeldq[nrow_off:nupper_off, ncol_off:ncol_off + nleft] & ~dqflags.pixel['REFERENCE_PIXEL']
-        res.pixeldq[nrow_off:nupper_off, -ncol_off - nright:nright_off] = res.pixeldq[nrow_off:nupper_off, -ncol_off - nright:nright_off] & ~dqflags.pixel['REFERENCE_PIXEL']
-        
+        if nlower>0:
+            res.pixeldq[ib1:ib2,:] = pixeldq_orig[ib1:ib2,:]
+        if nupper>0:
+            res.pixeldq[it1:it2,:] = pixeldq_orig[it1:it2,:]
+        if nleft>0:
+            res.pixeldq[:,il1:il2] = pixeldq_orig[:,il1:il2]
+        if nright>0:
+            res.pixeldq[:,ir1:ir2] = pixeldq_orig[:,ir1:ir2]
+
         return res
 
 def run_obs(database,
