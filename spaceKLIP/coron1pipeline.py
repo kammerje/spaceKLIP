@@ -378,9 +378,16 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
     def do_refpix(self,
                   input,
                   **kwargs):
-        """
-        Do the default or a custom pseudo reference pixel correction.
+        """ Do the default or a custom pseudo reference pixel correction.
         
+        If full frame, perform RefPix as normal.
+        If no ref rows or columns specified, then perform RefPix as normal.
+
+        Otherwise, temporarily set reference rows and columns in the DQ flags
+        and force the reference correction. Can set number of reference
+        rows and column via the  `nlower`, `nupper`, `nleft`, `nright` 
+        attributes.
+
         Parameters
         ----------
         input : jwst.datamodel
@@ -395,19 +402,19 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         
         """
         
-        # Check if full frame exposure.
+       # Is this a full frame observation?
         is_full_frame = 'FULL' in input.meta.subarray.name.upper()
-        
-        # Get number of custom reference pixel rows & columns.
+
+        # Get number of reference pixels explicitly specified
         nlower = self.refpix.nlower
         nupper = self.refpix.nupper
-        nleft = self.refpix.nleft
-        nright = self.refpix.nright
-        nall = nlower + nupper + nleft + nright
+        # The pipeline does not currently support col refpix correction for subarrays
+        # nleft  = self.refpix.nleft 
+        # nright = self.refpix.nright
+        nref_set = nlower + nupper #+ nleft + nright
         
-        # Run step with default settings if full frame exposure, otherwise run
-        # step with custom reference pixel rows & columns.
-        if is_full_frame or nall == 0:
+        # Perform normal operations if full frame or no refpix pixels specified
+        if is_full_frame or nref_set==0:
             return self.run_step(self.refpix, input, **kwargs)
         else:
             return self.do_pseudo_refpix(input, **kwargs)
@@ -415,10 +422,11 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
     def do_pseudo_refpix(self,
                          input,
                          **kwargs):
-        """
-        Do a pseudo reference pixel correction. Therefore, flag the requested
-        edge rows and columns as reference pixels, run the JWST stage 1 refpix
-        step, and unflag the pseudo reference pixels again.
+        """ Do a pseudo reference pixel correction
+        
+        Flag the requested edge rows and columns as reference pixels, 
+        run the JWST stage 1 refpix step, and then unflag those 
+        "pseudo" reference pixels.
         
         Parameters
         ----------
@@ -431,7 +439,6 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         -------
         res : jwst.datamodel
             Output JWST datamodel.
-        
         """
         
         # Get number of custom reference pixel rows & columns.
