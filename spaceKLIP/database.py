@@ -245,8 +245,8 @@ class Database():
             EXPSTART += [head.get('EXPSTART', np.nan)]
             NINTS += [head.get('NINTS', data.shape[0] if data.ndim == 3 else 1)]
             EFFINTTM += [head.get('EFFINTTM', np.nan)]
-            IS_PSF += [str(head.get('IS_PSF', 'NONE'))]
-            SELFREF += [str(head.get('SELFREF', 'NONE'))]
+            IS_PSF += [head.get('IS_PSF', 'NONE')]
+            SELFREF += [head.get('SELFREF', 'NONE')]
             SUBARRAY += [head.get('SUBARRAY', 'UNKNOWN')]
             NUMDTHPT += [head.get('NUMDTHPT', 1)]
             XOFFSET += [1e3 * head.get('XOFFSET', 0.)]
@@ -1279,7 +1279,8 @@ def create_database(output_dir,
 
     """ Create a spaceKLIP database from JWST data
 
-    Automatically searches for 
+    Automatically searches for uncal.fits in the input directory and creates 
+    a database of the JWST data. Only works for stage0, stage1, or stage2 data.
 
     Parameters
     ----------
@@ -1300,6 +1301,10 @@ def create_database(output_dir,
         List of paths of the input MIRI background observations. Make sure
         that they ARE duplicated in the 'datapaths' or 'psflibpaths'. The
         default is None.
+    assoc_using_targname : bool, optional
+        Associate observations using the TARGNAME keyword. The default is True.
+    verbose : bool, optional
+        Print information to the screen. The default is True.
     
     Keyword Arguments
     -----------------
