@@ -551,7 +551,7 @@ def subtractlsq(shift,
     else:
         return res[mask]
 
-def get_tp_comsubst(instrume,
+def _get_tp_comsubst(instrume,
                     subarray,
                     filt):
     """
@@ -604,6 +604,58 @@ def get_tp_comsubst(instrume,
             int_tp_bandpass = simps(bandpass_throughput, comsubst_wave)
             int_tp_bandpass_comsubst = simps(bandpass_throughput * comsubst_throughput, comsubst_wave)
             tp_comsubst = int_tp_bandpass_comsubst / int_tp_bandpass
+    
+    # Return.
+    return tp_comsubst
+
+def get_tp_comsubst(instrume,
+                    subarray,
+                    filt):
+    """
+    Get the COM substrate transmission averaged over the respective filter
+    profile.
+    
+    Parameters
+    ----------
+    instrume : 'NIRCAM', 'NIRISS', or 'MIRI'
+        JWST instrument in use.
+    subarray : str
+        JWST subarray in use.
+    filt : str
+        JWST filter in use.
+    
+    Returns
+    -------
+    tp_comsubst : float
+        COM substrate transmission averaged over the respective filter profile
+    
+    """
+    
+    from webbpsf_ext.bandpasses import nircam_filter, nircam_com_th
+
+    # Default return.
+    tp_comsubst = 1.
+    
+    # If NIRCam.
+    instrume = instrume.upper()
+    if instrume == 'NIRCAM':
+        
+        # If coronagraphy subarray.
+        if '210R' in subarray or '335R' in subarray or '430R' in subarray or 'SWB' in subarray or 'LWB' in subarray:
+            
+            # Read bandpass.
+            try:
+                bp = nircam_filter(filt)
+                bandpass_wave = bp.wave / 1e4  # micron
+                bandpass_throughput = bp.throughput
+            except FileNotFoundError:
+                log.error('--> Filter ' + filt + ' not found for instrument ' + instrume)
+            
+            # Read COM substrate transmission interpolated at bandpass wavelengths.
+            comsubst_throughput = nircam_com_th(bandpass_wave)
+
+            # Compute weighted average of COM substrate transmission.
+            tp_comsubst = np.average(comsubst_throughput, weights=bandpass_throughput)
     
     # Return.
     return tp_comsubst
