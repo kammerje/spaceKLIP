@@ -745,14 +745,19 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
         Flag outlier pixels in rateints? Default is True.
         Uses the `cube_outlier_detection` function and requires
         a minimum of 5 integrations.
+    remove_ktc : bool, optional
+        Remove kTC noise by fitting ramp data to get bias? 
+        Default is True.
+    remove_fnoise : bool, optional
+        Remove 1/f noise from data at group level? 
+        Default is True.
     skip_charge : bool, optional
         Skip charge migration flagging step? Default: False.
     skip_jump : bool, optional
         Skip jump detection step? Default: False.
     skip_dark : bool, optional
-        Skip dark current subtraction step? Default is True for 
-        subarrays and False for full frame data.
-        Dark current cal files for subarrays are really low SNR.
+        Skip dark current subtraction step? Default: True.
+        Dark current cal files are really low SNR.
     skip_ipc : bool, optional
         Skip IPC correction step? Default: True.
     skip_persistence : bool, optional
@@ -822,6 +827,10 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     pipeline.saturation.grow_diagonal  = kwargs.get('grow_diagonal', False)
     pipeline.saturation.flag_rcsat     = kwargs.get('flag_rcsat', True)
     pipeline.rate_int_outliers         = kwargs.get('rate_int_outliers', True)
+
+    # 1/f noise correction
+    pipeline.remove_ktc    = kwargs.get('remove_ktc', True)
+    pipeline.remove_fnoise = kwargs.get('remove_fnoise', True)
 
     # Skip pixels with only 1 group in ramp_fit?
     pipeline.ramp_fit.suppress_one_group = kwargs.get('suppress_one_group', False)
@@ -937,6 +946,12 @@ def run_obs(database,
         Flag outlier pixels in rateints? Default is True.
         Uses the `cube_outlier_detection` function and requires
         a minimum of 5 integrations.
+    remove_ktc : bool, optional
+        Remove kTC noise by fitting ramp data to get bias? 
+        Default is True.
+    remove_fnoise : bool, optional
+        Remove 1/f noise from data at group level? 
+        Default is True.
     skip_charge : bool, optional
         Skip charge migration flagging step? Default: False.
     skip_jump : bool, optional
