@@ -23,6 +23,8 @@ from scipy.integrate import simps
 from scipy.ndimage import fourier_shift, gaussian_filter
 from scipy.ndimage import shift as spline_shift
 
+from webbpsf_ext.imreg_tools import get_coron_apname as nircam_apname
+
 import logging
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -31,6 +33,44 @@ log.setLevel(logging.INFO)
 # =============================================================================
 # MAIN
 # =============================================================================
+
+def get_nrcmask_from_apname(apname):
+    """Get mask name from aperture name
+    
+    The aperture name is of the form:
+        NRC[A/B][1-5]_[FULL]_[MASK]_[FILTER]
+    where MASK is the name of the coronagraphic mask used.
+
+    For target acquisition apertures the mask name can be
+    prependend with "TA" (eg., TAMASK335R).
+
+    Return 'NONE' if MASK not in input aperture name.
+    """
+
+    if 'MASK' not in apname:
+        return 'NONE'
+
+    pps_str_arr = apname.split('_')
+    for s in pps_str_arr:
+        if 'MASK' in s:
+            image_mask = s
+            break
+
+    # Special case for TA apertures
+    if 'TA' in image_mask:
+        # return 'NONE'
+        # Remove TA from mask name
+        image_mask = image_mask.replace('TA', '')
+
+        # Remove FS from mask name
+        if 'FS' in image_mask:
+            image_mask = image_mask.replace('FS', '')
+
+        # Remove trailing S or L from LWB and SWB TA apertures
+        if ('WB' in image_mask) and (image_mask[-1]=='S' or image_mask[-1]=='L'):
+            image_mask = image_mask[:-1]
+
+    return image_mask
 
 def read_obs(fitsfile,
              return_var=False):
