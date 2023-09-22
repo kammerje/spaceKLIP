@@ -756,8 +756,9 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     skip_jump : bool, optional
         Skip jump detection step? Default: False.
     skip_dark : bool, optional
-        Skip dark current subtraction step? Default: True.
-        Dark current cal files are really low SNR.
+        Skip dark current subtraction step? Default is True for 
+        subarrays and False for full frame data.
+        Dark current cal files for subarrays are really low SNR.
     skip_ipc : bool, optional
         Skip IPC correction step? Default: True.
     skip_persistence : bool, optional
