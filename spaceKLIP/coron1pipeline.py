@@ -83,16 +83,18 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         # Initialize reference pixel correction parameters
         self.refpix.nlower = 4
         self.refpix.nupper = 4
-        self.refpix.nleft = 4
-        self.refpix.nright = 4
         self.refpix.nrow_off = 0
+        # NOTE: nleft, right, and ncol_off don't actually do anything.
+        #   For 1/f noise correction, set the `remove_fnoise` attribute to True
+        #   to model and subtract the 1/f noise.
+        self.refpix.nleft = 0
+        self.refpix.nright = 0
         self.refpix.ncol_off = 0
 
         # Ramp fit saving options
         # NOTE: `save_calibrated_ramp` is already a Detector1Pipeline property
         self.ramp_fit.save_calibrated_ramp = False
         
-        pass
     
     def process(self,
                 input):
@@ -706,12 +708,6 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
         - refpix/nupper : int, optional
             Number of rows at frame top that shall be used as additional
             reference pixels. The default is 0.
-        - refpix/nleft : int, optional
-            Number of rows at frame left side that shall be used as additional
-            reference pixels. The default is 0.
-        - refpix/nright : int, optional
-            Number of rows at frame right side that shall be used as additional
-            reference pixels. The default is 0.
         - ramp_fit/save_calibrated_ramp : bool, optional
             Save the calibrated ramp? The default is False.
 
@@ -815,10 +811,7 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
         nl = nr = 4
     pipeline.refpix.nlower   = kwargs.get('nlower', nb)
     pipeline.refpix.nupper   = kwargs.get('nupper', nt)
-    pipeline.refpix.nleft    = kwargs.get('nleft',  nl)
-    pipeline.refpix.nright   = kwargs.get('nright', nr)
     pipeline.refpix.nrow_off = kwargs.get('nrow_off', 0)
-    pipeline.refpix.ncol_off = kwargs.get('ncol_off', 0)
 
     # Set some Step parameters
     pipeline.jump.rejection_threshold              = kwargs.get('rejection_threshold', 4)
@@ -879,13 +872,11 @@ def run_obs(database,
       step, and unflag the pseudo reference pixels again. Only applicable for
       subarray data.
     - Remove horizontal 1/f noise spatial striping in NIRCam data.
-
     
     Parameters
     ----------
     database : spaceKLIP.Database
-        SpaceKLIP database on which the JWST stage 1 detector pipeline shall be
-        run.
+        SpaceKLIP database on which the JWST stage 1 pipeline shall be run.
     steps : dict, optional
         See here for how to use the steps parameter:
         https://jwst-pipeline.readthedocs.io/en/latest/jwst/user_documentation/running_pipeline_python.html#configuring-a-pipeline-step-in-python
@@ -900,12 +891,6 @@ def run_obs(database,
             reference pixels. The default is 0.
         - refpix/nupper : int, optional
             Number of rows at frame top that shall be used as additional
-            reference pixels. The default is 0.
-        - refpix/nleft : int, optional
-            Number of rows at frame left side that shall be used as additional
-            reference pixels. The default is 0.
-        - refpix/nright : int, optional
-            Number of rows at frame right side that shall be used as additional
             reference pixels. The default is 0.
         - ramp_fit/save_calibrated_ramp : bool, optional
             Save the calibrated ramp? The default is False.
