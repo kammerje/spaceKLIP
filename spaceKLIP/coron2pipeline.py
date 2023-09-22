@@ -119,6 +119,112 @@ class Coron2Pipeline_spaceKLIP(Image2Pipeline):
         
         return all_res
 
+def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
+    """ Run the JWST stage 2 image pipeline on a single file.
+
+    This customized implementation will also run the 'outlier_detection' step
+    if not skipped.
+    
+    Parameters
+    ----------
+    database : spaceKLIP.Database
+        SpaceKLIP database on which the JWST stage 2 image pipeline shall be
+        run.
+    steps : dict, optional
+        See here for how to use the steps parameter:
+        https://jwst-pipeline.readthedocs.io/en/latest/jwst/user_documentation/running_pipeline_python.html#configuring-a-pipeline-step-in-python
+        Custom step parameters are:
+        - n/a
+        The default is {}.
+    subdir : str, optional
+        Name of the directory where the data products shall be saved. The
+        default is 'stage2'.
+    do_rates : bool, optional
+        In addition to processing rateints files, also process rate files
+        if they exist? The default is False.
+    overwrite : bool, optional
+        Overwrite existing files? Default is False.
+    quiet : bool, optional
+        Use progress bar to track progress instead of messages. 
+        Overrides verbose and sets it to False. Default is False.
+    verbose : bool, optional
+        Print all info messages? Default is False.
+    
+    Keyword Args
+    ------------
+    save_results : bool, optional
+        Save the JWST pipeline products? The default is True.
+    skip_bg : bool, optional
+        Skip the background subtraction step? The default is False.
+    skip_photom : bool, optional
+        Skip the photometric correction step? The default is False.
+    skip_resample : bool, optional
+        Skip the resampling (drizzle) step? While the default is set
+        to False, this step only applies to normal imaging modes and
+        skips coronagraphic observation. For coronagraphic observations,
+        resampling occurs in Stage 3.
+    skip_wcs : bool, optional
+        Skip the WCS assignment step? The default is False.
+    skip_flat : bool, optional
+        Skip the flat field correction step? The default is False.
+    skip_outlier : bool, optional
+        Skip the outlier detection step? The default is False except
+        for target acquisition subarray data, which will always be True.
+
+    Returns
+    -------
+    None.
+    """
+    # Print all info message if verbose, otherwise only errors or critical.
+    from .logging_tools import all_logging_disabled
+    log_level = logging.INFO if verbose else logging.ERROR
+
+    # Initialize Coron1Pipeline.
+    with all_logging_disabled(log_level):
+        pipeline = Coron2Pipeline_spaceKLIP(output_dir=output_dir)
+
+    # Options for saving results
+    pipeline.save_results         = kwargs.get('save_results', True)
+    pipeline.save_intermediates   = kwargs.get('save_intermediates', False)
+
+    # Skip certain steps?
+    pipeline.bkg_subtract.skip = kwargs.get('skip_bg', True)
+    pipeline.photom.skip       = kwargs.get('skip_photom', False)
+    pipeline.resample.skip     = kwargs.get('skip_resample', False)
+    pipeline.assign_wcs.skip   = kwargs.get('skip_wcs', False)
+    pipeline.flat_field.skip   = kwargs.get('skip_flat', False)
+
+    # Don't perform outlier step for TA data.
+    hdr0 = pyfits.getheader(fitspath)
+    if 'NRC_TA' in hdr0['EXP_TYPE']:
+        pipeline.outlier_detection.skip = True
+    else:
+        pipeline.outlier_detection.skip = kwargs.get('skip_outlier', False)
+
+    # Set step parameters.
+    for key1 in steps.keys():
+        for key2 in steps[key1].keys():
+            setattr(getattr(pipeline, key1), key2, steps[key1][key2])
+    
+    # Run Coron2Pipeline. Raise exception on error.
+    # Ensure that pipeline is closed out.
+    try:
+        with all_logging_disabled(log_level):
+            res = pipeline.run(fitspath)
+    except Exception as e:
+        raise RuntimeError(
+            'Caught exception during pipeline processing.'
+            '\nException: {}'.format(e)
+        )
+    finally:
+        pipeline.closeout()
+
+    if isinstance(res, list):
+        res = res[0]
+
+    return res
+
+
 def run_obs(database,
             steps={},
             subdir='stage2'):
