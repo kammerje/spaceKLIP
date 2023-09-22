@@ -36,6 +36,8 @@ class Coron2Pipeline_spaceKLIP(Image2Pipeline):
     
     """
     
+    class_alias = "calwebb_coron2"
+
     def __init__(self,
                  **kwargs):
         """
@@ -60,8 +62,6 @@ class Coron2Pipeline_spaceKLIP(Image2Pipeline):
         
         # Set additional step parameters.
         self.outlier_detection.skip = False
-        
-        pass
     
     def process(self,
                 input):
@@ -102,11 +102,16 @@ class Coron2Pipeline_spaceKLIP(Image2Pipeline):
             res = self.outlier_detection.run(res)
             
             # Save results.
-            suffix = 'cal'
-            if isinstance(res, datamodels.CubeModel):
-                suffix = 'calints'
+            suffix = 'calints' if isinstance(res, datamodels.CubeModel) else 'cal'
             res.meta.filename = self.make_output_path(suffix=suffix)
             all_res.append(res)
+
+            # If outlier detection was run but intermediates were not request
+            # to be saved, remove the intermediate _median.fits files.
+            if not self.save_intermediates and not self.outlier_detection.skip:
+                file_median = res.meta.filename.replace('calints', 'median')
+                if os.path.exists(file_median):
+                    os.remove(file_median)
         
         # Setup output file.
         self.output_use_model = True
