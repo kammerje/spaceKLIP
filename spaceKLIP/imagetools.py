@@ -1698,6 +1698,7 @@ class ImageTools():
                             spectral_type='G2V',
                             date=None,
                             output_dir=None,
+                            fov_pix=65,
                             oversample=2,
                             use_coeff=False):
         """
@@ -1751,38 +1752,34 @@ class ImageTools():
         # Initialize JWST_PSF object. Use odd image size so that PSF is
         # centered in pixel center.
         log.info('  --> Recenter frames: generating WebbPSF image for absolute centering (this might take a while)')
-        INSTRUME = 'NIRCam'
         FILTER = self.database.obs[key]['FILTER'][j]
-        CORONMSK = self.database.obs[key]['CORONMSK'][j]
-        if CORONMSK.startswith('MASKA') or CORONMSK.startswith('MASKB'):
-            CORONMSK = CORONMSK[:4] + CORONMSK[5:]
-        fov_pix = 65
-        kwargs = {'oversample': oversample,
-                  'date': date,
-                  'use_coeff': use_coeff,
-                  'sp': spectrum}
-        psf = JWST_PSF(INSTRUME, FILTER, CORONMSK, fov_pix, **kwargs)
+        APERNAME = self.database.obs[key]['APERNAME'][j]
+        kwargs = {
+            'fov_pix': fov_pix,
+            'oversample': oversample,
+            'date': date,
+            'use_coeff': use_coeff,
+            'sp': spectrum
+        }
+        psf = JWST_PSF(APERNAME, FILTER, fov_pix=fov_pix, **kwargs)
         
         # Get SIAF reference pixel position.
-        apsiaf = psf.inst_on.siaf[self.database.obs[key]['APERNAME'][j]]
+        apsiaf = psf.inst_on.siaf_ap
         xsciref, ysciref = (apsiaf.XSciRef, apsiaf.YSciRef)
         
         # Generate model PSF. Apply offset between SIAF reference pixel
         # position and true mask center.
         xoff = (crpix1 + 1) - xsciref
         yoff = (crpix2 + 1) - ysciref
-        # crtel = apsiaf.sci_to_tel((crpix1 + 1) - xoff, (crpix2 + 1) - yoff)
-        # model_psf = psf.gen_psf_idl(crtel, coord_frame='tel', return_oversample=False)
-        model_psf = psf.gen_psf_idl((0, 0), coord_frame='idl', return_oversample=False)  # using this instead after discussing with Jarron
+        model_psf = psf.gen_psf_idl((0, 0), coord_frame='idl', return_oversample=False, quick=True)  
         if not np.isnan(self.database.obs[key]['BLURFWHM'][j]):
             gauss_sigma = self.database.obs[key]['BLURFWHM'][j] / np.sqrt(8. * np.log(2.))
             model_psf = gaussian_filter(model_psf, gauss_sigma)
         
         # Get transmission mask.
         yi, xi = np.indices(data0.shape)
-        xtel, ytel = apsiaf.sci_to_tel(xi + 1 - xoff, yi + 1 - yoff)
-        tmask, _, _ = _transmission_map(psf.inst_on, (xtel, ytel), 'tel')
-        mask = tmask**2
+        xidl, yidl = apsiaf.sci_to_idl(xi + 1 - xoff, yi + 1 - yoff)
+        mask = psf.inst_on.gen_mask_transmission_map((xidl, yidl), 'idl')
         
         # Determine relative shift between data and model PSF. Iterate 3 times
         # to improve precision.
