@@ -427,6 +427,7 @@ class JWST_PSF():
             PSF as a function of corongraphic mask throughput. Typically takes
             10s of msec, compared to standard calculations using coefficients 
             (~1 sec) or on-the-fly calcs w/ webbpsf (10s of sec).
+            Only applicable for NIRCam.
         sp : pysynphot spectrum
             Manually specify spectrum to get a desired wavelength weighting. 
             Only applicable if ``quick=False``. If not set, defaults to ``self.sp``.
@@ -557,6 +558,7 @@ class JWST_PSF():
             PSF as a function of corongraphic mask throughput. Typically takes
             10s of msec, compared to standard calculations using coefficients 
             (~1 sec) or on-the-fly calcs w/ webbpsf (10s of sec).
+            Only applicable for NIRCam.
         sp : pysynphot spectrum
             Manually specify spectrum to get a desired wavelength weighting. 
             Only applicable if ``quick=False``. If not set, defaults to ``self.sp``.
