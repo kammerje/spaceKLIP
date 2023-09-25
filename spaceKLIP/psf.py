@@ -25,11 +25,17 @@ from scipy.ndimage import shift as spline_shift
 from scipy.optimize import minimize
 
 from tqdm.auto import tqdm
+
 from webbpsf_ext import NIRCam_ext, MIRI_ext
+from webbpsf_ext.utils import siaf_nrc, siaf_mir
+
 from webbpsf_ext.coords import rtheta_to_xy
 from webbpsf_ext.image_manip import fourier_imshift, frebin, pad_or_cut_to_size
-from webbpsf_ext.webbpsf_ext_core import _transmission_map
+from webbpsf_ext.image_manip import add_ipc, add_ppc
+from webbpsf_ext.imreg_tools import get_coron_apname as gen_nrc_coron_apname
+from webbpsf_ext.imreg_tools import crop_image, apply_pixel_diffusion
 
+from webbpsf_ext.logging_utils import setup_logging
 import logging
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -63,10 +69,9 @@ class JWST_PSF():
     out to infinity.  
     """
     
-    def __init__(self, inst, filt, image_mask, fov_pix, oversample=2, 
-                 sp=None, use_coeff=True, date=None, **kwargs): 
-        """
-
+    def __init__(self, apername, filt, date=None, fov_pix=65, oversample=2, 
+                 sp=None, use_coeff=False, **kwargs): 
+        """ Initialize the JWST_PSF class
         
         Parameters
         ----------
@@ -96,51 +101,105 @@ class JWST_PSF():
         None.
         
         """
-        
-        # Assign extension to use based on instrument
-        if inst.upper() == 'NIRCAM':
+
+        if apername in siaf_nrc.apernames:
+            inst = 'NIRCAM'
             self.inst_ext = NIRCam_ext
-        elif inst.upper() == 'MIRI':
+        elif apername in siaf_mir.apernames:
+            inst = 'MIRI'
             self.inst_ext = MIRI_ext
-        
-        # Choose Lyot stop based on coronagraphic mask input
-        if image_mask is None:
-            pupil_mask = None
-        elif image_mask[-1] == 'R':
-            pupil_mask = 'CIRCLYOT'
-        elif image_mask[-1] == 'B':
-            pupil_mask = 'WEDGELYOT'
         else:
-            pupil_mask = 'MASKFQPM' if 'FQPM' in image_mask else 'MASKLYOT'
+            raise ValueError("apername not found in NIRCam or MIRI SIAF lists")
+                
+        # Determine image mask based on aperture name
+        if inst=='NIRCAM':
+            if 'FULL_WEDGE' in apername:
+                raise ValueError("NIRCam FULL_WEDGE not supported. Use more specific aperture.")
+
+            ND_acq = False
+            if 'MASK' not in apername:
+                image_mask = None
+            else:
+                ap_str_arr = apername.split('_')
+                for s in ap_str_arr:
+                    if 'MASK' in s:
+                        image_mask = s
+                        break
+                # Special case for TA apertures
+                if 'TA' in image_mask:
+                    # Set no mask for TA apertures
+                    image_mask = None
+                    # ND acquisitions use the ND mask
+                    ND_acq = False if 'FS' in image_mask else True
+
+            # Choose Lyot stop based on coronagraphic mask input
+            if image_mask is None:
+                pupil_mask = None
+            elif image_mask[-1] == 'R':
+                pupil_mask = 'CIRCLYOT'
+            elif image_mask[-1] == 'B':
+                pupil_mask = 'WEDGELYOT'
+        elif inst=='MIRI':
+            if '1065' in apername:
+                image_mask = 'FQPM1065'
+                pupil_mask = 'MASKFQPM'
+            elif '1140' in apername:
+                image_mask = 'FQPM1140'
+                pupil_mask = 'MASKFQPM'
+            elif '1550' in apername:
+                image_mask = 'FQPM1550'
+                pupil_mask = 'MASKFQPM'
+            elif 'LYOT' in apername:
+                image_mask = 'LYOT2300'
+                pupil_mask = 'MASKLYOT'
+            else:
+                image_mask = pupil_mask = None
+        else:
+            raise ValueError(f"Instrument {inst} not supported by JWST_PSF class")
         
+        # On-axis
+        setup_logging('WARN', verbose=False)
         inst_on = self.inst_ext(filter=filt, image_mask=image_mask, pupil_mask=pupil_mask,
-                                 fov_pix=fov_pix, oversample=oversample, **kwargs)
+                                fov_pix=fov_pix, oversample=oversample, **kwargs)
+        inst_on.siaf_ap = inst_on.siaf[apername]
+        # Is this a TA aperture on the ND mask?
+        if inst=='NIRCAM':
+            inst_on.ND_acq = ND_acq
+
+        # Off-axis
+        if image_mask is None:
+            inst_off = inst_on
+        else:        
+            inst_off = self.inst_ext(filter=filt, image_mask=None, pupil_mask=pupil_mask,
+                                     fov_pix=fov_pix, oversample=oversample, **kwargs)
         
-        inst_off = self.inst_ext(filter=filt, image_mask=None, pupil_mask=pupil_mask,
-                                  fov_pix=fov_pix, oversample=oversample, **kwargs)
-        
-        # Load date-specific OPD files?
-        if date is not None:
-            inst_on.load_wss_opd_by_date(date=date, choice='closest', verbose=False, plot=False)
-            inst_off.load_wss_opd_by_date(date=date, choice='closest', verbose=False, plot=False)
+        # Jitter values
+        inst_on.options['jitter'] = 'gaussian'
+        inst_on.options['jitter_sigma'] = 0.001 #1mas jitter from commissioning
+        inst_off.options['jitter'] = 'gaussian'
+        inst_off.options['jitter_sigma'] = 0.001 #1mas jitter from commissioning
         
         # Generating initial PSFs...
         # print('Generating initial PSFs...')
         if use_coeff:
-            inst_on.options['jitter_sigma'] = 0.001 #1mas jitter from commissioning
-            inst_off.options['jitter_sigma'] = 0.001 #1mas jitter from commissioning
             inst_on.gen_psf_coeff()
-            inst_off.gen_psf_coeff()
+            if image_mask is not None:
+                inst_off.gen_psf_coeff()
+                inst_on.gen_wfemask_coeff(large_grid=True)
             func_on = inst_on.calc_psf_from_coeff
             func_off = inst_off.calc_psf_from_coeff
+            func_off = inst_off.calc_psf_from_coeff
+            inst_on.gen_wfemask_coeff(large_grid=True)
+            func_off = inst_off.calc_psf_from_coeff                
             inst_on.gen_wfemask_coeff(large_grid=True)
         else:
             func_on = inst_on.calc_psf
             func_off = inst_off.calc_psf
-            inst_on.options['jitter'] = 'gaussian'
-            inst_on.options['jitter_sigma'] = 0.001 #1mas jitter from commissioning
-            inst_off.options['jitter'] = 'gaussian'
-            inst_off.options['jitter_sigma'] = 0.001 #1mas jitter from commissioning
+
+        # Load date-specific OPD files?
+        if date is not None:
+            inst_on.load_wss_opd_by_date(date=date, choice='closest', verbose=False, plot=False)
+            inst_off.load_wss_opd_by_date(date=date, choice='closest', verbose=False, plot=False)
         
         # Renormalize spectrum to have 1 e-/sec within bandpass to obtain normalized PSFs
         if sp is not None:
@@ -154,9 +213,14 @@ class JWST_PSF():
                 sp = sp.renorm(1, 'counts', inst_on.bandpass)
         
         # On axis PSF
+        log.info('Generating on-axis and off-axis PSFs...')
         if image_mask[-1] == 'B':
+            # Information for bar offsetting (in arcsec)
+            bar_offset = inst_on.get_bar_offset(ignore_options=True)
+            bar_offset = 0 if bar_offset is None else bar_offset
+
             # Need an array of PSFs along bar center
-            xvals = np.linspace(-8,8,9)
+            xvals = np.linspace(-8,8,9) - bar_offset
             self.psf_bar_xvals = xvals
             
             psf_bar_arr = []
@@ -170,6 +234,7 @@ class JWST_PSF():
         
         # Off axis PSF
         self.psf_off = func_off(sp=sp, return_oversample=True, return_hdul=False)
+        log.info('  Done.')
         
         # Center PSFs
         self._recenter_psfs()
@@ -206,6 +271,9 @@ class JWST_PSF():
     @property
     def bandpass(self):
         return self.inst_on.bandpass
+    @property
+    def name(self):
+        return self.inst_on.name
     
     def _calc_psf_off_shift(self, xysub=10):
         """
@@ -247,8 +315,8 @@ class JWST_PSF():
             psf_template = fourier_imshift(psf_template, xcen_psf, ycen_psf, pad=True)
         
         # Save to attribute
-        self._xy_off_to_cen = (xoff, yoff)
-    
+        self._xy_off_to_cen_osamp = (xoff, yoff)
+
     def _recenter_psfs(self, **kwargs):
         """
         Recenter PSFs by centroiding on off-axis PSF and shifting both by same
@@ -262,13 +330,13 @@ class JWST_PSF():
         
         # Calculate shift
         self._calc_psf_off_shift(**kwargs)
-        xoff, yoff = self._xy_off_to_cen
+        xoff, yoff = self._xy_off_to_cen_osamp
         
         # Perform recentering
         self.psf_on = fourier_imshift(self.psf_on, xoff, yoff, pad=True)
         self.psf_off = fourier_imshift(self.psf_off, xoff, yoff, pad=True)
     
-    def _shift_psfs(self,shifts):
+    def _shift_psfs(self, shifts):
         """
         Shift the on-axis and off-axis psfs by the desired amount.
         
@@ -356,17 +424,21 @@ class JWST_PSF():
                 * 'idl': arcsecs relative to aperture reference location.
         quick : bool
             Use linear combination of on-axis and off-axis PSFs to generate
-            PSF as a function of corongraphic mask throughput. This is much
-            faster (1 ms) than the standard calculations using coefficients (0.5 s) 
-            or on-the-fly calcs w/ webbpsf (10 s).
+            PSF as a function of corongraphic mask throughput. Typically takes
+            10s of msec, compared to standard calculations using coefficients 
+            (~1 sec) or on-the-fly calcs w/ webbpsf (10s of sec).
         sp : pysynphot spectrum
             Manually specify spectrum to get a desired wavelength weighting. 
             Only applicable if ``quick=False``. If not set, defaults to ``self.sp``.
         return_oversample : bool
             Return the oversampled version of the PSF?
         do_shift : bool
-            If True, will return the PSF offset from center. 
+            If True, will return the PSF offset from center in 'idl' coords.
             Otherwise, returns PSF in center of image.
+        normalize : str
+            How to normalize the PSF. Options are:
+                * 'first': Normalize to 1.0 at entrance pupil
+                * 'exit_pupil': Normalize to 1.0 at exit pupil
         
         Returns
         -------
@@ -385,10 +457,17 @@ class JWST_PSF():
         if sp is not None:
             sp = sp.renorm(1, 'counts', self.bandpass)
         
-        if quick:
-            t_temp, cx_idl, cy_idl = _transmission_map(self.inst_on, coord_vals, coord_frame)
-            trans = t_temp**2
-            
+        if self.name.upper()=='NIRCAM' and quick:
+            inst_on = self.inst_on
+
+            # Information for bar offsetting (in arcsec)
+            bar_offset = inst_on.get_bar_offset(ignore_options=True)
+            bar_offset = 0 if bar_offset is None else bar_offset
+
+            # cx and cy are transformed coordinate relative to center of mask in arcsec
+            trans, cx, cy = inst_on.gen_mask_transmission_map(coord_vals, coord_frame, return_more=True)
+            cx_idl = cx - bar_offset
+
             # Linear combination of min/max to determine PSF
             # Get a and b values for each position
             avals = trans
@@ -418,7 +497,7 @@ class JWST_PSF():
             
             # Perform shift to center
             # Already done for quick case
-            xoff, yoff = self._xy_off_to_cen
+            xoff, yoff = self._xy_off_to_cen_osamp
             psfs = fourier_imshift(psfs, xoff, yoff, pad=True)
         
         if do_shift:
@@ -444,8 +523,8 @@ class JWST_PSF():
         
         return psfs.squeeze()
     
-    def gen_psf(self, loc, mode='xy', PA_V3=0, return_oversample=False, do_shift=True,
-                addV3Yidl=True, normalize=False, normalize_webbpsf='first', **kwargs):
+    def gen_psf(self, loc, mode='xy', PA_V3=0, return_oversample=False, 
+                do_shift=True, addV3Yidl=True, normalize='first', **kwargs):
         """
         Generate offset PSF rotated by PA to N-E orientation.
         
@@ -456,20 +535,28 @@ class JWST_PSF():
         loc : float or ndarray
             (x,y) or (r,th) location (in arcsec) offset from center of mask.
         PA_V3 : float
-            V3 PA of ref point N over E (e.g. 'ROLL_REF').
+            V3 PA of ref point N over E (e.g. 'ROLL_REF'). Will add 'V3IdlYAngle'.
         return_oversample : bool
             Return the oversampled version of the PSF?
         do_shift : bool
-            If True, will offset PSF by appropriate amount from center. Otherwise,
+            If True, will offset PSF by some amount from center. Otherwise,
             returns PSF in center of image.
-        
+        addV3Yidl : bool
+            Add V3IdlYAngle to PA_V3 when converting (r,th) to (x,y) in idl coords?
+            This assumes that (r,th) are not already in idl coords, but are instead
+            relative to North / East sky coordinates.
+        normalize : str
+            How to normalize the PSF. Options are:
+                * 'first': Normalize to 1.0 at entrance pupil
+                * 'exit_pupil': Normalize to 1.0 at exit pupil
+                        
         Keyword Args
         ------------
         quick : bool
             Use linear combination of on-axis and off-axis PSFs to generate
-            PSF as a function of corongraphic mask throughput. This is much
-            faster (1 ms) than the standard calculations using coefficients (0.5 s) 
-            or on-the-fly calcs w/ webbpsf (10 s).
+            PSF as a function of corongraphic mask throughput. Typically takes
+            10s of msec, compared to standard calculations using coefficients 
+            (~1 sec) or on-the-fly calcs w/ webbpsf (10s of sec).
         sp : pysynphot spectrum
             Manually specify spectrum to get a desired wavelength weighting. 
             Only applicable if ``quick=False``. If not set, defaults to ``self.sp``.
@@ -488,13 +575,14 @@ class JWST_PSF():
         # Locations in aperture ideal frame to produce PSFs
         if mode == 'rth':
             r, th = loc
-            xidl, yidl = self.rth_to_xy(r, th, PA_V3=PA_V3, frame_out='idl', addV3Yidl=addV3Yidl)
+            xidl, yidl = self.rth_to_xy(r, th, PA_V3=PA_V3, frame_out='idl', 
+                                        addV3Yidl=addV3Yidl)
         elif mode == 'xy':
             xidl, yidl = loc
         
         # Perform shift in idl frame then rotate to sky coords
         psf = self.gen_psf_idl((xidl, yidl), coord_frame='idl', do_shift=do_shift, 
-                                return_oversample=True, normalize=normalize_webbpsf, **kwargs)
+                                return_oversample=True, normalize=normalize, **kwargs)
         
         if do_shift:
             # Shifting PSF, means rotate such that North is up
@@ -507,10 +595,7 @@ class JWST_PSF():
         if not return_oversample:
             psf = frebin(psf, scale=1/osamp)
         
-        # Normalize to 1
         psf = psf.squeeze()
-        if normalize == True:
-            psf = psf / np.sum(psf)
         
         return psf
 
