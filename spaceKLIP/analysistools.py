@@ -622,36 +622,37 @@ class AnalysisTools():
                             sim_sep = np.sqrt(guess_dx**2 + guess_dy**2) * pxsc_arcsec  # arcsec
                             sim_pa = np.rad2deg(np.arctan2(guess_dx, guess_dy))  # deg
                         
-                        
-                        # Generate offset PSF for this roll angle. Do not add
-                        # the V3Yidl angle as it has already been added to the
-                        # roll angle by spaceKLIP. This is only for estimating
-                        # the coronagraphic mask throughput!
-                        offsetpsf_coronmsk = offsetpsf_func.gen_psf([sim_sep, sim_pa],
-                                                                    mode='rth',
-                                                                    PA_V3=roll_ref,
-                                                                    do_shift=False,
-                                                                    quick=False,
-                                                                    addV3Yidl=False)
-                        
-                        # Coronagraphic mask throughput is not incorporated
-                        # into the flux calibration of the JWST pipeline so
-                        # that the companion flux from the detector pixels will
-                        # be underestimated. Therefore, we need to scale the
-                        # model offset PSF to account for the coronagraphic
-                        # mask throughput (it becomes fainter). Compute scale
-                        # factor by comparing a model PSF with and without
-                        # coronagraphic mask.
-                        scale_factor = np.sum(offsetpsf_coronmsk) / np.sum(psf_no_coronmsk)
+                        # Get mask transmission at planet location.
+                        if inst == 'NIRCAM':
+                            xidl, yidl = offsetpsf_func.rth_to_xy(sim_sep, sim_pa, frame_out='idl',
+                                                                PA_V3=roll_ref, addV3Yidl=False)
+                            scale_factor = offsetpsf_func.inst_on.gen_mask_transmission_map((xidl, yidl), 'idl')
+                        else:
+                            # Generate offset PSF for this roll angle. Do not add
+                            # the V3Yidl angle as it has already been added to the
+                            # roll angle by spaceKLIP. This is only for estimating
+                            # the coronagraphic mask throughput!
+                            offsetpsf_coronmsk = offsetpsf_func.gen_psf([sim_sep, sim_pa],
+                                                                        mode='rth',
+                                                                        PA_V3=roll_ref,
+                                                                        do_shift=False,
+                                                                        quick=False,
+                                                                        addV3Yidl=False)
+                            
+                            # Coronagraphic mask throughput is not incorporated
+                            # into the flux calibration of the JWST pipeline so
+                            # that the companion flux from the detector pixels will
+                            # be underestimated. Therefore, we need to scale the
+                            # model offset PSF to account for the coronagraphic
+                            # mask throughput (it becomes fainter). Compute scale
+                            # factor by comparing a model PSF with and without
+                            # coronagraphic mask.
+                            scale_factor = np.sum(offsetpsf_coronmsk) / np.sum(psf_no_coronmsk)
                         scale_factor_avg += [scale_factor]
                         
                         # Normalize model offset PSF to a total integrated flux
-                        # of 1.
-                        # EDIT: this misses all the flux outside of the 65 x 65
-                        # pix PSF stamp. Instead, simulate another offset PSF
-                        # normalized to a total intensity of 1 at an infinite
-                        # exit pupil.
-                        # offsetpsf /= np.sum(offsetpsf)
+                        # of 1 at infinity. Generates a new webbpsf model with
+                        # PSF normalization set to 'exit_pupil'.
                         offsetpsf = offsetpsf_func.gen_psf([sim_sep, sim_pa],
                                                            mode='rth',
                                                            PA_V3=roll_ref,
