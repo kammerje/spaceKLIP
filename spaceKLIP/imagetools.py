@@ -13,6 +13,7 @@ import pdb
 import sys
 
 import astropy.io.fits as pyfits
+import astropy.stats
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -22,8 +23,9 @@ import webbpsf_ext
 
 from copy import deepcopy
 from jwst.pipeline import Detector1Pipeline, Image2Pipeline, Coron3Pipeline
+import jwst.datamodels
 from pyklip import parallelized
-from scipy.ndimage import gaussian_filter, median_filter
+from scipy.ndimage import gaussian_filter, median_filter, fourier_shift
 from scipy.ndimage import shift as spline_shift
 from scipy.optimize import leastsq, minimize
 from skimage.registration import phase_cross_correlation
@@ -82,7 +84,53 @@ class ImageTools():
         self.database = database
         
         pass
-    
+
+    def _get_output_dir(self, subdir):
+        """Utility function to get full output dir path, and create it if needed"""
+        # Set output directory.
+        output_dir = os.path.join(self.database.output_dir, subdir)
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        return output_dir
+
+    def _iterate_function_over_files(self, types, file_transformation_function, restrict_to=None):
+        """ Iterate some callable function over all files in a database.
+
+        This is a repetitive pattern used in many of the image processing functions, so
+        we abstract it here to reduce code repetition.
+
+        The file transformation function should take one filename as an input, perform some transformation or image processing
+        write out the file to some new path, and return the output filename.
+        Any other arguments should be provided prior to passing in the function, for instance
+        via functools.partial if necessary.
+
+        """
+
+        # Loop through concatenations.
+        for i, key in enumerate(self.database.obs.keys()):
+
+            # if we limit to only processing some concatenations, check whether this concatenation matches the pattern
+            if (restrict_to is not None) and (restrict_to not in key):
+                continue
+
+            log.info('--> Concatenation ' + key)
+
+            # Loop through FITS files.
+            nfitsfiles = len(self.database.obs[key])
+            for j in range(nfitsfiles):
+
+                # Read FITS file.
+                filename = self.database.obs[key]['FITSFILE'][j]
+
+                # Only process files of the specified types.
+                #  (skip any files with types that are not in the list of types.)
+                if self.database.obs[key]['TYPE'][j] in types:
+
+                    output_filename = file_transformation_function(filename)
+
+                    # Update spaceKLIP database.
+                    self.database.update_obs(key, j, output_filename)
+
     def remove_frames(self,
                       index=[0],
                       types=['SCI', 'SCI_BG', 'REF', 'REF_BG'],
@@ -423,6 +471,9 @@ class ImageTools():
     
     def subtract_median(self,
                         types=['SCI', 'SCI_TA', 'SCI_BG', 'REF', 'REF_TA', 'REF_BG'],
+                        method='border',
+                        sigma=3.0,
+                        borderwidth=32,
                         subdir='medsub'):
         
         """
@@ -438,17 +489,31 @@ class ImageTools():
             Name of the directory where the data products shall be saved. The
             default is 'medsub'.
         
+       None.
+        
+        method : str
+            'robust' for a robust median after masking out bright stars,
+            'sigma_clipped' for another version of robust median using astropy sigma_clipped_stats on the whole image,
+            'border' for robust median on the outer border region only, to ignore the bright stellar PSF in the center,
+            or 'simple'  for a simple np.nanmedian
+        sigma : float
+            number of standard deviations to use for the clipping limit in sigma_clipped_stats, if
+            the robust option is selected.
+        borderwidth : int
+            number of pixels to use when defining the outer border region, if the border option is selected.
+            Default is to use the outermost 32 pixels around all sides of the image.
+
         Returns
         -------
-        None.
-        
-        """
+        None, but writes out new files to subdir and updates database.
+         """
         
         # Set output directory.
         output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         
+        log.info(f'Median subtraction using method={method}')
         # Loop through concatenations.
         for i, key in enumerate(self.database.obs.keys()):
             log.info('--> Concatenation ' + key)
@@ -475,13 +540,48 @@ class ImageTools():
                     data_temp[pxdq & 1 == 1] = np.nan
                     # else:
                     #     data_temp[pxdq & 1 == 1] = np.nan
-                    bg_med = np.nanmedian(data_temp, axis=(1, 2), keepdims=True)
-                    bg_std = robust.medabsdev(data_temp, axis=(1, 2), keepdims=True)
-                    bg_ind = data_temp > (bg_med + 5. * bg_std)  # clip bright PSFs for final calculation
-                    data_temp[bg_ind] = np.nan
-                    bg_med = np.nanmedian(data_temp, axis=(1, 2), keepdims=True)
-                    data -= bg_med
-                    log.info('  --> Median subtraction: mean of frame median = %.2f' % np.mean(bg_med))
+                    if method=='robust':
+                        # Robust median, using a method by Jens
+                        bg_med = np.nanmedian(data_temp, axis=(1, 2), keepdims=True)
+                        bg_std = robust.medabsdev(data_temp, axis=(1, 2), keepdims=True)
+                        bg_ind = data_temp > (bg_med + 5. * bg_std)  # clip bright PSFs for final calculation
+                        data_temp[bg_ind] = np.nan
+                        bg_median = np.nanmedian(data_temp, axis=(1, 2), keepdims=True)
+                    elif method == 'sigma_clipped':
+                        # Robust median using astropy.stats.sigma_clipped_stats
+                            if len(data.shape) == 2:
+                            mean, median, stddev = astropy.stats.sigma_clipped_stats(data_temp,sigma=sigma)
+                        elif len(data.shape) == 3:
+                            bg_median = np.zeros([data.shape[0], 1, 1])
+                            for iint in range(data.shape[0]):
+                                mean_i, median_i, stddev_i = astropy.stats.sigma_clipped_stats(data[iint])
+                                bg_median[iint] = median_i
+                        else:
+                            raise NotImplementedError("data must be 2d or 3d for this method")
+                    elif method=='border':
+                        # Use only the outer border region of the image, near the edges of the FOV
+                        shape = data.shape
+                        if len(shape) == 2:
+                            # only one int
+                            y, x = np.indices(shape)
+                            bordermask = (x < borderwidth) | (x > shape[1] - borderwidth) | (y < borderwidth) | ( y > shape[0] - borderwidth)
+                            mean, bg_median, stddev = astropy.stats.sigma_clipped_stats(data[bordermask])
+                        elif len(shape) == 3:
+                            # perform robust stats on border region of each int
+                            y, x = np.indices(data.shape[1:])
+                            bordermask = (x < borderwidth) | (x > shape[1] - borderwidth) | (y < borderwidth) | ( y > shape[0] - borderwidth)
+                            bg_median = np.zeros([shape[0],1,1])
+                            for iint in range(shape[0]):
+                                mean_i, median_i, stddev_i = astropy.stats.sigma_clipped_stats(data[iint][bordermask])
+                                bg_median[iint] = median_i
+                        else:
+                            raise NotImplementedError("data must be 2d or 3d for this method")
+                    else:
+                        # Plain vanilla median of the image
+                        bg_median = np.nanmedian(data_temp, axis=(1, 2), keepdims=True)
+
+                    data -= bg_median
+                    log.info('  --> Median subtraction: mean of frame median = %.2f' % np.mean(bg_median))
                 
                 # Write FITS file and PSF mask.
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs)
@@ -666,6 +766,94 @@ class ImageTools():
         
         pass
     
+
+    def subtract_1overf_stripe_noise(self,
+                                     types = ['SCI', 'SCI_BG', 'REF',  'REF_BG'],
+                                     subdir = 'destripe',
+                                     restrict_to = None,
+                                     destripe_columns=True,
+                                     ):
+        """Destripe by subtracting a model of 1/f noise in rows and columns
+
+        The method relies on having multiple integrations in a given exposure, and the
+        assumption that all integrations should be the same apart from random noise.
+        If we look at the difference between a given integration and the mean of all
+        integrations, the contributions from photon noise and read noise should be
+        zero mean in each row or column. Thus any significant variations in median
+        values across the columns or rows can be considered due to 1/f noise or similar.
+
+        Empirically, measuring the stripe noise on the difference relative to the mean
+        integration seems an effective way to exclude the bright stellar PSFs from biasing
+        the estimation of the stripe noise.
+
+        There are other methods to remove 1/f noise, e.g the image1overf.py script from
+        https://github.com/chriswillott/jwst, and many others. However these methods often
+        rely on the assumption that images typically contain large regions of blank sky, which
+        is not sufficiently true for coronagraphic data that may have a very bright PSF over
+        much or most of the array. So empirically those methods have at times proven
+        not well suited for use on coronagraphic data, hence this alternative.
+
+        Note, since this won't work on TA files, the default types is set to exclude those.
+
+        Parameters
+        ----------
+        types : list of st
+            List of data types from which the frames shall be coadded. The
+            default is ['SCI', 'SCI_BG', 'REF', 'REF_BG'].
+        subdir :  str
+            Subdirectory name to save output to. Default is 'destripe'
+        restrict_to : str or None.
+            Optional. String pattern to use in selecting only a subset of data to apply
+            this step to. Used for a pattern match in the concatenation keys. May be
+            e.g. a filter name like 'F444W', a coron mask like 'MASK335R' or any other
+            string subset used in the concatenation keys.
+        destripe_columns : bool
+            Rows are always destriped. Optionally, columns may also be destriped.
+            Set this flag to control whether or not column variations should be subtracted.
+
+        Returns
+        -------
+
+
+        """
+        output_dir = self._get_output_dir(subdir)
+
+        # First we define how to destripe one file, then we iterate that function over all files in the database
+        def destripe_one_file(filename):
+
+            model = jwst.datamodels.open(filename)
+            if (model.meta.exposure.nints == 1) or (len(model.data.shape) < 3):
+                raise RuntimeError("This operation only works on datasets that have multiple integrations available")
+
+            # Construct difference of each integration versus the median integration
+            medianimage = np.nanmedian(model.data, axis=0)
+            diffs = model.data - medianimage
+
+            # for each integration's difference, take row and column medians and construct a stripe model to subtract
+            for i in range(model.meta.exposure.nints):
+
+                rowmeds = np.nanmedian(diffs[i], axis=1, keepdims=True)
+                diffs[i] -= rowmeds # remove row medians before computing col medians
+                if destripe_columns:
+                    colmeds = np.nanmedian(diffs[i], axis=0, keepdims=True)
+
+                stripemodel = np.zeros(model.data.shape[1:])
+                stripemodel += rowmeds
+                if destripe_columns:
+                    stripemodel += colmeds
+
+                model.data[i] -= stripemodel
+                # error propagation in dq frame could be done here too, but low priority to add
+
+
+            output_filename = os.path.join(output_dir, os.path.basename(filename))
+            model.write(output_filename)
+            log.info(f"  --> Destriped {os.path.basename(filename)}")
+            return output_filename
+
+        self._iterate_function_over_files(types, destripe_one_file, restrict_to=restrict_to)
+
+
     def fix_bad_pixels(self,
                        method='timemed+dqmed+medfilt',
                        bpclean_kwargs={},
@@ -674,7 +862,8 @@ class ImageTools():
                        dqmed_kwargs={},
                        medfilt_kwargs={},
                        types=['SCI', 'SCI_TA', 'SCI_BG', 'REF', 'REF_TA', 'REF_BG'],
-                       subdir='bpcleaned'):
+                       subdir='bpcleaned',
+                       restrict_to=None):
         """
         Identify and fix bad pixels.
         
@@ -747,6 +936,10 @@ class ImageTools():
         
         # Loop through concatenations.
         for i, key in enumerate(self.database.obs.keys()):
+            # if we limit to only processing some concatenations, check whether this concatenation matches the pattern
+            if (restrict_to is not None) and (restrict_to not in key):
+                continue
+
             log.info('--> Concatenation ' + key)
             
             # Loop through FITS files.
