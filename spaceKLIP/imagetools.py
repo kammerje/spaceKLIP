@@ -549,7 +549,7 @@ class ImageTools():
                         bg_median = np.nanmedian(data_temp, axis=(1, 2), keepdims=True)
                     elif method == 'sigma_clipped':
                         # Robust median using astropy.stats.sigma_clipped_stats
-                            if len(data.shape) == 2:
+                        if len(data.shape) == 2:
                             mean, median, stddev = astropy.stats.sigma_clipped_stats(data_temp,sigma=sigma)
                         elif len(data.shape) == 3:
                             bg_median = np.zeros([data.shape[0], 1, 1])
