@@ -1937,6 +1937,10 @@ class ImageTools():
 
                         p0 = np.array([xshift, yshift, 1.])
                         # p0 = np.array([((crpix1 + xoffset) - (self.database.obs[key]['CRPIX1'][j] + self.database.obs[key]['XOFFSET'][j])) / self.database.obs[key]['PIXSCALE'][j], ((crpix2 + yoffset) - (self.database.obs[key]['CRPIX2'][j] + self.database.obs[key]['YOFFSET'][j])) / self.database.obs[key]['PIXSCALE'][j], 1.])
+                        # Fix for weird numerical behaviour if shifts are small
+                        # but not exactly zero.
+                        if (np.abs(xshift) < 1e-3) and (np.abs(yshift) < 1e-3):
+                            p0 = np.array([0., 0., 1.])
                         if align_algo == 'leastsq':
                             # Use header values to initiate least squares fit
                             pp = leastsq(ut.alignlsq,
