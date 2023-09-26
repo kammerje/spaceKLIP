@@ -205,7 +205,7 @@ def display_coron_image(filename):
 
         model = modeltype(filename)  # cubemodel needed for rateints
         
-        if cube:
+        if cube_ints:
             image = np.nanmean(model.data, axis=0)
             dq = model.dq[0]
             nints = model.meta.nints
@@ -664,6 +664,8 @@ def plot_subimages(imgdirs, subdirs, filts, submodes, numKL,
     imtext_col: str
         Color of any text / arrows that go on top of the images
     '''
+
+    from matplotlib.ticker import MultipleLocator, MaxNLocator
 
     # Get the files we care about
     imgfiles = sorted(list(chain.from_iterable([glob.glob(imgdir+'*.fits') for imgdir in imgdirs])))

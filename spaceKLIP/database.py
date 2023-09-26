@@ -24,8 +24,7 @@ from astropy.table import Table
 from astroquery.svo_fps import SvoFps
 from jwst.pipeline import Detector1Pipeline, Image2Pipeline, Coron3Pipeline
 
-from .utils import get_filter_info
-from .utils import nircam_apname, get_nrcmask_from_apname
+from .utils import nircam_apname, get_nrcmask_from_apname, get_filter_info
 
 import logging
 log = logging.getLogger(__name__)
