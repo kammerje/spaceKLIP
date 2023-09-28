@@ -25,6 +25,7 @@ from astroquery.svo_fps import SvoFps
 from jwst.pipeline import Detector1Pipeline, Image2Pipeline, Coron3Pipeline
 
 from .utils import nircam_apname, get_nrcmask_from_apname
+from .utils import get_filter_info
 
 import logging
 log = logging.getLogger(__name__)
@@ -35,40 +36,22 @@ log.setLevel(logging.INFO)
 # MAIN
 # =============================================================================
 
-# Load NIRCam, NIRISS, and MIRI filters from the SVO Filter Profile Service.
-# http://svo2.cab.inta-csic.es/theory/fps/
-wave_nircam = {}
-weff_nircam = {}
-filter_list = SvoFps.get_filter_list(facility='JWST', instrument='NIRCAM')
-for i in range(len(filter_list)):
-    name = filter_list['filterID'][i]
-    name = name[name.rfind('.') + 1:]
-    wave_nircam[name] = filter_list['WavelengthMean'][i] / 1e4  # micron
-    weff_nircam[name] = filter_list['WidthEff'][i] / 1e4  # micron
-wave_niriss = {}
-weff_niriss = {}
-filter_list = SvoFps.get_filter_list(facility='JWST', instrument='NIRISS')
-for i in range(len(filter_list)):
-    name = filter_list['filterID'][i]
-    name = name[name.rfind('.') + 1:]
-    wave_niriss[name] = filter_list['WavelengthMean'][i] / 1e4  # micron
-    weff_niriss[name] = filter_list['WidthEff'][i] / 1e4  # micron
-wave_miri = {}
-weff_miri = {}
-filter_list = SvoFps.get_filter_list(facility='JWST', instrument='MIRI')
-for i in range(len(filter_list)):
-    name = filter_list['filterID'][i]
-    name = name[name.rfind('.') + 1:]
-    wave_miri[name] = filter_list['WavelengthMean'][i] / 1e4  # micron
-    weff_miri[name] = filter_list['WidthEff'][i] / 1e4  # micron
-wave_miri['FND'] = 13.  # micron
-weff_miri['FND'] = 10.  # micron
-del filter_list
-
 # Initialize WebbPSF instruments.
 siaf_nrc = pysiaf.Siaf('NIRCam')
 siaf_nis = pysiaf.Siaf('NIRISS')
 siaf_mir = pysiaf.Siaf('MIRI')
+
+from webbpsf_ext.logging_utils import setup_logging
+setup_logging('WARN', verbose=False)
+
+nircam = webbpsf.NIRCam()
+niriss = webbpsf.NIRISS()
+miri   = webbpsf.MIRI()
+
+# Load NIRCam, NIRISS, and MIRI filters
+wave_nircam, weff_nircam, do_svo = get_filter_info('NIRCAM', return_more=True)
+wave_niriss, weff_niriss = get_filter_info('NIRISS', do_svo=do_svo)
+wave_miri,   weff_miri   = get_filter_info('MIRI',   do_svo=do_svo)
 
 class Database():
     """

@@ -591,12 +591,14 @@ def subtractlsq(shift,
     else:
         return res[mask]
 
-def get_tp_comsubst(instrume,
+def _get_tp_comsubst(instrume,
                     subarray,
                     filt):
     """
     Get the COM substrate transmission averaged over the respective filter
     profile.
+
+    *** Deprecated - use `get_tp_comsubst` instead. ***
     
     Parameters
     ----------
@@ -614,6 +616,8 @@ def get_tp_comsubst(instrume,
     
     """
     
+    log.warning('This function is deprecated. Use `get_tp_comsubst` instead.')
+
     # Default return.
     tp_comsubst = 1.
     
@@ -647,3 +651,121 @@ def get_tp_comsubst(instrume,
     
     # Return.
     return tp_comsubst
+
+def get_tp_comsubst(instrume,
+                    subarray,
+                    filt):
+    """
+    Get the COM substrate transmission averaged over the respective filter
+    profile.
+
+    TODO: Spot check the COM throughput using photometric calibration data,
+    assuming there are stellar offsets on and off the COM substrate.
+    
+    Parameters
+    ----------
+    instrume : 'NIRCAM', 'NIRISS', or 'MIRI'
+        JWST instrument in use.
+    subarray : str
+        JWST subarray in use.
+    filt : str
+        JWST filter in use.
+    
+    Returns
+    -------
+    tp_comsubst : float
+        COM substrate transmission averaged over the respective filter profile
+    
+    """
+    
+    from webbpsf_ext.bandpasses import nircam_filter, nircam_com_th
+
+    # Default return.
+    tp_comsubst = 1.
+    
+    # If NIRCam.
+    instrume = instrume.upper()
+    if instrume == 'NIRCAM':
+        
+        # If coronagraphy subarray.
+        if '210R' in subarray or '335R' in subarray or '430R' in subarray or 'SWB' in subarray or 'LWB' in subarray:
+            
+            # Read bandpass.
+            try:
+                bp = nircam_filter(filt)
+                bandpass_wave = bp.wave / 1e4  # micron
+                bandpass_throughput = bp.throughput
+            except FileNotFoundError:
+                log.error('--> Filter ' + filt + ' not found for instrument ' + instrume)
+            
+            # Read COM substrate transmission interpolated at bandpass wavelengths.
+            comsubst_throughput = nircam_com_th(bandpass_wave)
+
+            # Compute weighted average of COM substrate transmission.
+            tp_comsubst = np.average(comsubst_throughput, weights=bandpass_throughput)
+    
+    # Return.
+    return tp_comsubst
+
+def get_filter_info(instrument, timeout=1, do_svo=True, return_more=False):
+    """ Load filter information from the SVO Filter Profile Service or webbpsf
+
+    Load NIRCam, NIRISS, and MIRI filters from the SVO Filter Profile Service.
+    http://svo2.cab.inta-csic.es/theory/fps/
+
+    If timeout to server, then use local copy of filter list and load through webbpsf.
+
+    Parameters
+    ----------
+    instrument : str
+        Name of instrument to load filter list for. 
+        Must be one of 'NIRCam', 'NIRISS', or 'MIRI'.
+    timeout : float
+        Timeout in seconds for connection to SVO Filter Profile Service.
+    do_svo : bool
+        If True, try to load filter list from SVO Filter Profile Service. 
+        If False, use webbpsf without first check web server.
+    return_more : bool
+        If True, also return `do_svo` variable, whether SVO was used or not.
+    """
+
+    from astroquery.svo_fps import SvoFps
+    import webbpsf
+
+    iname_upper = instrument.upper()
+
+    # Try to get filter list from SVO
+    if do_svo:
+        try:
+            filter_list = SvoFps.get_filter_list(facility='JWST', instrument=iname_upper, timeout=timeout)
+        except:
+            log.warning('Using SVO Filter Profile Service timed out. Using WebbPSF instead.')
+            do_svo = False
+
+    # If unsuccessful, use webbpsf to get filter list
+    if not do_svo:
+        inst_func = {
+            'NIRCAM': webbpsf.NIRCam,
+            'NIRISS': webbpsf.NIRISS,
+            'MIRI'  : webbpsf.MIRI,
+        }
+        inst = inst_func[iname_upper]()
+        filter_list = inst.filter_list
+
+    wave, weff = ({}, {})
+    if do_svo:
+        for i in range(len(filter_list)):
+            name = filter_list['filterID'][i]
+            name = name[name.rfind('.') + 1:]
+            wave[name] = filter_list['WavelengthMean'][i] / 1e4  # micron
+            weff[name] = filter_list['WidthEff'][i] / 1e4  # micron
+    else:
+        for filt in filter_list:
+            bp = inst._get_synphot_bandpass(filt)
+            wave[filt] = bp.avgwave().to_value('micron')
+            weff[filt] = bp.equivwidth().to_value('micron')
+
+    if return_more:
+        return wave, weff, do_svo
+    else:
+        return wave, weff
