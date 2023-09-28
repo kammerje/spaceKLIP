@@ -18,7 +18,7 @@ import numpy as np
 
 import copy
 import json
-import webbpsf
+import pysiaf
 
 from astropy.table import Table
 from astroquery.svo_fps import SvoFps
@@ -36,6 +36,10 @@ log.setLevel(logging.INFO)
 # =============================================================================
 
 # Initialize WebbPSF instruments.
+siaf_nrc = pysiaf.Siaf('NIRCam')
+siaf_nis = pysiaf.Siaf('NIRISS')
+siaf_mir = pysiaf.Siaf('MIRI')
+
 from webbpsf_ext.logging_utils import setup_logging
 setup_logging('WARN', verbose=False)
 
@@ -261,16 +265,15 @@ class Database():
             CORONMSK += [coronmask]
             if TELESCOP[-1] == 'JWST':
                 if INSTRUME[-1] == 'NIRCAM':
-                    if 'LONG' in DETECTOR[-1] or '5' in DETECTOR[-1]:
-                        PIXSCALE += [nircam._pixelscale_long]
-                    else:
-                        PIXSCALE += [nircam._pixelscale_short]
+                    ap = siaf_nrc[apname]
                 elif INSTRUME[-1] == 'NIRISS':
-                    PIXSCALE += [niriss.pixelscale]
+                    ap = siaf_nis[apname]
                 elif INSTRUME[-1] == 'MIRI':
-                    PIXSCALE += [miri.pixelscale]
+                    ap = siaf_mir[apname]
                 else:
                     raise UserWarning('Data originates from unknown JWST instrument')
+                # Save the average of the X and Y pixel scales.
+                PIXSCALE += [(ap.XSciScale + ap.YSciScale) / 2.]
             else:
                 raise UserWarning('Data originates from unknown telescope')
             BLURFWHM += [head.get('BLURFWHM', np.nan)]
@@ -681,16 +684,15 @@ class Database():
             CORONMSK += [coronmask]
             if TELESCOP[-1] == 'JWST':
                 if INSTRUME[-1] == 'NIRCAM':
-                    if 'LONG' in DETECTOR[-1] or '5' in DETECTOR[-1]:
-                        PIXSCALE += [nircam._pixelscale_long]
-                    else:
-                        PIXSCALE += [nircam._pixelscale_short]
+                    ap = siaf_nrc[apname]
                 elif INSTRUME[-1] == 'NIRISS':
-                    PIXSCALE += [niriss.pixelscale]
+                    ap = siaf_nis[apname]
                 elif INSTRUME[-1] == 'MIRI':
-                    PIXSCALE += [miri.pixelscale]
+                    ap = siaf_mir[apname]
                 else:
                     raise UserWarning('Data originates from unknown JWST instrument')
+                # Save the average of the X and Y pixel scales.
+                PIXSCALE += [(ap.XSciScale + ap.YSciScale) / 2.]
             else:
                 raise UserWarning('Data originates from unknown telescope')
             if TYPE[-1] == 'CORON3':
