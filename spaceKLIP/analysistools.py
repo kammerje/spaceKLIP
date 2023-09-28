@@ -473,14 +473,17 @@ class AnalysisTools():
                 # Initialize a function that can generate model offset PSFs.
                 inst = self.database.red[key]['INSTRUME'][j]
                 filt = self.database.red[key]['FILTER'][j]
+                apername = self.database.red[key]['APERNAME'][j]
                 if self.database.red[key]['TELESCOP'][j] == 'JWST':
                     if inst == 'NIRCAM':
-                        image_mask = self.database.red[key]['CORONMSK'][j]
-                        image_mask = image_mask[:4] + image_mask[5:]
+                        pass
+                        # image_mask = self.database.red[key]['CORONMSK'][j]
+                        # image_mask = image_mask[:4] + image_mask[5:]
                     elif inst == 'NIRISS':
                         raise NotImplementedError()
                     elif inst == 'MIRI':
-                        image_mask = self.database.red[key]['CORONMSK'][j].replace('4QPM_', 'FQPM')
+                        pass
+                        # image_mask = self.database.red[key]['CORONMSK'][j].replace('4QPM_', 'FQPM')
                     else:
                         raise UserWarning('Data originates from unknown JWST instrument')
                 else:
@@ -493,13 +496,13 @@ class AnalysisTools():
                 if date is not None:
                     if date == 'auto':
                         date = fits.getheader(self.database.obs[key]['FITSFILE'][ww_sci[0]], 0)['DATE-BEG']
-                offsetpsf_func = JWST_PSF(inst,
+                offsetpsf_func = JWST_PSF(apername,
                                           filt,
-                                          image_mask,
+                                          date=date,
                                           fov_pix=65,
+                                          oversample=2,
                                           sp=sed,
-                                          use_coeff=False,
-                                          date=date)
+                                          use_coeff=False)
                 
                 # Loop through companions.
                 tab = Table(names=('ID',
@@ -617,8 +620,7 @@ class AnalysisTools():
                         else:
                             sim_sep = np.sqrt(guess_dx**2 + guess_dy**2) * pxsc_arcsec  # arcsec
                             sim_pa = np.rad2deg(np.arctan2(guess_dx, guess_dy))  # deg
-                        
-                        
+
                         # Generate offset PSF for this roll angle. Do not add
                         # the V3Yidl angle as it has already been added to the
                         # roll angle by spaceKLIP. This is only for estimating
@@ -627,7 +629,7 @@ class AnalysisTools():
                                                                     mode='rth',
                                                                     PA_V3=roll_ref,
                                                                     do_shift=False,
-                                                                    quick=False,
+                                                                    quick=True,
                                                                     addV3Yidl=False)
                         
                         # Coronagraphic mask throughput is not incorporated
@@ -642,19 +644,15 @@ class AnalysisTools():
                         scale_factor_avg += [scale_factor]
                         
                         # Normalize model offset PSF to a total integrated flux
-                        # of 1.
-                        # EDIT: this misses all the flux outside of the 65 x 65
-                        # pix PSF stamp. Instead, simulate another offset PSF
-                        # normalized to a total intensity of 1 at an infinite
-                        # exit pupil.
-                        # offsetpsf /= np.sum(offsetpsf)
+                        # of 1 at infinity. Generates a new webbpsf model with
+                        # PSF normalization set to 'exit_pupil'.
                         offsetpsf = offsetpsf_func.gen_psf([sim_sep, sim_pa],
                                                            mode='rth',
                                                            PA_V3=roll_ref,
                                                            do_shift=False,
                                                            quick=False,
                                                            addV3Yidl=False,
-                                                           normalize_webbpsf='exit_pupil')
+                                                           normalize='exit_pupil')
                         
                         # Normalize model offset PSF by the flux of the star.
                         offsetpsf *= fzero[filt] / 10**(mstar[filt] / 2.5) / 1e6 / pxar  # MJy/sr
