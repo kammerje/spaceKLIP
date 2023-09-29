@@ -1323,8 +1323,9 @@ def create_database(output_dir,
         'uncal.fits', 'rateints.fits', 'calints.fits', etc.
     exp_type : str
         Exposure type such as NRC_TACQ, NRC_TACONFIRM
-    act_id : str
-        Activity ID. The <aa> in _<gg><s><aa>_ portion of the file name.
+    vst_grp_act : str
+        The _<gg><s><aa>_ portion of the file name.
+        hdr0['VISITGRP'] + hdr0['SEQ_ID'] + hdr0['ACT_ID']
     apername : str
         Name of aperture (e.g., NRCA5_FULL)
     apername_pps : str
