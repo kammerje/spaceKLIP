@@ -36,17 +36,13 @@ log.setLevel(logging.INFO)
 # MAIN
 # =============================================================================
 
-# Initialize WebbPSF instruments.
+# Initialize SIAF instruments.
 siaf_nrc = pysiaf.Siaf('NIRCam')
 siaf_nis = pysiaf.Siaf('NIRISS')
 siaf_mir = pysiaf.Siaf('MIRI')
 
 from webbpsf_ext.logging_utils import setup_logging
 setup_logging('WARN', verbose=False)
-
-nircam = webbpsf.NIRCam()
-niriss = webbpsf.NIRISS()
-miri   = webbpsf.MIRI()
 
 # Load NIRCam, NIRISS, and MIRI filters
 wave_nircam, weff_nircam, do_svo = get_filter_info('NIRCAM', return_more=True)
