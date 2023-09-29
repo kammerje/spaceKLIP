@@ -19,6 +19,7 @@ import numpy as np
 import copy
 import json
 import pysiaf
+import webbpsf, webbpsf_ext
 
 from astropy.table import Table
 from astroquery.svo_fps import SvoFps
@@ -371,9 +372,9 @@ class Database():
                 for j in range(len(exp_type)):
                     if 'TA' in exp_type[j]:
                         is_psf[j] = 'False'
-                if 'NONE' not in is_psf:
-                    ww_sci = np.where(is_psf == 'False')[0]
-                    ww_ref = np.where(is_psf == 'True')[0]
+                if 'NONE' not in is_psf.astype(str):
+                    ww_sci = np.where(is_psf == False)[0]
+                    ww_ref = np.where(is_psf == True)[0]
                 else:
                     log.warning('  --> Could not find IS_PSF header keyword')
                     numdthpt = NUMDTHPT[ww]

@@ -231,7 +231,7 @@ def run_obs(database,
             steps={},
             subdir='stage2',
             do_rates=False,
-            overwrite=False,
+            overwrite=True,
             quiet=False,
             verbose=False,
             **kwargs):
