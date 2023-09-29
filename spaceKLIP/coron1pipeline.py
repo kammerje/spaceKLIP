@@ -773,6 +773,10 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     from .logging_tools import all_logging_disabled
     log_level = logging.INFO if verbose else logging.ERROR
 
+    # Create output directory if it doesn't exist.
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
     # Initialize Coron1Pipeline.
     with all_logging_disabled(log_level):
         pipeline = Coron1Pipeline_spaceKLIP(output_dir=output_dir)
