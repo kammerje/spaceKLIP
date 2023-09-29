@@ -181,6 +181,10 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     from .logging_tools import all_logging_disabled
     log_level = logging.INFO if verbose else logging.ERROR
 
+    # Create output directory if it doesn't exist.
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
     # Initialize Coron1Pipeline.
     with all_logging_disabled(log_level):
         pipeline = Coron2Pipeline_spaceKLIP(output_dir=output_dir)
@@ -231,7 +235,7 @@ def run_obs(database,
             steps={},
             subdir='stage2',
             do_rates=False,
-            overwrite=False,
+            overwrite=True,
             quiet=False,
             verbose=False,
             **kwargs):

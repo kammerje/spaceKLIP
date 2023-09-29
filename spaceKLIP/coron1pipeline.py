@@ -293,7 +293,7 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         
         """
 
-        from .imagetools import expand_mask
+        from .utils import expand_mask
         
         # Save original step parameter.
         npix_grow = self.saturation.n_pix_grow_sat
@@ -361,7 +361,7 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
             Default is 5.
         """
 
-        from .imagetools import cube_outlier_detection
+        from .utils import cube_outlier_detection
 
         inst = rateints_model.meta.instrument.name
         data = rateints_model.data[1:] if 'MIRI' in inst else rateints_model.data
@@ -531,7 +531,7 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
             the linear range.
         """
 
-        from .imagetools import cube_fit
+        from .utils import cube_fit
 
         # Get saturation reference file
         # Get the name of the saturation reference file
@@ -773,6 +773,10 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     from .logging_tools import all_logging_disabled
     log_level = logging.INFO if verbose else logging.ERROR
 
+    # Create output directory if it doesn't exist.
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
     # Initialize Coron1Pipeline.
     with all_logging_disabled(log_level):
         pipeline = Coron1Pipeline_spaceKLIP(output_dir=output_dir)
@@ -858,7 +862,7 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
 def run_obs(database,
             steps={},
             subdir='stage1',
-            overwrite=False,
+            overwrite=True,
             quiet=False,
             verbose=False,
             **kwargs):

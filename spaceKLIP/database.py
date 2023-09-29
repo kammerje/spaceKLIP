@@ -19,6 +19,7 @@ import numpy as np
 import copy
 import json
 import pysiaf
+import webbpsf, webbpsf_ext
 
 from astropy.table import Table
 from astroquery.svo_fps import SvoFps
@@ -35,11 +36,13 @@ log.setLevel(logging.INFO)
 # MAIN
 # =============================================================================
 
-# Initialize WebbPSF instruments.
+# Initialize SIAF instruments.
+siaf_nrc = pysiaf.Siaf('NIRCam')
+siaf_nis = pysiaf.Siaf('NIRISS')
+siaf_mir = pysiaf.Siaf('MIRI')
+
 from webbpsf_ext.logging_utils import setup_logging
 setup_logging('WARN', verbose=False)
-
-from webbpsf_ext.utils import siaf_nrc, siaf_nis, siaf_mir
 
 # Load NIRCam, NIRISS, and MIRI filters
 wave_nircam, weff_nircam, do_svo = get_filter_info('NIRCAM', return_more=True)
@@ -365,9 +368,9 @@ class Database():
                 for j in range(len(exp_type)):
                     if 'TA' in exp_type[j]:
                         is_psf[j] = 'False'
-                if 'NONE' not in is_psf:
-                    ww_sci = np.where(is_psf == 'False')[0]
-                    ww_ref = np.where(is_psf == 'True')[0]
+                if 'NONE' not in is_psf.astype(str):
+                    ww_sci = np.where(is_psf == False)[0]
+                    ww_ref = np.where(is_psf == True)[0]
                 else:
                     log.warning('  --> Could not find IS_PSF header keyword')
                     numdthpt = NUMDTHPT[ww]
@@ -1316,8 +1319,9 @@ def create_database(output_dir,
         'uncal.fits', 'rateints.fits', 'calints.fits', etc.
     exp_type : str
         Exposure type such as NRC_TACQ, NRC_TACONFIRM
-    act_id : str
-        Activity ID. The <aa> in _<gg><s><aa>_ portion of the file name.
+    vst_grp_act : str
+        The _<gg><s><aa>_ portion of the file name.
+        hdr0['VISITGRP'] + hdr0['SEQ_ID'] + hdr0['ACT_ID']
     apername : str
         Name of aperture (e.g., NRCA5_FULL)
     apername_pps : str
