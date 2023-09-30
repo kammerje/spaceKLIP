@@ -51,10 +51,11 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
 
     spec = """
         save_intermediates = boolean(default=False) # Save all intermediate step results
-        rate_int_outliers  = boolean(default=True)  # Flag outlier pixels in rateints
+        rate_int_outliers  = boolean(default=False) # Flag outlier pixels in rateints
         return_rateints    = boolean(default=False) # Return rateints or rate product?
         remove_ktc         = boolean(default=True) # Remove kTC noise from data
         remove_fnoise      = boolean(default=True) # Remove 1/f noise from data
+        remove_fnoise_horiz= boolean(default=True) # Remove horizontal striping from data
     """
     
     def __init__(self,
@@ -292,7 +293,6 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
             Output JWST datamodel.
         
         """
-
         from .utils import expand_mask
         
         # Save original step parameter.
@@ -360,7 +360,6 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
             Minimum number of integrations required for outlier detection.
             Default is 5.
         """
-
         from .utils import cube_outlier_detection
 
         inst = rateints_model.meta.instrument.name
@@ -530,7 +529,6 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
             Default is 0.5 to ensure that the fit is within 
             the linear range.
         """
-
         from .utils import cube_fit
 
         # Get saturation reference file
@@ -613,7 +611,6 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
             iteratively rejecting outliers from the model fit relative
             to the median model. The default is 'savgol'.
         """
-        
         from .fnoise_clean import CleanSubarray
 
         is_full_frame = 'FULL' in input.meta.subarray.name.upper()
@@ -668,8 +665,19 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
                     nf_clean.fit(**kwargs)
                     # Subtract model from data
                     data[i,j,:,x1:x2] -= nf_clean.model
-
                     del nf_clean
+
+                    # And do the same horizontally
+                    if self.remove_fnoise_horiz:
+                        imch_diff = data[i,j,:,x1:x2] - sigch
+                        imch_diff_rot = np.rot90(imch_diff, k=1, axes=(1,0))
+                        good_mask_rot = np.rot90(good_mask, k=1, axes=(1,0))
+                        nf_clean = CleanSubarray(imch_diff_rot, good_mask_rot)
+                        nf_clean.fit(**kwargs)
+                        model_derot = np.rot90(nf_clean.model, k=-1, axes=(1,0))
+                        # Subtract model from data
+                        data[i,j,:,x1:x2] -= model_derot
+                        del nf_clean
 
         return input
 
@@ -738,7 +746,7 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     return_rateints : bool, optional
         Return the rateints model instead of rate? Default is False.
     rate_int_outliers : bool, optional
-        Flag outlier pixels in rateints? Default is True.
+        Flag outlier pixels in rateints? Default is False.
         Uses the `cube_outlier_detection` function and requires
         a minimum of 5 integrations.
     remove_ktc : bool, optional
@@ -747,6 +755,8 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     remove_fnoise : bool, optional
         Remove 1/f noise from data at group level? 
         Default is True.
+    remove_fnoise_horiz : bool, optional
+        Remove striping noise from data in horizontal direction?
     skip_charge : bool, optional
         Skip charge migration flagging step? Default: False.
     skip_jump : bool, optional
@@ -756,9 +766,9 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
         subarrays and False for full frame data.
         Dark current cal files for subarrays are really low SNR.
     skip_ipc : bool, optional
-        Skip IPC correction step? Default: True.
+        Skip IPC correction step? Default: False.
     skip_persistence : bool, optional
-        Skip persistence correction step? Default: True.
+        Skip persistence correction step? Default: False.
         Doesn't currently do anything.
 
     Returns
@@ -790,8 +800,8 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     # Skip certain steps?
     pipeline.charge_migration.skip = kwargs.get('skip_charge', False)
     pipeline.jump.skip             = kwargs.get('skip_jump', False)
-    pipeline.ipc.skip              = kwargs.get('skip_ipc', True)
-    pipeline.persistence.skip      = kwargs.get('skip_persistence', True)
+    pipeline.ipc.skip              = kwargs.get('skip_ipc', False)
+    pipeline.persistence.skip      = kwargs.get('skip_persistence', False)
     # Skip dark current for subarray by default, but not full frame
     skip_dark     = kwargs.get('skip_dark', None)
     if skip_dark is None:
@@ -824,11 +834,12 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     pipeline.saturation.n_pix_grow_sat = kwargs.get('n_pix_grow_sat', 1)
     pipeline.saturation.grow_diagonal  = kwargs.get('grow_diagonal', False)
     pipeline.saturation.flag_rcsat     = kwargs.get('flag_rcsat', True)
-    pipeline.rate_int_outliers         = kwargs.get('rate_int_outliers', True)
+    pipeline.rate_int_outliers         = kwargs.get('rate_int_outliers', False)
 
     # 1/f noise correction
-    pipeline.remove_ktc    = kwargs.get('remove_ktc', True)
-    pipeline.remove_fnoise = kwargs.get('remove_fnoise', True)
+    pipeline.remove_ktc          = kwargs.get('remove_ktc', True)
+    pipeline.remove_fnoise       = kwargs.get('remove_fnoise', True)
+    pipeline.remove_fnoise_horiz = kwargs.get('remove_fnoise_horiz', True)
 
     # Skip pixels with only 1 group in ramp_fit?
     pipeline.ramp_fit.suppress_one_group = kwargs.get('suppress_one_group', False)
@@ -933,7 +944,7 @@ def run_obs(database,
     return_rateints : bool, optional
         Return the rateints model instead of rate? Default is False.
     rate_int_outliers : bool, optional
-        Flag outlier pixels in rateints? Default is True.
+        Flag outlier pixels in rateints? Default is False.
         Uses the `cube_outlier_detection` function and requires
         a minimum of 5 integrations.
     remove_ktc : bool, optional
@@ -942,6 +953,8 @@ def run_obs(database,
     remove_fnoise : bool, optional
         Remove 1/f noise from data at group level? 
         Default is True.
+    remove_fnoise_horiz : bool, optional
+        Remove striping noise from data in horizontal direction?
     skip_charge : bool, optional
         Skip charge migration flagging step? Default: False.
     skip_jump : bool, optional
@@ -951,9 +964,9 @@ def run_obs(database,
         subarrays and False for full frame data.
         Dark current cal files for subarrays are really low SNR.
     skip_ipc : bool, optional
-        Skip IPC correction step? Default: True.
+        Skip IPC correction step? Default: False.
     skip_persistence : bool, optional
-        Skip persistence correction step? Default: True.
+        Skip persistence correction step? Default: False.
         Doesn't currently do anything.
 
     Returns
