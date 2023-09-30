@@ -318,7 +318,7 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
             self.saturation.log.info(f'Growing saturation flags by {npix_grow} pixels. Ignoring diagonal growth.')
             # Update saturation dq flags to grow in vertical and horizontal directions
             # Get saturation mask
-            mask_sat = (input.groupdq & dqflags.pixel['SATURATED']) > 0
+            mask_sat = (res.groupdq & dqflags.pixel['SATURATED']) > 0
 
             # Expand the mask by npix_grow pixels
             mask_sat = expand_mask(mask_sat, npix_grow, grow_diagonal=False)
