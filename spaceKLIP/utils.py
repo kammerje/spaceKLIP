@@ -915,3 +915,45 @@ def chisqr_red(yvals, yfit=None, err=None, dof=None,
         chi_red = chi_red.reshape(sh_orig[-2:])
         
     return chi_red
+
+def cube_outlier_detection(data, sigma_cut=10, nint_min=5):
+    """Get outlier pixels in a cube model (e.g., rateints or calints)
+    
+    Parameters
+    ----------
+    data : ndarray
+        Data array to use for outlier detection.
+        Must be a cube with shape (nint, ny, nx).
+
+    Keyword Args
+    ------------
+    sigma_cut : float
+        Sigma cut for outlier detection.
+        Default is 5.
+    nint_min : int
+        Minimum number of integrations required for outlier detection.
+        Default is 5.
+
+    Returns
+    -------
+    Mask of bad pixels with same shape as input cube.
+    """
+
+    from webbpsf_ext import robust
+
+    # Get bad pixels
+    ndim = len(data.shape)
+    if ndim < 3:
+        log.warning(f'Skipping rateints outlier flagging. Only {ndim} dimensions.')
+        return np.zeros_like(data, dtype=bool)
+    
+    nint = data.shape[0]
+    if nint < nint_min:
+        log.warning(f'Skipping rateints outlier flagging. Only {nint} INTS.')
+        return np.zeros_like(data, dtype=bool)
+
+    # Get outliers
+    indgood = robust.mean(data, Cut=sigma_cut, axis=0, return_mask=True)
+    indbad = ~indgood
+
+    return indbad
