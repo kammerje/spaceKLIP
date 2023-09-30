@@ -79,7 +79,7 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         
         # Set additional parameters in saturation step
         self.saturation.grow_diagonal = False
-        self.saturation.flag_rcsat = True
+        self.saturation.flag_rcsat = False
 
         # Initialize reference pixel correction parameters
         self.refpix.nlower = 4
@@ -709,7 +709,7 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
             Flag also diagonal pixels (or only bottom/top/left/right)? 
             The default is True.
         - saturation/flag_rcsat : bool, optional
-            Flag RC pixels as saturated? The default is True.
+            Flag RC pixels as saturated? The default is False.
         - refpix/nlower : int, optional
             Number of rows at frame bottom that shall be used as additional
             reference pixels. The default is 0.
@@ -833,7 +833,7 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     pipeline.jump.four_group_rejection_threshold   = kwargs.get('four_group_rejection_threshold', 4)
     pipeline.saturation.n_pix_grow_sat = kwargs.get('n_pix_grow_sat', 1)
     pipeline.saturation.grow_diagonal  = kwargs.get('grow_diagonal', False)
-    pipeline.saturation.flag_rcsat     = kwargs.get('flag_rcsat', True)
+    pipeline.saturation.flag_rcsat     = kwargs.get('flag_rcsat', False)
     pipeline.rate_int_outliers         = kwargs.get('rate_int_outliers', False)
 
     # 1/f noise correction
@@ -900,7 +900,7 @@ def run_obs(database,
             Flag also diagonal pixels (or only bottom/top/left/right)? 
             The default is True.
         - saturation/flag_rcsat : bool, optional
-            Flag RC pixels as saturated? The default is True.
+            Flag RC pixels as saturated? The default is False.
         - refpix/nlower : int, optional
             Number of rows at frame bottom that shall be used as additional
             reference pixels. The default is 0.
