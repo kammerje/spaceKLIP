@@ -589,6 +589,9 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
         Default: False.
     skip_fnoise : bool, optional
         Skip 1/f noise removal? Default: False.
+    skip_fnoise_horiz : bool, optional
+        Skip removal of horizontal striping? Default: False.
+        Not applied if 1/f noise correction is skipped.
     skip_charge : bool, optional
         Skip charge migration flagging step? Default: False.
     skip_jump : bool, optional
@@ -636,6 +639,8 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     pipeline.persistence.skip      = kwargs.get('skip_persistence', False)
     pipeline.subtract_ktc.skip     = kwargs.get('skip_ktc', False)
     pipeline.subtract_1overf.skip  = kwargs.get('skip_fnoise', False)
+    skip_horiz = kwargs.get('skip_fnoise_horiz', False)
+    pipeline.subtract_1overf.horizontal_corr = not skip_horiz
 
     # Skip dark current for subarray by default, but not full frame
     skip_dark     = kwargs.get('skip_dark', None)
@@ -794,6 +799,9 @@ def run_obs(database,
         Default: False.
     skip_fnoise : bool, optional
         Skip 1/f noise removal? Default: False.
+    skip_fnoise_horiz : bool, optional
+        Skip removal of horizontal striping? Default: False.
+        Not applied if 1/f noise correction is skipped.
     skip_charge : bool, optional
         Skip charge migration flagging step? Default: False.
     skip_jump : bool, optional
