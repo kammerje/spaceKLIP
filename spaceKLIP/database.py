@@ -258,7 +258,7 @@ class Database():
             apname = nircam_apname(head) if INSTRUME[-1] == 'NIRCAM' else head.get('APERNAME', 'UNKNOWN')
             APERNAME += [apname]
             PPS_APER += [head.get('PPS_APER', 'UNKNOWN')]
-            coronmask = get_nrcmask_from_apname(APERNAME[-1]) if INSTRUME[-1] == 'NIRCAM' else head.get('CORONMSK', 'NONE')
+            coronmask = get_nrcmask_from_apname(PPS_APER[-1]) if INSTRUME[-1] == 'NIRCAM' else head.get('CORONMSK', 'NONE')
             CORONMSK += [coronmask]
             if TELESCOP[-1] == 'JWST':
                 if INSTRUME[-1] == 'NIRCAM':
@@ -677,7 +677,7 @@ class Database():
             apname = nircam_apname(head) if INSTRUME[-1] == 'NIRCAM' else head.get('APERNAME', 'UNKNOWN')
             APERNAME += [apname]
             PPS_APER += [head.get('PPS_APER', 'UNKNOWN')]
-            coronmask = get_nrcmask_from_apname(APERNAME[-1]) if INSTRUME[-1] == 'NIRCAM' else head.get('CORONMSK', 'NONE')
+            coronmask = get_nrcmask_from_apname(PPS_APER[-1]) if INSTRUME[-1] == 'NIRCAM' else head.get('CORONMSK', 'NONE')
             CORONMSK += [coronmask]
             if TELESCOP[-1] == 'JWST':
                 if INSTRUME[-1] == 'NIRCAM':
@@ -1335,7 +1335,7 @@ def create_database(output_dir,
         input_dir = os.path.join(mast_dir, f'{pid:05d}')
 
     # Check if obsids is not a list, tuple, or numpy array
-    if (obsids is not None) and not isinstance(obsids, (list, tuple, np.ndarray)):
+    if not isinstance(obsids, (list, tuple, np.ndarray)):
         obsids = [obsids]
 
     # Cycle through all obsids and get the files in a single list

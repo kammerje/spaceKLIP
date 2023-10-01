@@ -51,8 +51,8 @@ def get_nrcmask_from_apname(apname):
     if 'MASK' not in apname:
         return 'NONE'
 
-    pps_str_arr = apname.split('_')
-    for s in pps_str_arr:
+    ap_str_arr = apname.split('_')
+    for s in ap_str_arr:
         if 'MASK' in s:
             image_mask = s
             break
