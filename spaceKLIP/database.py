@@ -301,8 +301,8 @@ class Database():
         EXPSTART = np.array(EXPSTART)
         NINTS = np.array(NINTS)
         EFFINTTM = np.array(EFFINTTM)
-        IS_PSF = np.array(IS_PSF)
-        SELFREF = np.array(SELFREF)
+        IS_PSF = np.array(IS_PSF, dtype='<U5')
+        SELFREF = np.array(SELFREF, dtype='<U5')
         SUBARRAY = np.array(SUBARRAY)
         NUMDTHPT = np.array(NUMDTHPT)
         XOFFSET = np.array(XOFFSET)
@@ -368,9 +368,9 @@ class Database():
                 for j in range(len(exp_type)):
                     if 'TA' in exp_type[j]:
                         is_psf[j] = 'False'
-                if 'NONE' not in is_psf.astype(str):
-                    ww_sci = np.where(is_psf == False)[0]
-                    ww_ref = np.where(is_psf == True)[0]
+                if 'NONE' not in is_psf:
+                    ww_sci = np.where(is_psf == 'False')[0]
+                    ww_ref = np.where(is_psf == 'True')[0]
                 else:
                     log.warning('  --> Could not find IS_PSF header keyword')
                     numdthpt = NUMDTHPT[ww]
