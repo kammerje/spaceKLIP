@@ -916,7 +916,7 @@ def chisqr_red(yvals, yfit=None, err=None, dof=None,
         
     return chi_red
 
-def cube_outlier_detection(data, sigma_cut=10, nint_min=5):
+def cube_outlier_detection(data, sigma_cut=10, nint_min=10):
     """Get outlier pixels in a cube model (e.g., rateints or calints)
     
     Parameters
