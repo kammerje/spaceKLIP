@@ -258,7 +258,7 @@ class Database():
             apname = nircam_apname(head) if INSTRUME[-1] == 'NIRCAM' else head.get('APERNAME', 'UNKNOWN')
             APERNAME += [apname]
             PPS_APER += [head.get('PPS_APER', 'UNKNOWN')]
-            coronmask = get_nrcmask_from_apname(APERNAME[-1]) if INSTRUME[-1] == 'NIRCAM' else head.get('CORONMSK', 'NONE')
+            coronmask = get_nrcmask_from_apname(PPS_APER[-1]) if INSTRUME[-1] == 'NIRCAM' else head.get('CORONMSK', 'NONE')
             CORONMSK += [coronmask]
             if TELESCOP[-1] == 'JWST':
                 if INSTRUME[-1] == 'NIRCAM':
@@ -301,8 +301,8 @@ class Database():
         EXPSTART = np.array(EXPSTART)
         NINTS = np.array(NINTS)
         EFFINTTM = np.array(EFFINTTM)
-        IS_PSF = np.array(IS_PSF)
-        SELFREF = np.array(SELFREF)
+        IS_PSF = np.array(IS_PSF, dtype='<U5')
+        SELFREF = np.array(SELFREF, dtype='<U5')
         SUBARRAY = np.array(SUBARRAY)
         NUMDTHPT = np.array(NUMDTHPT)
         XOFFSET = np.array(XOFFSET)
@@ -368,9 +368,9 @@ class Database():
                 for j in range(len(exp_type)):
                     if 'TA' in exp_type[j]:
                         is_psf[j] = 'False'
-                if 'NONE' not in is_psf.astype(str):
-                    ww_sci = np.where(is_psf == False)[0]
-                    ww_ref = np.where(is_psf == True)[0]
+                if 'NONE' not in is_psf:
+                    ww_sci = np.where(is_psf == 'False')[0]
+                    ww_ref = np.where(is_psf == 'True')[0]
                 else:
                     log.warning('  --> Could not find IS_PSF header keyword')
                     numdthpt = NUMDTHPT[ww]
@@ -677,7 +677,7 @@ class Database():
             apname = nircam_apname(head) if INSTRUME[-1] == 'NIRCAM' else head.get('APERNAME', 'UNKNOWN')
             APERNAME += [apname]
             PPS_APER += [head.get('PPS_APER', 'UNKNOWN')]
-            coronmask = get_nrcmask_from_apname(APERNAME[-1]) if INSTRUME[-1] == 'NIRCAM' else head.get('CORONMSK', 'NONE')
+            coronmask = get_nrcmask_from_apname(PPS_APER[-1]) if INSTRUME[-1] == 'NIRCAM' else head.get('CORONMSK', 'NONE')
             CORONMSK += [coronmask]
             if TELESCOP[-1] == 'JWST':
                 if INSTRUME[-1] == 'NIRCAM':
@@ -1335,7 +1335,7 @@ def create_database(output_dir,
         input_dir = os.path.join(mast_dir, f'{pid:05d}')
 
     # Check if obsids is not a list, tuple, or numpy array
-    if (obsids is not None) and not isinstance(obsids, (list, tuple, np.ndarray)):
+    if not isinstance(obsids, (list, tuple, np.ndarray)):
         obsids = [obsids]
 
     # Cycle through all obsids and get the files in a single list
