@@ -1,6 +1,5 @@
 import os
 import numpy as np
-from tqdm.auto import trange
 
 from jwst.stpipe import Step
 from jwst import datamodels
@@ -89,7 +88,7 @@ class OneOverfStep(Step):
             # Subtract 1/f noise from each integration
             datamodel = input_model.copy()
             data = datamodel.data
-            for i in trange(nints):
+            for i in range(nints):
                 cube = data[i] - bias_arr[i]
                 groupdq = datamodel.groupdq[i]
                 # Cumulative sum of group DQ flags
