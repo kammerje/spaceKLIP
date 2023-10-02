@@ -522,7 +522,7 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
       edge rows and columns as reference pixels, run the JWST stage 1 refpix
       step, and unflag the pseudo reference pixels again. Only applicable for
       subarray data.
-    - Remove horizontal 1/f noise spatial striping in NIRCam data.
+    - Remove 1/f noise spatial striping in NIRCam data.
     
     Parameters
     ----------
@@ -589,8 +589,8 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
         Default: False.
     skip_fnoise : bool, optional
         Skip 1/f noise removal? Default: False.
-    skip_fnoise_horiz : bool, optional
-        Skip removal of horizontal striping? Default: False.
+    skip_fnoise_vert : bool, optional
+        Skip removal of vertical striping? Default: False.
         Not applied if 1/f noise correction is skipped.
     skip_charge : bool, optional
         Skip charge migration flagging step? Default: False.
@@ -603,7 +603,7 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     skip_ipc : bool, optional
         Skip IPC correction step? Default: False.
     skip_persistence : bool, optional
-        Skip persistence correction step? Default: False.
+        Skip persistence correction step? Default: True.
         Doesn't currently do anything.
 
     Returns
@@ -636,11 +636,11 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     pipeline.charge_migration.skip = kwargs.get('skip_charge', False)
     pipeline.jump.skip             = kwargs.get('skip_jump', False)
     pipeline.ipc.skip              = kwargs.get('skip_ipc', False)
-    pipeline.persistence.skip      = kwargs.get('skip_persistence', False)
+    pipeline.persistence.skip      = kwargs.get('skip_persistence', True)
     pipeline.subtract_ktc.skip     = kwargs.get('skip_ktc', False)
     pipeline.subtract_1overf.skip  = kwargs.get('skip_fnoise', False)
-    skip_horiz = kwargs.get('skip_fnoise_horiz', False)
-    pipeline.subtract_1overf.horizontal_corr = not skip_horiz
+    skip_vert = kwargs.get('skip_fnoise_vert', False)
+    pipeline.subtract_1overf.vertical_corr = not skip_vert
 
     # Skip dark current for subarray by default, but not full frame
     skip_dark     = kwargs.get('skip_dark', None)
@@ -675,11 +675,6 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     pipeline.saturation.grow_diagonal  = kwargs.get('grow_diagonal', False)
     pipeline.saturation.flag_rcsat     = kwargs.get('flag_rcsat', False)
     pipeline.rate_int_outliers         = kwargs.get('rate_int_outliers', False)
-
-    # 1/f noise correction
-    # pipeline.remove_ktc          = kwargs.get('remove_ktc', True)
-    # pipeline.remove_fnoise       = kwargs.get('remove_fnoise', True)
-    # pipeline.remove_fnoise_horiz = kwargs.get('remove_fnoise_horiz', True)
 
     # Skip pixels with only 1 group in ramp_fit?
     pipeline.ramp_fit.suppress_one_group = kwargs.get('suppress_one_group', False)
@@ -726,7 +721,7 @@ def run_obs(database,
       edge rows and columns as reference pixels, run the JWST stage 1 refpix
       step, and unflag the pseudo reference pixels again. Only applicable for
       subarray data.
-    - Remove horizontal 1/f noise spatial striping in NIRCam data.
+    - Remove 1/f noise spatial striping in NIRCam data.
     
     Parameters
     ----------
@@ -799,8 +794,8 @@ def run_obs(database,
         Default: False.
     skip_fnoise : bool, optional
         Skip 1/f noise removal? Default: False.
-    skip_fnoise_horiz : bool, optional
-        Skip removal of horizontal striping? Default: False.
+    skip_fnoise_vert : bool, optional
+        Skip removal of vertical striping? Default: False.
         Not applied if 1/f noise correction is skipped.
     skip_charge : bool, optional
         Skip charge migration flagging step? Default: False.
@@ -813,7 +808,7 @@ def run_obs(database,
     skip_ipc : bool, optional
         Skip IPC correction step? Default: False.
     skip_persistence : bool, optional
-        Skip persistence correction step? Default: False.
+        Skip persistence correction step? Default: True.
         Doesn't currently do anything.
 
     Returns
