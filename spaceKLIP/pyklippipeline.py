@@ -606,6 +606,7 @@ def run_obs(database,
                     hdul[0].header['EFFINTTM'] = database.obs[key]['EFFINTTM'][ww_sci[0]]
                     hdul[0].header['SUBARRAY'] = database.obs[key]['SUBARRAY'][ww_sci[0]]
                     hdul[0].header['APERNAME'] = database.obs[key]['APERNAME'][ww_sci[0]]
+                    hdul[0].header['PPS_APER'] = database.obs[key]['PPS_APER'][ww_sci[0]]
                     hdul[0].header['PIXSCALE'] = database.obs[key]['PIXSCALE'][ww_sci[0]]
                     hdul[0].header['MODE'] = mode
                     hdul[0].header['ANNULI'] = annu
