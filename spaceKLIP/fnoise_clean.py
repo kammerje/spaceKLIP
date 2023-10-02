@@ -63,9 +63,9 @@ class OneOverfStep(Step):
 
     spec = """
         model_type = option('median', 'mean', 'savgol', default='savgol') # Type of model to fit
-        vertical_corr = boolean(default=False) # Apply horizontal correction
         sat_frac = float(default=0.5) # Maximum saturation fraction for fitting
-        combine_ints = boolean(default=False) # Combine integrations before fitting
+        combine_ints = boolean(default=True) # Combine integrations before ramp fitting
+        vertical_corr = boolean(default=True) # Apply horizontal correction
     """
 
     def process(self, input):
