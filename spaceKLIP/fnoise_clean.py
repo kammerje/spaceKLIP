@@ -156,11 +156,10 @@ class OneOverfStep(Step):
 
                     # Perform the fit and subtract model
                     nf_clean.fit(model_type=self.model_type, vertical_corr=self.vertical_corr)
-
-                    if i==0 and j==ngroups//2+1:
-                        self.quick_plot(data[i,j], nf_clean.M, nf_clean.model, im_diff=im_diff)
-
+                    # if i==0 and j==ngroups//2+1:
+                    #     self.quick_plot(data[i,j], nf_clean.M, nf_clean.model, im_diff=im_diff)
                     data[i,j] -= nf_clean.model
+
                     del nf_clean
 
         return datamodel
@@ -214,10 +213,10 @@ class OneOverfStep(Step):
 
                 # Perform the fit and subtract model
                 nf_clean.fit(model_type=self.model_type, vertical_corr=self.vertical_corr)
-                if i==0:
-                    self.quick_plot(datamodel.data[i], nf_clean.M, nf_clean.model, im_diff=im_diff)
-
+                # if i==0:
+                #     self.quick_plot(datamodel.data[i], nf_clean.M, nf_clean.model, im_diff=im_diff)
                 datamodel.data[i] -= nf_clean.model
+
                 del nf_clean
 
         return datamodel
@@ -245,9 +244,9 @@ class OneOverfStep(Step):
 
             # Perform the fit and subtract model
             nf_clean.fit(model_type=self.model_type, vertical_corr=self.vertical_corr)
-            self.quick_plot(datamodel.data, nf_clean.M, nf_clean.model)
-
+            # self.quick_plot(datamodel.data, nf_clean.M, nf_clean.model)
             datamodel.data -= nf_clean.model
+            
             del nf_clean
 
         return datamodel
