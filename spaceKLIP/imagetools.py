@@ -1902,11 +1902,12 @@ class ImageTools():
                                     npix=fov_pix)
             
             # Determine relative shift between data and model PSF.
-            yshift, xshift = phase_cross_correlation(datasub * masksub,
-                                                     model_psf * masksub,
-                                                     upsample_factor=1000,
-                                                     normalization=None,
-                                                     return_error=False)
+            shift, error, phasediff = phase_cross_correlation(datasub * masksub,
+                                                              model_psf * masksub,
+                                                              upsample_factor=1000,
+                                                              normalization=None,
+                                                              return_error=False)
+            yshift, xshift = shift
             
             # Update star position.
             xc = np.mean(xsub_indarr) + xshift
