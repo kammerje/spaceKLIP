@@ -1079,7 +1079,7 @@ class ImageTools():
         # Find bad pixels using median of neighbors.
         pxdq_orig = pxdq.copy()
         pxdq_custom = custom_kwargs[key] != 0
-        if pxdq_custom.ndim == pxdq.ndim - 1:
+        if pxdq_custom.ndim == pxdq.ndim - 1: # Enable 3D bad pixel map to flag individual frames
             pxdq_custom = np.array([pxdq_custom] * pxdq.shape[0]) 
         pxdq[pxdq_custom] = 1
         log.info('  --> Method custom: flagged %.0f additional bad pixel(s) -- %.2f%%' % (np.sum(pxdq) - np.sum(pxdq_orig), 100. * (np.sum(pxdq) - np.sum(pxdq_orig)) / np.prod(pxdq.shape)))
