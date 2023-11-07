@@ -1079,7 +1079,8 @@ class ImageTools():
         # Find bad pixels using median of neighbors.
         pxdq_orig = pxdq.copy()
         pxdq_custom = custom_kwargs[key] != 0
-        pxdq_custom = np.array([pxdq_custom] * pxdq.shape[0])
+        if pxdq_custom.ndim == pxdq.ndim - 1:
+            pxdq_custom = np.array([pxdq_custom] * pxdq.shape[0]) 
         pxdq[pxdq_custom] = 1
         log.info('  --> Method custom: flagged %.0f additional bad pixel(s) -- %.2f%%' % (np.sum(pxdq) - np.sum(pxdq_orig), 100. * (np.sum(pxdq) - np.sum(pxdq_orig)) / np.prod(pxdq.shape)))
         
@@ -1902,12 +1903,18 @@ class ImageTools():
                                     npix=fov_pix)
             
             # Determine relative shift between data and model PSF.
-            yshift, xshift = phase_cross_correlation(datasub * masksub,
+            pcc_result = phase_cross_correlation(datasub * masksub,
                                                      model_psf * masksub,
                                                      upsample_factor=1000,
                                                      normalization=None,
                                                      return_error=False)
             
+            # Hotfix for skimage version 0.22.0 returning error even if return_error is False
+            if type(pcc_result) == np.ndarray:
+                yshift, xshift = pcc_result
+            else:
+                yshift, xshift = pcc_result[0] 
+
             # Update star position.
             xc = np.mean(xsub_indarr) + xshift
             yc = np.mean(ysub_indarr) + yshift
