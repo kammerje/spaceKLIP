@@ -40,6 +40,10 @@ class Coron2Pipeline_spaceKLIP(Image2Pipeline):
     
     class_alias = "calwebb_coron2"
 
+    spec = """
+        save_intermediates = boolean(default=False) # Save all intermediate step results
+    """
+
     def __init__(self,
                  **kwargs):
         """
