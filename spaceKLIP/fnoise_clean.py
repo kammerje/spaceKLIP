@@ -271,21 +271,22 @@ class OneOverfStep(Step):
             # Create a copy of the input data model
             datamodel = input_model.copy()
             data = datamodel.data
-            # Remove the channel backgrounds
-            for i in range(nints):
-                for ch in range(noutputs):
-                    ix1 = int(ch*chsize)
-                    ix2 = int(ix1 + chsize)
-                    if slowaxis==2:
-                        data[i,:,ix1:ix2] -= get_bkg(data[i,:,ix1:ix2])
-                    else:
-                        data[i,ix1:ix2,:] -= get_bkg(data[i,ix1:ix2,:])
 
             # If only a single integration, then apply a mask to exclude pixels
             # with a large flux values. This will be used by the model fit.
             if nints==1:
                 data_diff = data
             else:
+                # Remove the channel backgrounds
+                for i in range(nints):
+                    for ch in range(noutputs):
+                        ix1 = int(ch*chsize)
+                        ix2 = int(ix1 + chsize)
+                        if slowaxis==2:
+                            data[i,:,ix1:ix2] -= get_bkg(data[i,:,ix1:ix2])
+                        else:
+                            data[i,ix1:ix2,:] -= get_bkg(data[i,ix1:ix2,:])
+
                 # Get average of data
                 data_mean = np.nanmean(data, axis=0)
 
@@ -342,7 +343,7 @@ class OneOverfStep(Step):
             good_mask = create_bkg_mask(input_model.data)
             good_mask = ~expand_mask(~good_mask, 1, grow_diagonal=True)
 
-            # Subtract 1/f noise from each integration
+            # Subtract 1/f noise from image
             datamodel = input_model.copy()
 
             # Single image, so always perform model flattening along slow axis
@@ -584,7 +585,7 @@ class CleanFullFrame:
         flatten_model : bool
             Subtract the smoothed version of each column in the model. 
             This will remove residual large scale structures form astrophysical sources 
-            from the model. Default is False.
+            from the model. Default is True.
         bg_sub : bool
             Use photutils Background2D to remove spatially varying background.
             Default is False.
@@ -610,7 +611,10 @@ class CleanFullFrame:
         self.nout = nout
         self.ny, self.nx = self.D.shape
         self.chsize = self.nx // self.nout
+
         self._flatten_model = flatten_model
+        self._bg_sub = bg_sub
+        self._exclude_outliers = exclude_outliers
 
         # Init the output classes
         self.chavg = np.zeros([self.ny, self.chsize])
@@ -695,7 +699,7 @@ class CleanFullFrame:
         # Fit model to average channel
         chavg_class = self.output_classes['chavg']
         if chavg_class is None:
-            chavg_model = np.zeros([self.ny, self.chsize])
+            chavg_model = np.zeros_like(self.output_classes[0].D)
         else:
             chavg_class.fit(model_type=model_type, vertical_corr=False, **kwargs)
             chavg_model = self.output_classes['chavg'].model
@@ -706,20 +710,41 @@ class CleanFullFrame:
             ch_class = self.output_classes[ch]
 
             # Flip model every other channel
+            if ch % 2 == 0:
+                axis_flip = 1 if self.slowaxis==2 else 0
+                avgmod = np.flip(chavg_model, axis=axis_flip)
+
             avgmod = np.flip(chavg_model, axis=1) if ch % 2 == 0 else chavg_model
 
             # Subtract average channel model from data
             ch_class.D -= avgmod
-            ch_class.fit(model_type=model_type, vertical_corr=vertical_corr, **kwargs)
+            ch_class.fit(model_type=model_type, vertical_corr=False, **kwargs)
             ch_class.D += avgmod
 
-            # Add model back to data
+            # Add average model back to channel model
             x1 = int(ch*self.chsize)
             x2 = int(x1 + self.chsize)
             if self.slowaxis==2:
                 final_model[:,x1:x2] = ch_class.model + avgmod
             else:
                 final_model[x1:x2,:] = ch_class.model + avgmod
+
+        # Run vertical correction on the full frame image
+        if vertical_corr:
+            # Subtract the final model from the data and transpose
+            data = (self.D - final_model).T
+            mask = self.M.T
+            ff_class = CleanSubarray(data, mask, slowaxis=self.slowaxis, 
+                                     exclude_outliers=self._exclude_outliers,
+                                     flatten_model=self._flatten_model,
+                                     bg_sub=self._bg_sub)
+            ws = kwargs.get('winsize', 127)
+            kwargs['winsize'] = ws if ws % 2 == 1 else ws - 1
+            ff_class.fit(model_type=model_type, vertical_corr=False, **kwargs)
+            vert_model = ff_class.model.T
+            final_model += vert_model
+
+            del ff_class
 
         self.model = final_model
 
@@ -833,7 +858,7 @@ class CleanSubarray:
         # Definitions
         self.D = np.array(data, dtype=np.float32)
         self.M = np.array(mask, dtype=np.bool_)
-        self.slowaxis = slowaxis
+        self.slowaxis = np.abs(slowaxis)
         self.flatten_model = flatten_model
         
         # The mask potentially contains NaNs. Exclude them.
@@ -917,20 +942,17 @@ class CleanSubarray:
         else:
             raise ValueError(f"Do not recognize model_type={model_type}")
         
-        # Remove vertical structure from astrophysical sources
+        # Remove vertical structure in model due to astrophysical sources
         if self.flatten_model:
-            line_size = self.nx if self.slowaxis==1 else self.ny
-            max_size = line_size #// 3
+            max_size = self.ny - 1 # Has already been transposed to slow axis along y-direction
             ws = np.min([max_size, 255])
-            model_bg = channel_smooth_savgol(self.model.T, winsize=ws, order=3, per_line=False).T
+            model_bg = channel_smooth_savgol(self.model.T, winsize=ws, order=3, per_line=True).T
             self.model -= model_bg
 
         # Apply vertical offset correction
         if vertical_corr:
             data = self.D.copy()
             model_horz = self.model.copy()
-            flatten_model = self.flatten_model
-            self.flatten_model = False
 
             # Rotate model subtracted data by 90 degrees
             data_model_sub = data - model_horz
@@ -943,11 +965,11 @@ class CleanSubarray:
             elif 'mean' in model_type:
                 self.model = self._fit_median(robust_mean=True)
             elif 'savgol' in model_type:
+                kwargs['winsize'] = self.D.shape[-1] // 3 - 1
                 self.model = self._fit_savgol(**kwargs)
 
             # Return data and mask to original orientation
             self.D = data
-            self.flatten_model = flatten_model
             self.M = self.M.T #np.rot90(self.M, k=-1, axes=(0,1))
             self.model = model_horz + self.model.T # np.rot90(self.model, k=-1, axes=(0,1))
 
@@ -1266,7 +1288,7 @@ def get_bkg(data, bpmask=None, nsigma=3, complex=False):
 
     if not complex:
         # Take a simple median of the background pixels
-        background = np.median(data[bgk_mask])
+        background = np.nanmedian(data[bgk_mask])
     else:
         # A more comlex background using photutils
         sigma_clip = SigmaClip(sigma=3., maxiters=5)

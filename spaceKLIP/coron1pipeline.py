@@ -573,9 +573,6 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
             'none', 'quarter', 'half', or 'all'. Default: 'quarter'.
 
         The default is {}. 
-    subdir : str, optional
-        Name of the directory where the data products shall be saved. The
-        default is 'stage1'.
     
     Keyword Args
     ------------
