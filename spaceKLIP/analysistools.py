@@ -146,7 +146,8 @@ class AnalysisTools():
                 # Compute the pixel area in steradian.
                 pxsc_arcsec = self.database.red[key]['PIXSCALE'][j] # arcsec
                 pxsc_rad = pxsc_arcsec / 3600. / 180. * np.pi  # rad
-                pxar = pxsc_rad**2  # sr
+                # pxar = pxsc_rad**2  # sr
+                pxar = self.database.red[key]['PIXAR_SR'][j]  # sr
                 
                 # Convert the host star brightness from vegamag to MJy. Use an
                 # unocculted model PSF whose integrated flux is normalized to
@@ -202,6 +203,29 @@ class AnalysisTools():
                             else:
                                 temp = (pa > pa1) & (pa < pa2)
                             data[:, temp] = np.nan
+                    # else:
+                    #     xr = np.arange(data.shape[-1]) - center[0]
+                    #     yr = np.arange(data.shape[-2]) - center[1]
+                    #     xx, yy = np.meshgrid(xr, yr)
+                    #     pa = -np.rad2deg(np.arctan2(xx, yy))
+                    #     pa[pa < 0.] += 360.
+                    #     ww_sci = np.where(self.database.obs[key]['TYPE'] == 'SCI')[0]
+                    #     for ww in ww_sci:
+                    #         roll_ref = self.database.obs[key]['ROLL_REF'][ww]  # deg
+                    #         pa1 = (119.1 - 30. + roll_ref) % 360.
+                    #         pa2 = (119.1 + 30. + roll_ref) % 360.
+                    #         if pa1 > pa2:
+                    #             temp = (pa > pa1) | (pa < pa2)
+                    #         else:
+                    #             temp = (pa > pa1) & (pa < pa2)
+                    #         data[:, temp] = np.nan
+                    #         pa1 = (299.1 - 30. + roll_ref) % 360.
+                    #         pa2 = (299.1 + 30. + roll_ref) % 360.
+                    #         if pa1 > pa2:
+                    #             temp = (pa > pa1) | (pa < pa2)
+                    #         else:
+                    #             temp = (pa > pa1) & (pa < pa2)
+                    #         data[:, temp] = np.nan
                 elif self.database.red[key]['EXP_TYPE'][j] in ['MIR_4QPM', 'MIR_LYOT']:
                     raise NotImplementedError()
                 
@@ -288,7 +312,10 @@ class AnalysisTools():
                     columns = [seps[0]]
                     names = ['separation']
                     for i, klmode in enumerate(klmodes):
-                        columns.append(cons[i])
+                        if mask is None:
+                            columns.append(cons[i])
+                        else:
+                            columns.append(cons_mask[i])
                         names.append(f'contrast, N_kl={klmode}')
                     results_table = Table(columns,
                                           names=names)
@@ -413,7 +440,8 @@ class AnalysisTools():
                 # Compute the pixel area in steradian.
                 pxsc_arcsec = self.database.red[key]['PIXSCALE'][j] # arcsec
                 pxsc_rad = pxsc_arcsec / 3600. / 180. * np.pi  # rad
-                pxar = pxsc_rad**2  # sr
+                # pxar = pxsc_rad**2  # sr
+                pxar = self.database.red[key]['PIXAR_SR'][j]  # sr
                 
                 # Compute the resolution element. Account for possible
                 # blurring.
@@ -499,7 +527,7 @@ class AnalysisTools():
                 offsetpsf_func = JWST_PSF(apername,
                                           filt,
                                           date=date,
-                                          fov_pix=65,
+                                          fov_pix=157,
                                           oversample=2,
                                           sp=sed,
                                           use_coeff=False)
@@ -665,6 +693,14 @@ class AnalysisTools():
                         # transmission.
                         # offsetpsf *= tp_comsubst
                         
+                        # peak = np.nanmax(offsetpsf)
+                        # ramp = np.arange(65)
+                        # xx, yy = np.meshgrid(ramp, ramp)
+                        # sx = 3
+                        # sy = 3
+                        # offsetpsf = 1. / (2. * np.pi * sx * sy) * np.exp(-((xx - 32)**2. / (2. * sx**2.) + (yy - 32)**2. / (2. * sy**2.)))
+                        # offsetpsf *= peak / np.nanmax(offsetpsf)
+                        
                         # Blur frames with a Gaussian filter.
                         if not np.isnan(self.database.obs[key]['BLURFWHM'][ww]):
                             gauss_sigma = self.database.obs[key]['BLURFWHM'][j] / np.sqrt(8. * np.log(2.))
@@ -762,8 +798,18 @@ class AnalysisTools():
                     # PSF.
                     if use_fm_psf == False:
                         av_offsetpsf = np.average(rot_offsetpsfs, weights=sci_totinttime, axis=0)
+                        # peak = np.nanmax(av_offsetpsf)
+                        # ramp = np.arange(65)
+                        # xx, yy = np.meshgrid(ramp, ramp)
+                        # sx = 3
+                        # sy = 3
+                        # av_offsetpsf = 1. / (2. * np.pi * sx * sy) * np.exp(-((xx - 32)**2. / (2. * sx**2.) + (yy - 32)**2. / (2. * sy**2.)))
+                        # av_offsetpsf *= peak / np.nanmax(av_offsetpsf)
                         sx = av_offsetpsf.shape[1]
                         sy = av_offsetpsf.shape[0]
+                        # for z in range(len(all_offsetpsfs)):
+                        #     all_offsetpsfs[z] = av_offsetpsf.copy()
+                        #     all_offsetpsfs_nohpf[z] = av_offsetpsf.copy()
                         
                         # Make sure that the model offset PSF has odd shape and
                         # perform the required subpixel shift before inserting
@@ -784,7 +830,7 @@ class AnalysisTools():
                     
                     # Fit the FM PSF to the KLIP-subtracted data.
                     if inject == False:
-                        fitboxsize = 30  # pix
+                        fitboxsize = 35  # pix
                         # fitboxsize = 21  # pix
                         dr = 5  # pix
                         exclusion_radius = 3 * resolution  # pix
