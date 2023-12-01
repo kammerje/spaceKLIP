@@ -1599,6 +1599,8 @@ class ImageTools():
                         method='fourier',
                         subpix_first_sci_only=False,
                         spectral_type='G2V',
+                        take_sqrt=False,
+                        mask_override=False,
                         kwargs={},
                         subdir='recentered'):
         """
@@ -1624,6 +1626,10 @@ class ImageTools():
         spectral_type : str, optional
             Host star spectral type for the WebbPSF model used to determine the
             star position behind the coronagraphic mask. The default is 'G2V'.
+        mask_override : bool, optional
+            Skip applying the mask to the shifting step. helps align nircam bar data
+        take_sqrt : bool, optional
+            Take sqrt before cross correlating for shifts. helps align nircam bar data
         kwargs : dict, optional
             Keyword arguments for the scipy.ndimage.shift routine. The default
             is {}.
@@ -1691,6 +1697,8 @@ class ImageTools():
                                 xc, yc, xshift, yshift = self.find_nircam_centers(data0=data[k].copy(),
                                                                                   key=key,
                                                                                   j=j,
+                                                                                  mask_override=mask_override,
+                                                                                  take_sqrt=take_sqrt,
                                                                                   spectral_type=spectral_type,
                                                                                   date=head_pri['DATE-BEG'],
                                                                                   output_dir=output_dir)
@@ -1820,6 +1828,8 @@ class ImageTools():
                             key,
                             j,
                             spectral_type='G2V',
+                            take_sqrt=False,
+                            mask_override=False,
                             date=None,
                             output_dir=None,
                             fov_pix=65,
@@ -1840,6 +1850,10 @@ class ImageTools():
         spectral_type : str, optional
             Host star spectral type for the WebbPSF model used to determine the
             star position behind the coronagraphic mask. The default is 'G2V'.
+        mask_override : bool, optional
+            Skip applying the mask to the shifting step. helps align nircam bar data
+        take_sqrt : bool, optional
+            Take sqrt before cross correlating for shifts. helps align nircam bar data
         date : str, optional
             Observation date in the format 'YYYY-MM-DDTHH:MM:SS.MMM'. The
             default is None.
@@ -1918,10 +1932,20 @@ class ImageTools():
             masksub = ut.crop_image(image=mask,
                                     xycen=(xc, yc),
                                     npix=fov_pix)
-            
+
+            if take_sqrt:
+                term1 = np.sqrt(np.abs(datasub))
+                term2 = np.sqrt(np.abs(model_psf))
+            else:
+                term1 = datasub
+                term2 = model_psf
+            if not mask_override:
+                term1 *= masksub
+                term2 *= masksub
+
             # Determine relative shift between data and model PSF.
-            shift, error, phasediff = phase_cross_correlation(datasub * masksub,
-                                                              model_psf * masksub,
+            shift, error, phasediff = phase_cross_correlation(term1,
+                                                              term2,
                                                               upsample_factor=1000,
                                                               normalization=None)
             yshift, xshift = shift
@@ -1973,6 +1997,8 @@ class ImageTools():
     def align_frames(self,
                      method='fourier',
                      align_algo='leastsq',
+                     mask_override=None,
+                     take_sqrt=False,
                      kwargs={},
                      subdir='aligned'):
         """
@@ -1985,6 +2011,10 @@ class ImageTools():
         align_algo : 'leastsq' or 'header'
             Algorithm to determine the alignment offsets. Default is 'leastsq',
             'header' assumes perfect header offsets. 
+        mask_override : str, optional
+            Mask some pixels when cross correlating for shifts
+        take_sqrt : bool, optional
+            Take sqrt before cross correlating for shifts. helps align nircam bar data
         kwargs : dict, optional
             Keyword arguments for the scipy.ndimage.shift routine. The default
             is {}.
@@ -1997,7 +2027,31 @@ class ImageTools():
         None.
         
         """
-        
+
+        def create_circular_mask(h, w, center=None, radius=None):
+
+            if center is None: # use the middle of the image
+                center = (int(w/2), int(h/2))
+            if radius is None: # use the smallest distance between the center and image walls
+                radius = min(center[0], center[1], w-center[0], h-center[1])
+
+            Y, X = np.ogrid[:h, :w]
+            dist_from_center = np.sqrt((X - center[0])**2 + (Y-center[1])**2)
+
+            mask = dist_from_center <= radius
+            return mask
+
+        def create_rec_mask(h, w, center=None, z=None):
+            if center is None: # use the middle of the image
+                center = (int(w/2), int(h/2))
+            if z is None:
+                z = h//4
+
+            mask = np.zeros((h,w), dtype=bool)
+            mask[center[1]-z:center[1]+z,:] = True
+
+            return mask
+
         # Set output directory.
         output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
@@ -2024,7 +2078,21 @@ class ImageTools():
                 data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs = ut.read_obs(fitsfile)
                 maskfile = self.database.obs[key]['MASKFILE'][j]
                 mask = ut.read_msk(maskfile)
-                
+                if mask_override is not None:
+                    if mask_override == 'circ':
+                        mask_circ = create_circular_mask(data[0].shape[0],data[0].shape[1], radius=9)
+                    elif mask_override == 'rec':
+                        mask_circ = create_rec_mask(data[0].shape[0],data[0].shape[1], z=8)
+                    else:
+                        raise ValueError('I don\'t recognize the mask you want me to override. This is a WIP!')
+                    mask_temp = data[0].copy()
+                    mask_temp[~mask_circ] = 1
+                    mask_temp[mask_circ] = 0
+                elif mask is None:
+                    mask_temp = np.ones_like(data[0])
+                else:
+                    mask_temp = mask
+
                 # Align frames.
                 head, tail = os.path.split(fitsfile)
                 log.info('  --> Align frames: ' + tail)
@@ -2064,10 +2132,16 @@ class ImageTools():
                         if (np.abs(xshift) < 1e-3) and (np.abs(yshift) < 1e-3):
                             p0 = np.array([0., 0., 1.])
                         if align_algo == 'leastsq':
+
+                            if take_sqrt:
+                                args = (np.sqrt(np.abs(data[k])), np.sqrt(np.abs(ref_image)), mask_temp, method, kwargs)
+                            else:
+                                args = (data[k], ref_image, mask_temp, method, kwargs)
+
                             # Use header values to initiate least squares fit
                             pp = leastsq(ut.alignlsq,
                                          p0,
-                                         args=(data[k], ref_image, mask, method, kwargs))[0]
+                                         args=args)[0]
                         elif align_algo == 'header':
                             # Just assume the header values are correct
                             pp = p0
