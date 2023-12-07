@@ -274,8 +274,10 @@ class Database():
             BLURFWHM += [head.get('BLURFWHM', np.nan)]
             head = hdul['SCI'].header
             BUNIT += [head.get('BUNIT', 'NONE')]
-            CRPIX1 += [head.get('CRPIX1', np.nan)]
-            CRPIX2 += [head.get('CRPIX2', np.nan)]
+            # CRPIX1 += [head.get('CRPIX1', np.nan)]
+            # CRPIX2 += [head.get('CRPIX2', np.nan)]
+            CRPIX1 += [ap.XSciRef]
+            CRPIX2 += [ap.YSciRef]
             VPARITY += [head.get('VPARITY', -1)]
             V3I_YANG += [head.get('V3I_YANG', 0.)]
             RA_REF += [head.get('RA_REF', np.nan)]
@@ -718,8 +720,10 @@ class Database():
             if TYPE[-1] == 'CORON3':
                 head = hdul['SCI'].header
             BUNIT += [head.get('BUNIT', 'NONE')]
-            CRPIX1 += [head.get('CRPIX1', np.nan)]
-            CRPIX2 += [head.get('CRPIX2', np.nan)]
+            # CRPIX1 += [head.get('CRPIX1', np.nan)]
+            # CRPIX2 += [head.get('CRPIX2', np.nan)]
+            CRPIX1 += [ap.XSciRef]
+            CRPIX2 += [ap.YSciRef]
             HASH += [TELESCOP[-1] + '_' + INSTRUME[-1] + '_' + DETECTOR[-1] + '_' + FILTER[-1] + '_' + PUPIL[-1] + '_' + CORONMSK[-1] + '_' + SUBARRAY[-1]]
             hdul.close()
         TYPE = np.array(TYPE)
