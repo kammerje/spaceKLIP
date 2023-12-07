@@ -1286,16 +1286,16 @@ class AnalysisTools():
                     
                     # Fit the FM PSF to the KLIP-subtracted data.
                     if inject == False:
-                        fitboxsize = 30  # pix
+                        fitboxsize = 35  # pix
                         # fitboxsize = 21  # pix
                         dr = 5  # pix
                         exclusion_radius = 3 * resolution  # pix
                         corr_len_guess = 3.  # pix
-                        xrange = 2.  # pix
-                        yrange = 2.  # pix
+                        xrange = 1.  # pix
+                        yrange = 1.  # pix
                         # xrange = 0.001  # pix
                         # yrange = 0.001  # pix
-                        frange = 10.  # mag
+                        frange = [1e-1,1e3]  # mag
                         corr_len_range = 1.  # mag
                         
                         # MCMC.
