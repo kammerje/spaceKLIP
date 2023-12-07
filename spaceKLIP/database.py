@@ -1025,8 +1025,10 @@ class Database():
             else:
                 print_tab.remove_columns(['TARG_RA', 'TARG_DEC', 'EXPSTART', 'APERNAME', 'PPS_APER', 
                                           'CRPIX1', 'CRPIX2', 'RA_REF', 'DEC_REF', 'FITSFILE', 'MASKFILE'])
+            print_tab['XOFFSET'] *= 1e3
             print_tab['XOFFSET'] = np.round(print_tab['XOFFSET'])
             print_tab['XOFFSET'][print_tab['XOFFSET'] == 0.] = 0.
+            print_tab['YOFFSET'] *= 1e3
             print_tab['YOFFSET'] = np.round(print_tab['YOFFSET'])
             print_tab['YOFFSET'][print_tab['YOFFSET'] == 0.] = 0.
             print_tab.pprint()

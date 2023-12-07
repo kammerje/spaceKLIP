@@ -20,6 +20,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import copy
+import corner
+import emcee
+import matplotlib.patheffects as PathEffects
 import pyklip.fakes as fakes
 import pyklip.fitpsf as fitpsf
 import pyklip.fm as fm
@@ -27,7 +30,7 @@ import pyklip.fmlib.fmpsf as fmpsf
 import shutil
 
 from pyklip import klip, parallelized
-from scipy.ndimage import gaussian_filter, rotate
+from scipy.ndimage import fourier_shift, gaussian_filter, rotate
 from scipy.ndimage import shift as spline_shift
 from spaceKLIP import utils as ut
 from spaceKLIP.psf import get_offsetpsf, JWST_PSF
@@ -226,7 +229,63 @@ class AnalysisTools():
                     #         else:
                     #             temp = (pa > pa1) & (pa < pa2)
                     #         data[:, temp] = np.nan
-                elif self.database.red[key]['EXP_TYPE'][j] in ['MIR_4QPM', 'MIR_LYOT']:
+                elif self.database.red[key]['EXP_TYPE'][j] in ['MIR_4QPM']:
+                    # This is MIRI 4QPM data, want to mask edges. However,
+                    # close to the center you don't have a choice. So, want to
+                    # use rectangles with a gap in the center.
+                    
+                    # Create array and pad slightly.
+                    nanmask = np.zeros_like(data[0])
+                    pad = 5
+                    nanmask = np.pad(nanmask, pad)
+                    
+                    # Upsample array to improve centering.
+                    samp = 15  # upsampling factor
+                    nanmask = nanmask.repeat(samp, axis=0).repeat(samp, axis=1)
+                    
+                    # Define rectangle edges.
+                    rect_width = 10 * samp  # pix
+                    thinrect_width = 2 * samp  # pix
+                    cent_rect = [(center[0] + pad) * samp, (center[0] + pad) * samp,
+                                 (center[1] + pad) * samp, (center[1] + pad) * samp]
+                    rect = [int(cent_rect[i] - (rect_width / 2 * (-1)**(i % 2))) for i in range(4)]
+                    thinrect = [int(cent_rect[i] - (thinrect_width / 2 * (-1)**(i % 2))) for i in range(4)]
+                    
+                    # Define circle mask for center.
+                    circ_rad = 15 * samp  # pix
+                    yarr, xarr = np.ogrid[:nanmask.shape[0], :nanmask.shape[1]]
+                    rad_dist = np.sqrt((xarr - (center[0] + pad) * samp)**2 + (yarr - (center[1] + pad) * samp)**2)
+                    circ = rad_dist < circ_rad
+                    
+                    # Loop over images.
+                    ww_sci = np.where(self.database.obs[key]['TYPE'] == 'SCI')[0]
+                    for ww in ww_sci:
+                        # Apply cross.
+                        roll_ref = self.database.obs[key]['ROLL_REF'][ww]   # deg
+                        temp = np.zeros_like(nanmask)
+                        temp[:, rect[0]:rect[1]] = 1  # vertical
+                        temp[rect[2]:rect[3], :] = 1  # horizontal
+                        
+                        # Now ensure center isn't completely masked.
+                        temp[circ] = 0
+                        
+                        # Apply thin cross.
+                        temp[:, thinrect[0]:thinrect[1]] = 1  # vertical
+                        temp[thinrect[2]:thinrect[3], :] = 1  # horizontal
+                        
+                        # Rotate the array, include fixed rotation of FQPM edges.
+                        temp = rotate(temp, 90. - roll_ref + 4.83544897, reshape=False)
+                        nanmask += temp
+                    
+                    # If pixel value too high, should be masked, else set to 1.
+                    nanmask[nanmask >= 0.5] = np.nan
+                    nanmask[nanmask < 0.5] = 1
+                    
+                    # Downsample, remove padding, and mask data.
+                    nanmask = nanmask[::samp, ::samp]
+                    nanmask = nanmask[pad:-pad, pad:-pad]
+                    data *= nanmask
+                elif self.database.red[key]['EXP_TYPE'][j] in ['MIR_LYOT']:
                     raise NotImplementedError()
                 
                 # Mask companions.
@@ -349,6 +408,7 @@ class AnalysisTools():
                            fitkernel='diag',
                            subtract=True,
                            inject=False,
+                           remove_background=True,
                            overwrite=True,
                            subdir='companions'):
         """
@@ -399,6 +459,9 @@ class AnalysisTools():
         inject : bool, optional
             Instead of fitting for a companion at the guessed location and
             contrast, inject one into the data.
+        remove_background : bool, optional
+            Remove a constant background level from the KLIP-subtracted data
+            before fitting the FM PSF. The default is True.
         overwrite : bool, optional
             If True, compute a new FM PSF and overwrite any existing one,
             otherwise try to load an existing one and only compute a new one if
@@ -480,10 +543,13 @@ class AnalysisTools():
                     kwargs_temp['maxnumbasis'] = maxnumbasis
                 
                 # Initialize pyKLIP dataset.
-                dataset = SpaceTelescope(self.database.obs[key], filepaths, psflib_filepaths)
+                dataset = SpaceTelescope(self.database.obs[key], filepaths, psflib_filepaths, highpass=highpass)
                 kwargs_temp['dataset'] = dataset
                 kwargs_temp['aligned_center'] = dataset._centers[0]
                 kwargs_temp['psf_library'] = dataset.psflib
+                
+                # Make copy of the original pyKLIP dataset.
+                dataset_orig = copy.deepcopy(dataset)
                 
                 # Get index of desired KL mode.
                 klmodes = self.database.red[key]['KLMODES'][j].split(',')
@@ -529,7 +595,7 @@ class AnalysisTools():
                                           date=date,
                                           fov_pix=157,
                                           oversample=2,
-                                          sp=sed,
+                                          sp=None,
                                           use_coeff=False)
                 
                 # Loop through companions.
@@ -756,8 +822,14 @@ class AnalysisTools():
                         
                         # Compute the FM dataset.
                         mode = self.database.red[key]['MODE'][j]
-                        annuli = 1
-                        subsections = 1
+                        # annuli = 1
+                        # subsections = 1
+                        annuli = [[guess_sep - 35., guess_sep + 35.]]  # pix
+                        if guess_sep < 35.:
+                            dpa = np.pi  # rad
+                        else:
+                            dpa = 35. / guess_sep  # rad
+                        subsections = [[np.deg2rad(guess_pa) - dpa, np.deg2rad(guess_pa) + dpa]]
                         if not isinstance(highpass, bool):
                             if k == 0:
                                 highpass_temp = float(highpass)
@@ -775,10 +847,11 @@ class AnalysisTools():
                                         fileprefix='FM-' + key,
                                         annuli=annuli,
                                         subsections=subsections,
-                                        movement=1,
+                                        movement=1.,
                                         numbasis=klmodes,
                                         maxnumbasis=maxnumbasis,
                                         calibrate_flux=False,
+                                        aligned_center=dataset._centers[0],
                                         psf_library=dataset.psflib,
                                         highpass=highpass_temp,
                                         mute_progression=True)
@@ -842,8 +915,69 @@ class AnalysisTools():
                         frange = 10.  # mag
                         corr_len_range = 1.  # mag
                         
+                        # Remove a constant background level from the
+                        # KLIP-subtracted data before fitting the FM PSF?
+                        if remove_background:
+                            
+                            # Initialize pyKLIP FMAstrometry class.
+                            fma = fitpsf.FMAstrometry(guess_sep=guess_sep,
+                                                      guess_pa=guess_pa,
+                                                      fitboxsize=fitboxsize)
+                            fma.generate_fm_stamp(fm_image=fm_frame,
+                                                  fm_center=[fm_centx, fm_centy],
+                                                  padding=5)
+                            fma.generate_data_stamp(data=data_frame,
+                                                    data_center=[data_centx, data_centy],
+                                                    dr=dr,
+                                                    exclusion_radius=exclusion_radius)
+                            corr_len_label = r'$l$'
+                            fma.set_kernel(fitkernel, [corr_len_guess], [corr_len_label])
+                            # fma.set_kernel('diag', [], [])
+                            fma.set_bounds(xrange, yrange, frange, [corr_len_range])
+                            
+                            # Make sure that the noise map is invertible.
+                            noise_map_max = np.nanmax(fma.noise_map)
+                            fma.noise_map[np.isnan(fma.noise_map)] = noise_map_max
+                            fma.noise_map[fma.noise_map == 0.] = noise_map_max
+                            
+                            # Run the MCMC fit.
+                            nwalkers = 50
+                            nburn = 400
+                            nsteps = 100
+                            numthreads = 4
+                            chain_output = os.path.join(output_dir_kl, key + '-bka_chain_c%.0f' % (k + 1) + '.pkl')
+                            fma.fit_astrometry(nwalkers=nwalkers,
+                                               nburn=nburn,
+                                               nsteps=nsteps,
+                                               numthreads=numthreads,
+                                               chain_output=chain_output)
+                            
+                            # Estimate the background level from those pixels
+                            # in the KLIP-subtracted data which have a small
+                            # flux in the best fit FM PSF.
+                            hsz = 35
+                            stamp = data_frame.copy()
+                            xp = int(round(data_centx - guess_dx))
+                            yp = int(round(data_centy + guess_dy))
+                            stamp = stamp[yp-hsz:yp+hsz+1, xp-hsz:xp+hsz+1]
+                            psf = fm_frame.copy()
+                            xp = int(round(fm_centx - guess_dx))
+                            yp = int(round(fm_centy + guess_dy))
+                            psf = psf[yp-hsz:yp+hsz+1, xp-hsz:xp+hsz+1]
+                            xshift = -(fma.raw_RA_offset.bestfit - guess_dx)
+                            yshift = fma.raw_Dec_offset.bestfit - guess_dy
+                            yxshift = np.array([yshift, xshift])
+                            psf_shift = np.fft.ifftn(fourier_shift(np.fft.fftn(psf), yxshift)).real
+                            con = fma.fit_flux.bestfit * guess_flux
+                            res = stamp - fma.fit_flux.bestfit * psf_shift
+                            thresh = np.nanmax(psf_shift) / 150.
+                            bg = np.nanmedian(stamp[np.abs(psf_shift) < thresh])
+                            data_frame -= bg
+                        
                         # MCMC.
                         if fitmethod == 'mcmc':
+                            
+                            # Initialize pyKLIP FMAstrometry class.
                             # fm_frame *= -1
                             fma = fitpsf.FMAstrometry(guess_sep=guess_sep,
                                                       guess_pa=guess_pa,
@@ -867,8 +1001,8 @@ class AnalysisTools():
                             
                             # Run the MCMC fit.
                             nwalkers = 50
-                            nburn = 100
-                            nsteps = 200
+                            nburn = 400
+                            nsteps = 100
                             numthreads = 4
                             chain_output = os.path.join(output_dir_kl, key + '-bka_chain_c%.0f' % (k + 1) + '.pkl')
                             fma.fit_astrometry(nwalkers=nwalkers,
@@ -1040,13 +1174,43 @@ class AnalysisTools():
                         # Otherwise.
                         else:
                             raise NotImplementedError()
+                        
+                        # Plot estimated background level.
+                        if remove_background:
+                            f, ax = plt.subplots(1, 4, figsize=(4 * 6.4, 4.8))
+                            p0 = ax[0].imshow(res, origin='lower')
+                            c0 = plt.colorbar(p0, ax=ax[0])
+                            c0.set_label('Flux (arbitrary units)', rotation=270, labelpad=20)
+                            text = ax[0].text(0.99, 0.99, 'Contrast = %.3e' % con, ha='right', va='top', transform=ax[0].transAxes)
+                            text.set_path_effects([PathEffects.withStroke(linewidth=3, foreground='white')])
+                            ax[0].set_title('Residuals before bg. subtraction')
+                            p1 = ax[1].imshow(np.abs(psf_shift) < thresh, origin='lower')
+                            c1 = plt.colorbar(p1, ax=ax[1])    
+                            ax[1].set_title('Pixels used for bg. estimation')
+                            ax[2].hist(stamp[np.abs(psf_shift) < thresh], bins=20)
+                            ax[2].axvline(bg, ls='--', color='black', label='bg. = %.2f' % bg)
+                            ax[2].set_xlabel('Pixel value')
+                            ax[2].set_ylabel('Occurrence')
+                            ax[2].legend(loc='upper right')
+                            ax[2].set_title('Distribution of bg. pixels')
+                            con = fma.fit_flux.bestfit * guess_flux
+                            res = stamp - fma.fit_flux.bestfit * psf_shift
+                            imgs = ax[0].get_images()
+                            if len(imgs) > 0:
+                                vmin, vmax = imgs[0].get_clim()
+                            p3 = ax[3].imshow(res, origin='lower', vmin=vmin, vmax=vmax)
+                            c3 = plt.colorbar(p3, ax=ax[3])
+                            c3.set_label('Flux (arbitrary units)', rotation=270, labelpad=20)
+                            text = ax[3].text(0.99, 0.99, 'Contrast = %.3e' % con, ha='right', va='top', transform=ax[3].transAxes)
+                            text.set_path_effects([PathEffects.withStroke(linewidth=3, foreground='white')])
+                            ax[3].set_title('Residuals after bg. subtraction')
+                            plt.tight_layout()
+                            path = os.path.join(output_dir_kl, key + '-bgest_c%.0f' % (k + 1) + '.pdf')
+                            plt.savefig(path)
+                            plt.close()
                     
                     # Subtract companion before fitting the next one.
                     if subtract or inject:
-                        
-                        # Make copy of the original pyKLIP dataset.
-                        if k == 0:
-                            dataset_orig = copy.deepcopy(dataset)
                         
                         # Subtract companion from pyKLIP dataset. Use offset
                         # PSFs w/o high-pass filtering because this will be
@@ -1055,18 +1219,18 @@ class AnalysisTools():
                             ra = companions[k][0]  # arcsec
                             dec = companions[k][1]  # arcsec
                             con = companions[k][2]
-                            inputflux = con * np.array(all_offsetpsfs)  # positive to inject companion
+                            inputflux = con * np.array(all_offsetpsfs_nohpf)  # positive to inject companion
                             fileprefix = 'INJECTED-' + key
                         else:
                             ra = tab[-1]['RA']  # arcsec
                             dec = tab[-1]['DEC']  # arcsec
                             con = tab[-1]['CON']
-                            inputflux = -con * np.array(all_offsetpsfs)  # negative to remove companion
+                            inputflux = -con * np.array(all_offsetpsfs_nohpf)  # negative to remove companion
                             fileprefix = 'KILLED-' + key
                         sep = np.sqrt(ra**2 + dec**2) / pxsc_arcsec  # pix
                         pa = np.rad2deg(np.arctan2(ra, dec))  # deg
                         thetas = [pa + 90. - all_pa for all_pa in all_pas]
-                        fakes.inject_planet(frames=dataset.input, centers=dataset.centers, inputflux=inputflux, astr_hdrs=dataset.wcs, radius=sep, pa=pa, thetas=np.array(thetas), field_dependent_correction=None)
+                        fakes.inject_planet(frames=dataset_orig.input, centers=dataset_orig.centers, inputflux=inputflux, astr_hdrs=dataset_orig.wcs, radius=sep, pa=pa, thetas=np.array(thetas), field_dependent_correction=None)
                         
                         # Copy pre-KLIP files.
                         for filepath in filepaths:
@@ -1079,14 +1243,14 @@ class AnalysisTools():
                             shutil.copy(src, dst)
                         
                         # Update content of pre-KLIP files.
-                        filenames = dataset.filenames.copy()
+                        filenames = dataset_orig.filenames.copy()
                         for l, filename in enumerate(filenames):
                             filenames[l] = filename[:filename.find('_INT')]
                         for filepath in filepaths:
                             ww_file = filenames == os.path.split(filepath)[1]
                             file = os.path.join(output_dir_pk, os.path.split(filepath)[1])
                             hdul = fits.open(file)
-                            hdul['SCI'].data = dataset.input[ww_file]
+                            hdul['SCI'].data = dataset_orig.input[ww_file]
                             hdul.writeto(file, output_verify='fix', overwrite=True)
                             hdul.close()
                         
@@ -1105,18 +1269,19 @@ class AnalysisTools():
                         mode = self.database.red[key]['MODE'][j]
                         annuli = self.database.red[key]['ANNULI'][j]
                         subsections = self.database.red[key]['SUBSECTS'][j]
-                        parallelized.klip_dataset(dataset=dataset,
+                        parallelized.klip_dataset(dataset=dataset_orig,
                                                   mode=mode,
                                                   outputdir=output_dir_fm,
                                                   fileprefix=fileprefix,
                                                   annuli=annuli,
                                                   subsections=subsections,
-                                                  movement=1,
+                                                  movement=1.,
                                                   numbasis=klmodes,
                                                   maxnumbasis=maxnumbasis,
                                                   calibrate_flux=False,
-                                                  psf_library=dataset.psflib,
-                                                  highpass=False,
+                                                  aligned_center=dataset_orig._centers[0],
+                                                  psf_library=dataset_orig.psflib,
+                                                  highpass=highpass_temp,
                                                   verbose=False)
                         head = fits.getheader(self.database.red[key]['FITSFILE'][j], 0)
                         temp = os.path.join(output_dir_fm, fileprefix + '-KLmodes-all.fits')

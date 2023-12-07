@@ -376,10 +376,10 @@ def write_fitpsf_images(fitpsf,
             pri.header[key] = 'NONE'
         else:
             pri.header[key] = row[key]
+    res = pyfits.ImageHDU(residual_image, name='RES')
     sci = pyfits.ImageHDU(fitpsf.data_stamp, name='SCI')
     mod = pyfits.ImageHDU(fm_bestfit, name='MOD')
-    res = pyfits.ImageHDU(residual_image, name='RES')
-    hdul = pyfits.HDUList([pri, sci, res, mod])
+    hdul = pyfits.HDUList([pri, res, sci, mod])
     hdul.writeto(fitsfile, output_verify='fix', overwrite=True)
     
     pass

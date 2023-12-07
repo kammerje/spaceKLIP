@@ -48,7 +48,8 @@ class SpaceTelescope(Data):
     def __init__(self,
                  obs,
                  filepaths,
-                 psflib_filepaths=None):
+                 psflib_filepaths=None,
+                 highpass=False):
         """
         Initialize the pyKLIP instrument class for space telescope data.
         
@@ -74,7 +75,7 @@ class SpaceTelescope(Data):
         # Read science and reference files.
         self.readdata(obs, filepaths)
         if psflib_filepaths is not None and len(psflib_filepaths) != 0:
-            self.readpsflib(obs, psflib_filepaths)
+            self.readpsflib(obs, psflib_filepaths, highpass)
         else:
             self._psflib = None
         
@@ -245,7 +246,7 @@ class SpaceTelescope(Data):
             iwa_all = 1.  # pix
 
         # Recenter science images.
-        new_center = np.array(data.shape[1:])/ 2.
+        new_center = (np.array(data.shape[1:]) - 1.) / 2.
         new_center = new_center[::-1]
         for i, image in enumerate(input_all):
             recentered_image = pyklip.klip.align_and_scale(image, new_center=new_center, old_center=centers_all[i])
@@ -266,7 +267,8 @@ class SpaceTelescope(Data):
     
     def readpsflib(self,
                    obs,
-                   psflib_filepaths):
+                   psflib_filepaths,
+                   highpass=False):
         """
         Read the input reference observations.
         
@@ -326,7 +328,7 @@ class SpaceTelescope(Data):
         psflib_filenames_all = np.array(psflib_filenames_all)
         
         # Recenter reference images.
-        new_center = np.array(data.shape[1:])/ 2.
+        new_center = (np.array(data.shape[1:]) - 1.) / 2.
         new_center = new_center[::-1]
         for i, image in enumerate(psflib_data_all):
             recentered_image = pyklip.klip.align_and_scale(image, new_center=new_center, old_center=psflib_centers_all[i])
@@ -339,7 +341,7 @@ class SpaceTelescope(Data):
         psflib_filenames_all = np.append(psflib_filenames_all, self._filenames, axis=0)
         
         # Initialize PSF library.
-        psflib = rdi.PSFLibrary(psflib_data_all, new_center, psflib_filenames_all, compute_correlation=True)
+        psflib = rdi.PSFLibrary(psflib_data_all, new_center, psflib_filenames_all, compute_correlation=True, highpass=highpass)
         
         # Prepare PSF library.
         psflib.prepare_library(self)
@@ -560,18 +562,18 @@ def run_obs(database,
         if 'maxnumbasis' not in kwargs_temp.keys() or kwargs_temp['maxnumbasis'] is None:
             kwargs_temp['maxnumbasis'] = maxnumbasis
         
-        # Initialize pyKLIP dataset.
-        dataset = SpaceTelescope(database.obs[key], filepaths, psflib_filepaths)
-        kwargs_temp['dataset'] = dataset
-        kwargs_temp['aligned_center'] = dataset._centers[0]
-        kwargs_temp['psf_library'] = dataset.psflib
-        
         # Run KLIP subtraction.
         for mode in kwargs['mode']:
             for annu in kwargs['annuli']:
                 for subs in kwargs['subsections']:
                     log.info('  --> pyKLIP: mode = ' + mode + ', annuli = ' + str(annu) + ', subsections = ' + str(subs))
                     fileprefix = mode + '_NANNU' + str(annu) + '_NSUBS' + str(subs) + '_' + key
+                    
+                    # Initialize pyKLIP dataset.
+                    dataset = SpaceTelescope(database.obs[key], filepaths, psflib_filepaths, highpass=kwargs_temp['highpass'])
+                    kwargs_temp['dataset'] = dataset
+                    kwargs_temp['aligned_center'] = dataset._centers[0]
+                    kwargs_temp['psf_library'] = dataset.psflib
                     kwargs_temp['fileprefix'] = fileprefix
                     kwargs_temp['mode'] = mode
                     kwargs_temp['annuli'] = annu
