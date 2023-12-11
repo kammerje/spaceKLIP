@@ -18,11 +18,14 @@ import numpy as np
 
 import copy
 import json
-import webbpsf
+import pysiaf
+import webbpsf, webbpsf_ext
 
 from astropy.table import Table
 from astroquery.svo_fps import SvoFps
 from jwst.pipeline import Detector1Pipeline, Image2Pipeline, Coron3Pipeline
+
+from .utils import nircam_apname, get_nrcmask_from_apname, get_filter_info
 
 import logging
 log = logging.getLogger(__name__)
@@ -33,40 +36,18 @@ log.setLevel(logging.INFO)
 # MAIN
 # =============================================================================
 
-# Load NIRCam, NIRISS, and MIRI filters from the SVO Filter Profile Service.
-# http://svo2.cab.inta-csic.es/theory/fps/
-wave_nircam = {}
-weff_nircam = {}
-filter_list = SvoFps.get_filter_list(facility='JWST', instrument='NIRCAM')
-for i in range(len(filter_list)):
-    name = filter_list['filterID'][i]
-    name = name[name.rfind('.') + 1:]
-    wave_nircam[name] = filter_list['WavelengthMean'][i] / 1e4  # micron
-    weff_nircam[name] = filter_list['WidthEff'][i] / 1e4  # micron
-wave_niriss = {}
-weff_niriss = {}
-filter_list = SvoFps.get_filter_list(facility='JWST', instrument='NIRISS')
-for i in range(len(filter_list)):
-    name = filter_list['filterID'][i]
-    name = name[name.rfind('.') + 1:]
-    wave_niriss[name] = filter_list['WavelengthMean'][i] / 1e4  # micron
-    weff_niriss[name] = filter_list['WidthEff'][i] / 1e4  # micron
-wave_miri = {}
-weff_miri = {}
-filter_list = SvoFps.get_filter_list(facility='JWST', instrument='MIRI')
-for i in range(len(filter_list)):
-    name = filter_list['filterID'][i]
-    name = name[name.rfind('.') + 1:]
-    wave_miri[name] = filter_list['WavelengthMean'][i] / 1e4  # micron
-    weff_miri[name] = filter_list['WidthEff'][i] / 1e4  # micron
-wave_miri['FND'] = 13.  # micron
-weff_miri['FND'] = 10.  # micron
-del filter_list
+# Initialize SIAF instruments.
+siaf_nrc = pysiaf.Siaf('NIRCam')
+siaf_nis = pysiaf.Siaf('NIRISS')
+siaf_mir = pysiaf.Siaf('MIRI')
 
-# Initialize WebbPSF instruments.
-nircam = webbpsf.NIRCam()
-niriss = webbpsf.NIRISS()
-miri = webbpsf.MIRI()
+from webbpsf_ext.logging_utils import setup_logging
+setup_logging('WARN', verbose=False)
+
+# Load NIRCam, NIRISS, and MIRI filters
+wave_nircam, weff_nircam, do_svo = get_filter_info('NIRCAM', return_more=True)
+wave_niriss, weff_niriss = get_filter_info('NIRISS', do_svo=do_svo)
+wave_miri,   weff_miri   = get_filter_info('MIRI',   do_svo=do_svo)
 
 class Database():
     """
@@ -103,6 +84,11 @@ class Database():
         
         # Output directory for saving reduction products.
         self.output_dir = output_dir
+
+        # Check if output directory exists
+        if not os.path.isdir(self.output_dir):
+            log.warning(f'Output directory does not exist. Creating {self.output_dir}.')
+            os.makedirs(self.output_dir)
         
         # Initialize observations dictionary which contains the individual
         # concatenations.
@@ -201,10 +187,11 @@ class Database():
         SELFREF = []
         SUBARRAY = []
         NUMDTHPT = []
-        XOFFSET = []  # mas
-        YOFFSET = []  # mas
+        XOFFSET = []  # arcsec
+        YOFFSET = []  # arcsec
         APERNAME = []
-        PIXSCALE = []  # mas
+        PPS_APER = []
+        PIXSCALE = []  # arcsec
         BUNIT = []
         CRPIX1 = []  # pix
         CRPIX2 = []  # pix
@@ -258,30 +245,32 @@ class Database():
                     raise UserWarning('Data originates from unknown JWST instrument')
             else:
                 raise UserWarning('Data originates from unknown telescope')
-            CORONMSK += [head.get('CORONMSK', 'NONE')]
             EXP_TYPE += [head.get('EXP_TYPE', 'UNKNOWN')]
             EXPSTART += [head.get('EXPSTART', np.nan)]
             NINTS += [head.get('NINTS', data.shape[0] if data.ndim == 3 else 1)]
             EFFINTTM += [head.get('EFFINTTM', np.nan)]
-            IS_PSF += [str(head.get('IS_PSF', 'NONE'))]
-            SELFREF += [str(head.get('SELFREF', 'NONE'))]
+            IS_PSF += [head.get('IS_PSF', 'NONE')]
+            SELFREF += [head.get('SELFREF', 'NONE')]
             SUBARRAY += [head.get('SUBARRAY', 'UNKNOWN')]
             NUMDTHPT += [head.get('NUMDTHPT', 1)]
-            XOFFSET += [1e3 * head.get('XOFFSET', 0.)]
-            YOFFSET += [1e3 * head.get('YOFFSET', 0.)]
-            APERNAME += [head.get('APERNAME', 'UNKNOWN')]
+            XOFFSET += [head.get('XOFFSET', 0.)]
+            YOFFSET += [head.get('YOFFSET', 0.)]
+            apname = nircam_apname(head) if INSTRUME[-1] == 'NIRCAM' else head.get('APERNAME', 'UNKNOWN')
+            APERNAME += [apname]
+            PPS_APER += [head.get('PPS_APER', 'UNKNOWN')]
+            coronmask = get_nrcmask_from_apname(PPS_APER[-1]) if INSTRUME[-1] == 'NIRCAM' else head.get('CORONMSK', 'NONE')
+            CORONMSK += [coronmask]
             if TELESCOP[-1] == 'JWST':
                 if INSTRUME[-1] == 'NIRCAM':
-                    if 'LONG' in DETECTOR[-1] or '5' in DETECTOR[-1]:
-                        PIXSCALE += [nircam._pixelscale_long * 1e3]
-                    else:
-                        PIXSCALE += [nircam._pixelscale_short * 1e3]
+                    ap = siaf_nrc[apname]
                 elif INSTRUME[-1] == 'NIRISS':
-                    PIXSCALE += [niriss.pixelscale * 1e3]
+                    ap = siaf_nis[apname]
                 elif INSTRUME[-1] == 'MIRI':
-                    PIXSCALE += [miri.pixelscale * 1e3]
+                    ap = siaf_mir[apname]
                 else:
                     raise UserWarning('Data originates from unknown JWST instrument')
+                # Save the average of the X and Y pixel scales.
+                PIXSCALE += [(ap.XSciScale + ap.YSciScale) / 2.]
             else:
                 raise UserWarning('Data originates from unknown telescope')
             BLURFWHM += [head.get('BLURFWHM', np.nan)]
@@ -312,13 +301,14 @@ class Database():
         EXPSTART = np.array(EXPSTART)
         NINTS = np.array(NINTS)
         EFFINTTM = np.array(EFFINTTM)
-        IS_PSF = np.array(IS_PSF)
-        SELFREF = np.array(SELFREF)
+        IS_PSF = np.array(IS_PSF, dtype='<U5')
+        SELFREF = np.array(SELFREF, dtype='<U5')
         SUBARRAY = np.array(SUBARRAY)
         NUMDTHPT = np.array(NUMDTHPT)
         XOFFSET = np.array(XOFFSET)
         YOFFSET = np.array(YOFFSET)
         APERNAME = np.array(APERNAME)
+        PPS_APER = np.array(PPS_APER)
         PIXSCALE = np.array(PIXSCALE)
         BUNIT = np.array(BUNIT)
         CRPIX1 = np.array(CRPIX1)
@@ -415,6 +405,7 @@ class Database():
                                'XOFFSET',
                                'YOFFSET',
                                'APERNAME',
+                               'PPS_APER',
                                'PIXSCALE',
                                'BUNIT',
                                'CRPIX1',
@@ -447,6 +438,7 @@ class Database():
                                'float',
                                'float',
                                'object',
+                               'object', 
                                'float',
                                'object',
                                'float',
@@ -524,6 +516,7 @@ class Database():
                              XOFFSET[ww][j],
                              YOFFSET[ww][j],
                              APERNAME[ww][j],
+                             PPS_APER[ww][j],
                              PIXSCALE[ww][j],
                              BUNIT[ww][j],
                              CRPIX1[ww][j],
@@ -628,7 +621,8 @@ class Database():
         EFFINTTM = []  # s
         SUBARRAY = []
         APERNAME = []
-        PIXSCALE = []  # mas
+        PPS_APER = []
+        PIXSCALE = []  # arcsec
         MODE = []
         ANNULI = []
         SUBSECTS = []
@@ -675,25 +669,27 @@ class Database():
                     raise UserWarning('Data originates from unknown JWST instrument')
             else:
                 raise UserWarning('Data originates from unknown telescope')
-            CORONMSK += [head.get('CORONMSK', 'NONE')]
             EXP_TYPE += [head.get('EXP_TYPE', 'UNKNOWN')]
             EXPSTART += [head.get('EXPSTART', np.nan)]
             NINTS += [head.get('NINTS', 1)]
             EFFINTTM += [head.get('EFFINTTM', np.nan)]
             SUBARRAY += [head.get('SUBARRAY', 'UNKNOWN')]
-            APERNAME += [head.get('APERNAME', 'UNKNOWN')]
+            apname = nircam_apname(head) if INSTRUME[-1] == 'NIRCAM' else head.get('APERNAME', 'UNKNOWN')
+            APERNAME += [apname]
+            PPS_APER += [head.get('PPS_APER', 'UNKNOWN')]
+            coronmask = get_nrcmask_from_apname(PPS_APER[-1]) if INSTRUME[-1] == 'NIRCAM' else head.get('CORONMSK', 'NONE')
+            CORONMSK += [coronmask]
             if TELESCOP[-1] == 'JWST':
                 if INSTRUME[-1] == 'NIRCAM':
-                    if 'LONG' in DETECTOR[-1] or '5' in DETECTOR[-1]:
-                        PIXSCALE += [nircam._pixelscale_long * 1e3]
-                    else:
-                        PIXSCALE += [nircam._pixelscale_short * 1e3]
+                    ap = siaf_nrc[apname]
                 elif INSTRUME[-1] == 'NIRISS':
-                    PIXSCALE += [niriss.pixelscale * 1e3]
+                    ap = siaf_nis[apname]
                 elif INSTRUME[-1] == 'MIRI':
-                    PIXSCALE += [miri.pixelscale * 1e3]
+                    ap = siaf_mir[apname]
                 else:
                     raise UserWarning('Data originates from unknown JWST instrument')
+                # Save the average of the X and Y pixel scales.
+                PIXSCALE += [(ap.XSciScale + ap.YSciScale) / 2.]
             else:
                 raise UserWarning('Data originates from unknown telescope')
             if TYPE[-1] == 'CORON3':
@@ -747,6 +743,7 @@ class Database():
         EFFINTTM = np.array(EFFINTTM)
         SUBARRAY = np.array(SUBARRAY)
         APERNAME = np.array(APERNAME)
+        PPS_APER = np.array(PPS_APER)
         PIXSCALE = np.array(PIXSCALE)
         MODE = np.array(MODE)
         ANNULI = np.array(ANNULI)
@@ -787,6 +784,7 @@ class Database():
                                    'EFFINTTM',
                                    'SUBARRAY',
                                    'APERNAME',
+                                   'PPS_APER',
                                    'PIXSCALE',
                                    'MODE',
                                    'ANNULI',
@@ -813,6 +811,7 @@ class Database():
                                    'float',
                                    'int',
                                    'float',
+                                   'object',
                                    'object',
                                    'object',
                                    'float',
@@ -849,6 +848,7 @@ class Database():
                              EFFINTTM[ww[j]],
                              SUBARRAY[ww[j]],
                              APERNAME[ww[j]],
+                             PPS_APER[ww[j]],
                              PIXSCALE[ww[j]],
                              MODE[ww[j]],
                              ANNULI[ww[j]],
@@ -1008,9 +1008,11 @@ class Database():
             log.info('  --> Concatenation %.0f: ' % (i + 1) + key)
             print_tab = copy.deepcopy(self.obs[key])
             if include_fitsfiles:
-                print_tab.remove_columns(['TARG_RA', 'TARG_DEC', 'EXPSTART', 'APERNAME', 'CRPIX1', 'CRPIX2', 'RA_REF', 'DEC_REF'])
+                print_tab.remove_columns(['TARG_RA', 'TARG_DEC', 'EXPSTART', 'APERNAME', 'PPS_APER', 
+                                          'CRPIX1', 'CRPIX2', 'RA_REF', 'DEC_REF'])
             else:
-                print_tab.remove_columns(['TARG_RA', 'TARG_DEC', 'EXPSTART', 'APERNAME', 'CRPIX1', 'CRPIX2', 'RA_REF', 'DEC_REF', 'FITSFILE', 'MASKFILE'])
+                print_tab.remove_columns(['TARG_RA', 'TARG_DEC', 'EXPSTART', 'APERNAME', 'PPS_APER', 
+                                          'CRPIX1', 'CRPIX2', 'RA_REF', 'DEC_REF', 'FITSFILE', 'MASKFILE'])
             print_tab['XOFFSET'] = np.round(print_tab['XOFFSET'])
             print_tab['XOFFSET'][print_tab['XOFFSET'] == 0.] = 0.
             print_tab['YOFFSET'] = np.round(print_tab['YOFFSET'])
@@ -1042,9 +1044,9 @@ class Database():
             log.info('  --> Concatenation %.0f: ' % (i + 1) + key)
             print_tab = copy.deepcopy(self.red[key])
             if include_fitsfiles:
-                print_tab.remove_columns(['TARG_RA', 'TARG_DEC', 'EXPSTART', 'APERNAME'])
+                print_tab.remove_columns(['TARG_RA', 'TARG_DEC', 'EXPSTART', 'APERNAME', 'PPS_APER'])
             else:
-                print_tab.remove_columns(['TARG_RA', 'TARG_DEC', 'EXPSTART', 'APERNAME', 'FITSFILE', 'MASKFILE'])
+                print_tab.remove_columns(['TARG_RA', 'TARG_DEC', 'EXPSTART', 'APERNAME', 'PPS_APER', 'FITSFILE', 'MASKFILE'])
             print_tab.pprint()
         
         pass
@@ -1268,3 +1270,85 @@ class Database():
                         summarystr += (', ' if i>0 else '') + f'{ntype} {typestr}'
                     print(summarystr)
 
+def create_database(output_dir, 
+                    pid, 
+                    obsids=None,
+                    input_dir=None,
+                    psflibpaths=None, 
+                    bgpaths=None,
+                    assoc_using_targname=True,
+                    verbose=True,
+                    **kwargs):
+
+    """ Create a spaceKLIP database from JWST data
+
+    Automatically searches for uncal.fits in the input directory and creates 
+    a database of the JWST data. Only works for stage0, stage1, or stage2 data.
+
+    Parameters
+    ----------
+    output_dir : str
+        Directory to save the database.
+    pid : str
+        Program ID.
+    obsids : list of ints, optional
+        List of observation numbers. If not set, will search for all
+        observations in the input directory.
+    input_dir : str
+        Directory containing the JWST data. If not set, will search for
+        MAST directory.
+    psflibpaths : list of paths, optional
+        List of paths of the input PSF references. Make sure that they are
+        NOT duplicated in the 'datapaths'. The default is None.
+    bgpaths : list of paths, optional
+        List of paths of the input MIRI background observations. Make sure
+        that they ARE duplicated in the 'datapaths' or 'psflibpaths'. The
+        default is None.
+    assoc_using_targname : bool, optional
+        Associate observations using the TARGNAME keyword. The default is True.
+    verbose : bool, optional
+        Print information to the screen. The default is True.
+    
+    Keyword Arguments
+    -----------------
+    sca : str
+        Name of detector (e.g., 'along' or 'a3')
+    filt : str
+        Return files observed in given filter.
+    file_type : str
+        'uncal.fits', 'rateints.fits', 'calints.fits', etc.
+    exp_type : str
+        Exposure type such as NRC_TACQ, NRC_TACONFIRM
+    vst_grp_act : str
+        The _<gg><s><aa>_ portion of the file name.
+        hdr0['VISITGRP'] + hdr0['SEQ_ID'] + hdr0['ACT_ID']
+    apername : str
+        Name of aperture (e.g., NRCA5_FULL)
+    apername_pps : str
+        Name of aperture from PPS (e.g., NRCA5_FULL)
+    """
+
+    from webbpsf_ext.imreg_tools import get_files
+
+    if input_dir is None:
+        mast_dir = os.getenv('JWSTDOWNLOAD_OUTDIR')
+        input_dir = os.path.join(mast_dir, f'{pid:05d}')
+
+    # Check if obsids is not a list, tuple, or numpy array
+    if not isinstance(obsids, (list, tuple, np.ndarray)):
+        obsids = [obsids]
+
+    # Cycle through all obsids and get the files in a single list
+    fitsfiles = [get_files(input_dir, pid, obsid=oid, **kwargs) for oid in obsids]
+    fitsfiles = [f for sublist in fitsfiles for f in sublist]
+    datapaths = [os.path.join(input_dir, f) for f in fitsfiles]
+
+    # Initialize the spaceKLIP database and read the input FITS files.
+    db = Database(output_dir=output_dir)
+    db.verbose = verbose
+    db.read_jwst_s012_data(datapaths=datapaths,
+                           psflibpaths=psflibpaths,
+                           bgpaths=bgpaths,
+                           assoc_using_targname=assoc_using_targname)
+    
+    return db

@@ -36,6 +36,7 @@ log.setLevel(logging.INFO)
 # =============================================================================
 
 def run_obs(database,
+            restrict_to=None,
             kwargs={},
             subdir='klipsub'):
     """
@@ -116,6 +117,11 @@ def run_obs(database,
     # Loop through concatenations.
     datapaths = []
     for i, key in enumerate(database.obs.keys()):
+
+        # if we limit to only processing some concatenations, check whether this concatenation matches the pattern
+        if (restrict_to is not None) and (restrict_to not in key):
+            continue
+
         log.info('--> Concatenation ' + key)
         
         filepaths, psflib_filepaths, maxnumbasis = get_pyklip_filepaths(database, key, return_maxbasis=True)
@@ -168,6 +174,7 @@ def run_obs(database,
                     hdul[0].header['EFFINTTM'] = database.obs[key]['EFFINTTM'][ww_sci[0]]
                     hdul[0].header['SUBARRAY'] = database.obs[key]['SUBARRAY'][ww_sci[0]]
                     hdul[0].header['APERNAME'] = database.obs[key]['APERNAME'][ww_sci[0]]
+                    hdul[0].header['PPS_APER'] = database.obs[key]['PPS_APER'][ww_sci[0]]
                     hdul[0].header['PIXSCALE'] = database.obs[key]['PIXSCALE'][ww_sci[0]]
                     hdul[0].header['MODE'] = mode
                     hdul[0].header['ANNULI'] = annu

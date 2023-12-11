@@ -13,6 +13,7 @@ import pdb
 import sys
 
 import astropy.io.fits as pyfits
+import astropy.stats
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -22,8 +23,9 @@ import webbpsf_ext
 
 from copy import deepcopy
 from jwst.pipeline import Detector1Pipeline, Image2Pipeline, Coron3Pipeline
+import jwst.datamodels
 from pyklip import parallelized
-from scipy.ndimage import gaussian_filter, median_filter
+from scipy.ndimage import gaussian_filter, median_filter, fourier_shift
 from scipy.ndimage import shift as spline_shift
 from scipy.optimize import leastsq, minimize
 from skimage.registration import phase_cross_correlation
@@ -84,7 +86,53 @@ class ImageTools():
         self.database = database
         
         pass
-    
+
+    def _get_output_dir(self, subdir):
+        """Utility function to get full output dir path, and create it if needed"""
+        # Set output directory.
+        output_dir = os.path.join(self.database.output_dir, subdir)
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        return output_dir
+
+    def _iterate_function_over_files(self, types, file_transformation_function, restrict_to=None):
+        """ Iterate some callable function over all files in a database.
+
+        This is a repetitive pattern used in many of the image processing functions, so
+        we abstract it here to reduce code repetition.
+
+        The file transformation function should take one filename as an input, perform some transformation or image processing
+        write out the file to some new path, and return the output filename.
+        Any other arguments should be provided prior to passing in the function, for instance
+        via functools.partial if necessary.
+
+        """
+
+        # Loop through concatenations.
+        for i, key in enumerate(self.database.obs.keys()):
+
+            # if we limit to only processing some concatenations, check whether this concatenation matches the pattern
+            if (restrict_to is not None) and (restrict_to not in key):
+                continue
+
+            log.info('--> Concatenation ' + key)
+
+            # Loop through FITS files.
+            nfitsfiles = len(self.database.obs[key])
+            for j in range(nfitsfiles):
+
+                # Read FITS file.
+                filename = self.database.obs[key]['FITSFILE'][j]
+
+                # Only process files of the specified types.
+                #  (skip any files with types that are not in the list of types.)
+                if self.database.obs[key]['TYPE'][j] in types:
+
+                    output_filename = file_transformation_function(filename)
+
+                    # Update spaceKLIP database.
+                    self.database.update_obs(key, j, output_filename)
+
     def remove_frames(self,
                       index=[0],
                       types=['SCI', 'SCI_BG', 'REF', 'REF_BG'],
@@ -425,6 +473,9 @@ class ImageTools():
     
     def subtract_median(self,
                         types=['SCI', 'SCI_TA', 'SCI_BG', 'REF', 'REF_TA', 'REF_BG'],
+                        method='border',
+                        sigma=3.0,
+                        borderwidth=32,
                         subdir='medsub'):
         
         """
@@ -440,17 +491,31 @@ class ImageTools():
             Name of the directory where the data products shall be saved. The
             default is 'medsub'.
         
+       None.
+        
+        method : str
+            'robust' for a robust median after masking out bright stars,
+            'sigma_clipped' for another version of robust median using astropy sigma_clipped_stats on the whole image,
+            'border' for robust median on the outer border region only, to ignore the bright stellar PSF in the center,
+            or 'simple'  for a simple np.nanmedian
+        sigma : float
+            number of standard deviations to use for the clipping limit in sigma_clipped_stats, if
+            the robust option is selected.
+        borderwidth : int
+            number of pixels to use when defining the outer border region, if the border option is selected.
+            Default is to use the outermost 32 pixels around all sides of the image.
+
         Returns
         -------
-        None.
-        
-        """
+        None, but writes out new files to subdir and updates database.
+         """
         
         # Set output directory.
         output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         
+        log.info(f'Median subtraction using method={method}')
         # Loop through concatenations.
         for i, key in enumerate(self.database.obs.keys()):
             log.info('--> Concatenation ' + key)
@@ -477,13 +542,48 @@ class ImageTools():
                     data_temp[pxdq & 1 == 1] = np.nan
                     # else:
                     #     data_temp[pxdq & 1 == 1] = np.nan
-                    bg_med = np.nanmedian(data_temp, axis=(1, 2), keepdims=True)
-                    bg_std = robust.medabsdev(data_temp, axis=(1, 2), keepdims=True)
-                    bg_ind = data_temp > (bg_med + 5. * bg_std)  # clip bright PSFs for final calculation
-                    data_temp[bg_ind] = np.nan
-                    bg_med = np.nanmedian(data_temp, axis=(1, 2), keepdims=True)
-                    data -= bg_med
-                    log.info('  --> Median subtraction: mean of frame median = %.2f' % np.mean(bg_med))
+                    if method=='robust':
+                        # Robust median, using a method by Jens
+                        bg_med = np.nanmedian(data_temp, axis=(1, 2), keepdims=True)
+                        bg_std = robust.medabsdev(data_temp, axis=(1, 2), keepdims=True)
+                        bg_ind = data_temp > (bg_med + 5. * bg_std)  # clip bright PSFs for final calculation
+                        data_temp[bg_ind] = np.nan
+                        bg_median = np.nanmedian(data_temp, axis=(1, 2), keepdims=True)
+                    elif method == 'sigma_clipped':
+                        # Robust median using astropy.stats.sigma_clipped_stats
+                        if len(data.shape) == 2:
+                            mean, median, stddev = astropy.stats.sigma_clipped_stats(data_temp,sigma=sigma)
+                        elif len(data.shape) == 3:
+                            bg_median = np.zeros([data.shape[0], 1, 1])
+                            for iint in range(data.shape[0]):
+                                mean_i, median_i, stddev_i = astropy.stats.sigma_clipped_stats(data[iint])
+                                bg_median[iint] = median_i
+                        else:
+                            raise NotImplementedError("data must be 2d or 3d for this method")
+                    elif method=='border':
+                        # Use only the outer border region of the image, near the edges of the FOV
+                        shape = data.shape
+                        if len(shape) == 2:
+                            # only one int
+                            y, x = np.indices(shape)
+                            bordermask = (x < borderwidth) | (x > shape[1] - borderwidth) | (y < borderwidth) | ( y > shape[0] - borderwidth)
+                            mean, bg_median, stddev = astropy.stats.sigma_clipped_stats(data[bordermask])
+                        elif len(shape) == 3:
+                            # perform robust stats on border region of each int
+                            y, x = np.indices(data.shape[1:])
+                            bordermask = (x < borderwidth) | (x > shape[1] - borderwidth) | (y < borderwidth) | ( y > shape[0] - borderwidth)
+                            bg_median = np.zeros([shape[0],1,1])
+                            for iint in range(shape[0]):
+                                mean_i, median_i, stddev_i = astropy.stats.sigma_clipped_stats(data[iint][bordermask])
+                                bg_median[iint] = median_i
+                        else:
+                            raise NotImplementedError("data must be 2d or 3d for this method")
+                    else:
+                        # Plain vanilla median of the image
+                        bg_median = np.nanmedian(data_temp, axis=(1, 2), keepdims=True)
+
+                    data -= bg_median
+                    log.info('  --> Median subtraction: mean of frame median = %.2f' % np.mean(bg_median))
                 
                 # Write FITS file and PSF mask.
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs)
@@ -671,6 +771,7 @@ class ImageTools():
         
         pass
     
+
     def fix_bad_pixels(self,
                        method='timemed+dqmed+medfilt',
                        bpclean_kwargs={},
@@ -679,7 +780,8 @@ class ImageTools():
                        dqmed_kwargs={},
                        medfilt_kwargs={},
                        types=['SCI', 'SCI_TA', 'SCI_BG', 'REF', 'REF_TA', 'REF_BG'],
-                       subdir='bpcleaned'):
+                       subdir='bpcleaned',
+                       restrict_to=None):
         """
         Identify and fix bad pixels.
         
@@ -752,6 +854,10 @@ class ImageTools():
         
         # Loop through concatenations.
         for i, key in enumerate(self.database.obs.keys()):
+            # if we limit to only processing some concatenations, check whether this concatenation matches the pattern
+            if (restrict_to is not None) and (restrict_to not in key):
+                continue
+
             log.info('--> Concatenation ' + key)
             
             # Loop through FITS files.
@@ -1296,7 +1402,7 @@ class ImageTools():
                     if fact_temp is not None:
                         if str(fact_temp) == 'auto':
                             wave_min = self.database.obs[key]['CWAVEL'][j] - self.database.obs[key]['DWAVEL'][j]
-                            nyquist = wave_min * 1e-6 / diam * 180. / np.pi * 3600. * 1000. / 2.3  # see, e.g., Pawley 2006
+                            nyquist = wave_min * 1e-6 / diam * 180. / np.pi * 3600. / 2.3  # see, e.g., Pawley 2006
                             fact_temp = self.database.obs[key]['PIXSCALE'][j] / nyquist
                             fact_temp /= np.sqrt(8. * np.log(2.))  # fix from Marshall
                         log.info('  --> Frame blurring: factor = %.3f' % fact_temp)
@@ -1312,7 +1418,7 @@ class ImageTools():
                 if fact_temp is None:
                     pass
                 else:
-                    head_pri['BLURFWHM'] = fact_temp
+                    head_pri['BLURFWHM'] = fact_temp * np.sqrt(8. * np.log(2.)) # Factor to convert from sigma to FWHM
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs)
                 maskfile = ut.write_msk(maskfile, mask, fitsfile)
                 
@@ -1320,7 +1426,7 @@ class ImageTools():
                 if fact_temp is None:
                     self.database.update_obs(key, j, fitsfile, maskfile, blurfwhm=np.nan)
                 else:
-                    self.database.update_obs(key, j, fitsfile, maskfile, blurfwhm=fact_temp)
+                    self.database.update_obs(key, j, fitsfile, maskfile, blurfwhm=fact_temp * np.sqrt(8. * np.log(2.)))
         
         pass
     
@@ -1585,8 +1691,8 @@ class ImageTools():
                         if mask is not None:
                             # mask = ut.imshift(mask, [shifts[k][0], shifts[k][1]], method=method, kwargs=kwargs)
                             mask = spline_shift(mask, [shifts[k][1], shifts[k][0]], order=0, mode='constant', cval=np.nanmedian(mask))
-                        xoffset = self.database.obs[key]['XOFFSET'][j] - self.database.obs[key]['XOFFSET'][ww_sci[0]]  # mas
-                        yoffset = self.database.obs[key]['YOFFSET'][j] - self.database.obs[key]['YOFFSET'][ww_sci[0]]  # mas
+                        xoffset = self.database.obs[key]['XOFFSET'][j] - self.database.obs[key]['XOFFSET'][ww_sci[0]]  # arcsec
+                        yoffset = self.database.obs[key]['YOFFSET'][j] - self.database.obs[key]['YOFFSET'][ww_sci[0]]  # arcsec
                         crpix1 = data.shape[-1]//2 + 1  # 1-indexed
                         crpix2 = data.shape[-2]//2 + 1  # 1-indexed
                     
@@ -1598,8 +1704,8 @@ class ImageTools():
                             # Do nothing.
                             shifts += [np.array([0., 0.])]
                             maskoffs_temp += [np.array([0., 0.])]
-                        xoffset = self.database.obs[key]['XOFFSET'][j]  # mas
-                        yoffset = self.database.obs[key]['YOFFSET'][j]  # mas
+                        xoffset = self.database.obs[key]['XOFFSET'][j]  # arcsec
+                        yoffset = self.database.obs[key]['YOFFSET'][j]  # arcsec
                         crpix1 = self.database.obs[key]['CRPIX1'][j]  # 1-indexed
                         crpix2 = self.database.obs[key]['CRPIX2'][j]  # 1-indexed
                     
@@ -1629,8 +1735,8 @@ class ImageTools():
                                 shifts[-1][1] += dy
                                 data[k] = np.roll(np.roll(data[k], dx, axis=1), dy, axis=0)
                                 erro[k] = np.roll(np.roll(erro[k], dx, axis=1), dy, axis=0)
-                        xoffset = 0.  # mas
-                        yoffset = 0.  # mas
+                        xoffset = 0.  # arcsec
+                        yoffset = 0.  # arcsec
                         crpix1 = data.shape[-1]//2 + 1  # 1-indexed
                         crpix2 = data.shape[-2]//2 + 1  # 1-indexed
                 
@@ -1660,8 +1766,8 @@ class ImageTools():
                             shifts[-1][1] += dy
                             data[k] = np.roll(np.roll(data[k], dx, axis=1), dy, axis=0)
                             erro[k] = np.roll(np.roll(erro[k], dx, axis=1), dy, axis=0)
-                    xoffset = 0.  # mas
-                    yoffset = 0.  # mas
+                    xoffset = 0.  # arcsec
+                    yoffset = 0.  # arcsec
                     crpix1 = data.shape[-1]//2 + 1  # 1-indexed
                     crpix2 = data.shape[-2]//2 + 1  # 1-indexed
                 shifts = np.array(shifts)
@@ -1678,14 +1784,14 @@ class ImageTools():
                 
                 # Compute shift distances.
                 dist = np.sqrt(np.sum(shifts[:, :2]**2, axis=1))  # pix
-                dist *= self.database.obs[key]['PIXSCALE'][j]  # mas
+                dist *= self.database.obs[key]['PIXSCALE'][j] * 1000  # mas
                 head, tail = os.path.split(self.database.obs[key]['FITSFILE'][j])
                 log.info('  --> Recenter frames: ' + tail)
                 log.info('  --> Recenter frames: median required shift = %.2f mas' % np.median(dist))
                 
                 # Write FITS file and PSF mask.
-                head_pri['XOFFSET'] = xoffset / 1e3 #Should be saved in arcseconds for FITS file
-                head_pri['YOFFSET'] = yoffset / 1e3 #Should be saved in arcseconds for FITS file
+                head_pri['XOFFSET'] = xoffset #arcsec
+                head_pri['YOFFSET'] = yoffset #arcsec
                 head_sci['CRPIX1'] = crpix1
                 head_sci['CRPIX2'] = crpix2
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs)
@@ -1703,6 +1809,7 @@ class ImageTools():
                             spectral_type='G2V',
                             date=None,
                             output_dir=None,
+                            fov_pix=65,
                             oversample=2,
                             use_coeff=False):
         """
@@ -1756,37 +1863,34 @@ class ImageTools():
         # Initialize JWST_PSF object. Use odd image size so that PSF is
         # centered in pixel center.
         log.info('  --> Recenter frames: generating WebbPSF image for absolute centering (this might take a while)')
-        INSTRUME = 'NIRCam'
         FILTER = self.database.obs[key]['FILTER'][j]
-        CORONMSK = self.database.obs[key]['CORONMSK'][j]
-        if CORONMSK.startswith('MASKA') or CORONMSK.startswith('MASKB'):
-            CORONMSK = CORONMSK[:4] + CORONMSK[5:]
-        fov_pix = 65
-        kwargs = {'oversample': oversample,
-                  'date': date,
-                  'use_coeff': use_coeff,
-                  'sp': spectrum}
-        psf = JWST_PSF(INSTRUME, FILTER, CORONMSK, fov_pix, **kwargs)
+        APERNAME = self.database.obs[key]['APERNAME'][j]
+        kwargs = {
+            'fov_pix': fov_pix,
+            'oversample': oversample,
+            'date': date,
+            'use_coeff': use_coeff,
+            'sp': spectrum
+        }
+        psf = JWST_PSF(APERNAME, FILTER, **kwargs)
         
         # Get SIAF reference pixel position.
-        apsiaf = psf.inst_on.siaf[self.database.obs[key]['APERNAME'][j]]
+        apsiaf = psf.inst_on.siaf_ap
         xsciref, ysciref = (apsiaf.XSciRef, apsiaf.YSciRef)
         
         # Generate model PSF. Apply offset between SIAF reference pixel
         # position and true mask center.
         xoff = (crpix1 + 1) - xsciref
         yoff = (crpix2 + 1) - ysciref
-        # crtel = apsiaf.sci_to_tel((crpix1 + 1) - xoff, (crpix2 + 1) - yoff)
-        # model_psf = psf.gen_psf_idl(crtel, coord_frame='tel', return_oversample=False)
-        model_psf = psf.gen_psf_idl((0, 0), coord_frame='idl', return_oversample=False)  # using this instead after discussing with Jarron
+        model_psf = psf.gen_psf_idl((0, 0), coord_frame='idl', return_oversample=False, quick=True)
         if not np.isnan(self.database.obs[key]['BLURFWHM'][j]):
-            model_psf = gaussian_filter(model_psf, self.database.obs[key]['BLURFWHM'][j])
+            gauss_sigma = self.database.obs[key]['BLURFWHM'][j] / np.sqrt(8. * np.log(2.))
+            model_psf = gaussian_filter(model_psf, gauss_sigma)
         
         # Get transmission mask.
         yi, xi = np.indices(data0.shape)
-        xtel, ytel = apsiaf.sci_to_tel(xi + 1 - xoff, yi + 1 - yoff)
-        tmask, _, _ = _transmission_map(psf.inst_on, (xtel, ytel), 'tel')
-        mask = tmask**2
+        xidl, yidl = apsiaf.sci_to_idl(xi + 1 - xoff, yi + 1 - yoff)
+        mask = psf.inst_on.gen_mask_transmission_map((xidl, yidl), 'idl')
         
         # Determine relative shift between data and model PSF. Iterate 3 times
         # to improve precision.
@@ -1803,11 +1907,12 @@ class ImageTools():
                                     npix=fov_pix)
             
             # Determine relative shift between data and model PSF.
-            yshift, xshift = phase_cross_correlation(datasub * masksub,
-                                                     model_psf * masksub,
-                                                     upsample_factor=1000,
-                                                     normalization=None,
-                                                     return_error=False)
+            shift, error, phasediff = phase_cross_correlation(datasub * masksub,
+                                                              model_psf * masksub,
+                                                              upsample_factor=1000,
+                                                              normalization=None,
+                                                              return_error=False)
+            yshift, xshift = shift
             
             # Update star position.
             xc = np.mean(xsub_indarr) + xshift
@@ -1919,16 +2024,32 @@ class ImageTools():
                     if j == ww_sci[0] and k == 0:
                         ref_image = data[k].copy()
                         pp = np.array([0., 0., 1.])
-                        xoffset = self.database.obs[key]['XOFFSET'][j]
-                        yoffset = self.database.obs[key]['YOFFSET'][j]
-                        crpix1 = self.database.obs[key]['CRPIX1'][j]
-                        crpix2 = self.database.obs[key]['CRPIX2'][j]
+                        xoffset = self.database.obs[key]['XOFFSET'][j] #arcsec
+                        yoffset = self.database.obs[key]['YOFFSET'][j] #arcsec
+                        crpix1 = self.database.obs[key]['CRPIX1'][j] #pixels
+                        crpix2 = self.database.obs[key]['CRPIX2'][j] #pixels
+                        pxsc = self.database.obs[key]['PIXSCALE'][j] #arcsec
                     
                     # Align all other SCI and REF frames to the first science
                     # frame.
                     else:
-                        # Calculate shifts relative to first frame. 
-                        p0 = np.array([((crpix1 + xoffset) - (self.database.obs[key]['CRPIX1'][j] + self.database.obs[key]['XOFFSET'][j])) / self.database.obs[key]['PIXSCALE'][j], ((crpix2 + yoffset) - (self.database.obs[key]['CRPIX2'][j] + self.database.obs[key]['YOFFSET'][j])) / self.database.obs[key]['PIXSCALE'][j], 1.])
+                        # Calculate shifts relative to first frame, work in pixels
+                        xfirst = crpix1 + (xoffset/pxsc)
+                        xoff_curr_pix = self.database.obs[key]['XOFFSET'][j]/self.database.obs[key]['PIXSCALE'][j]
+                        xcurrent = self.database.obs[key]['CRPIX1'][j] + xoff_curr_pix
+                        xshift = xfirst - xcurrent
+
+                        yfirst = crpix2 + (yoffset/pxsc)
+                        yoff_curr_pix = self.database.obs[key]['YOFFSET'][j]/self.database.obs[key]['PIXSCALE'][j]
+                        ycurrent = self.database.obs[key]['CRPIX2'][j] + yoff_curr_pix
+                        yshift = yfirst - ycurrent
+
+                        p0 = np.array([xshift, yshift, 1.])
+                        # p0 = np.array([((crpix1 + xoffset) - (self.database.obs[key]['CRPIX1'][j] + self.database.obs[key]['XOFFSET'][j])) / self.database.obs[key]['PIXSCALE'][j], ((crpix2 + yoffset) - (self.database.obs[key]['CRPIX2'][j] + self.database.obs[key]['YOFFSET'][j])) / self.database.obs[key]['PIXSCALE'][j], 1.])
+                        # Fix for weird numerical behaviour if shifts are small
+                        # but not exactly zero.
+                        if (np.abs(xshift) < 1e-3) and (np.abs(yshift) < 1e-3):
+                            p0 = np.array([0., 0., 1.])
                         if align_algo == 'leastsq':
                             # Use header values to initiate least squares fit
                             pp = leastsq(ut.alignlsq,
@@ -1962,7 +2083,7 @@ class ImageTools():
                 
                 # Compute shift distances.
                 dist = np.sqrt(np.sum(shifts[:, :2]**2, axis=1))  # pix
-                dist *= self.database.obs[key]['PIXSCALE'][j]  # mas
+                dist *= self.database.obs[key]['PIXSCALE'][j]*1000  # mas
                 if j == ww_sci[0]:
                     dist = dist[1:]
                 log.info('  --> Align frames: median required shift = %.2f mas' % np.median(dist))
@@ -1993,9 +2114,9 @@ class ImageTools():
             f = plt.figure(figsize=(6.4, 4.8))
             ax = plt.gca()
             for index, j in enumerate(ww_sci):
-                ax.scatter(shifts_all[index][:, 0] * self.database.obs[key]['PIXSCALE'][j], 
-                           shifts_all[index][:, 1] * self.database.obs[key]['PIXSCALE'][j], 
-                           s=5, color=colors[index%10], marker='o', 
+                ax.scatter(shifts_all[index][:, 0] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
+                           shifts_all[index][:, 1] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
+                           s=5, color=colors[index], marker='o', 
                            label='PA = %.0f deg' % self.database.obs[key]['ROLL_REF'][j])
             ax.axhline(0., color='gray', lw=1, zorder=-1)  # set zorder to ensure lines are drawn behind all the scatter points
             ax.axvline(0., color='gray', lw=1, zorder=-1)
@@ -2030,16 +2151,27 @@ class ImageTools():
                 syms = ['o', 'v', '^', '<', '>'] * (1 + len(ww_ref) // 5)
                 add = len(ww_sci)
                 for index, j in enumerate(ww_ref):
-                    this = '%.0f_%.0f' % (database_temp[key]['XOFFSET'][j], database_temp[key]['YOFFSET'][j])
+                    this = '%.3f_%.3f' % (database_temp[key]['XOFFSET'][j], database_temp[key]['YOFFSET'][j])
                     if this not in seen:
-                        ax.scatter(shifts_all[index + add][:, 0] * self.database.obs[key]['PIXSCALE'][j], shifts_all[index + add][:, 1] * self.database.obs[key]['PIXSCALE'][j], s=5, color=colors[len(seen)], marker=syms[0], label='dither %.0f' % (len(seen) + 1))
-                        ax.hlines(-database_temp[key]['YOFFSET'][j] + yoffset, -database_temp[key]['XOFFSET'][j] + xoffset - 4., -database_temp[key]['XOFFSET'][j] + xoffset + 4., color=colors[len(seen)], lw=1)
-                        ax.vlines(-database_temp[key]['XOFFSET'][j] + xoffset, -database_temp[key]['YOFFSET'][j] + yoffset - 4., -database_temp[key]['YOFFSET'][j] + yoffset + 4., color=colors[len(seen)], lw=1)
+                        ax.scatter(shifts_all[index + add][:, 0] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
+                                   shifts_all[index + add][:, 1] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
+                                   s=5, color=colors[len(seen)], marker=syms[0], 
+                                   label='dither %.0f' % (len(seen) + 1))
+                        ax.hlines((-database_temp[key]['YOFFSET'][j] + yoffset) * 1000, 
+                                  (-database_temp[key]['XOFFSET'][j] + xoffset) * 1000 - 4., 
+                                  (-database_temp[key]['XOFFSET'][j] + xoffset) * 1000 + 4.,
+                                  color=colors[len(seen)], lw=1)
+                        ax.vlines((-database_temp[key]['XOFFSET'][j] + xoffset) * 1000, 
+                                  (-database_temp[key]['YOFFSET'][j] + yoffset) * 1000 - 4., 
+                                  (-database_temp[key]['YOFFSET'][j] + yoffset) * 1000 + 4., 
+                                  color=colors[len(seen)], lw=1)
                         seen += [this]
                         reps += [1]
                     else:
                         ww = np.where(np.array(seen) == this)[0][0]
-                        ax.scatter(shifts_all[index + add][:, 0] * self.database.obs[key]['PIXSCALE'][j], shifts_all[index + add][:, 1] * self.database.obs[key]['PIXSCALE'][j], s=5, color=colors[ww], marker=syms[reps[ww]])
+                        ax.scatter(shifts_all[index + add][:, 0] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
+                                   shifts_all[index + add][:, 1] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
+                                   s=5, color=colors[ww], marker=syms[reps[ww]])
                         reps[ww] += 1
                 ax.set_aspect('equal')
                 xlim = ax.get_xlim()
