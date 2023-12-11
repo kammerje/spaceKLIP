@@ -126,8 +126,8 @@ class AnalysisTools():
             os.makedirs(output_dir)
 
         # Copy the starfile that will be used into this directory
-        starfile_type = starfile.split('.')[-1]
-        new_starfile_path = output_dir+'/user_starfile.'+starfile_type
+        starfile_ext = os.path.splitext(starfile)[1]
+        new_starfile_path = output_dir+'/user_starfile'+starfile_ext
         header = '#'+starfile.split('/')[-1] + ' /// {}'.format(spectral_type)+'\n'
         with open(new_starfile_path, 'w') as new_starfile:
             with open(starfile, 'r') as orig_starfile:
