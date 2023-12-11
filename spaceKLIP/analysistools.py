@@ -727,8 +727,6 @@ class AnalysisTools():
                              fontsize=11)
                 plt.savefig(save_string + '_calcon.pdf', 
                             bbox_inches='tight', dpi=300)
-        
-        pass
     
     def extract_companions(self,
                            companions,
@@ -1509,7 +1507,6 @@ def inject_and_recover(raw_dataset,
     raw_dataset : pyKLIP dataset
         A pyKLIP dataset which companions will be injected into and KLIP
         will be performed on. 
-    true_companions :
     injection_psf : 2D-array
         The PSF of the companion to be injected. 
     injection_seps : 1D-array
@@ -1536,8 +1533,18 @@ def inject_and_recover(raw_dataset,
 
     Returns
     -------
-    TBD
-
+    all_seps : np.array
+        Array containing the separations of all injected 
+        companions across all images. 
+    all_pas : np.array
+        Array containing the position angles of all injected 
+        companions across all images. 
+    all_inj_fluxes : np.array
+        Array containing the injected peak fluxes of all injected 
+        companions across all images. 
+    all_retr_fluxes : np.array
+        Array containing the retrieved peak fluxes of all injected 
+        companions across all images. 
     '''
 
     # Initialise some arrays and quantities
