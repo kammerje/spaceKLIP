@@ -607,3 +607,35 @@ def get_tp_comsubst(instrume,
     
     # Return.
     return tp_comsubst
+
+def write_starfile(starfile,  
+                   new_starfile_path,
+                   new_header=None):
+    """
+    Save stellar spectrum file to a different location, and insert
+    a header to the start if needed. 
+    
+    Parameters
+    ----------
+    starfile : str
+        Path to original stellar spectrum file
+    new_starfile_path : str
+        Path to new stellar spectrum file
+    new_header : str
+        Header to be inserted 
+    
+    Returns
+    -------
+    None
+    
+    """ 
+    if not os.path.exists(starfile):
+        raise FileNotFoundError("The specified starfile does not exist.")
+    
+    with open(starfile, 'r') as orig_starfile:
+        text=orig_starfile.read()
+        with open(new_starfile_path, 'w') as new_starfile:
+            if new_header is None:
+                new_starfile.write(text)
+            else:
+                new_starfile.write(new_header+text)

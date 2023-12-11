@@ -36,6 +36,7 @@ from spaceKLIP import utils as ut
 from spaceKLIP.psf import get_offsetpsf, JWST_PSF
 from spaceKLIP.starphot import get_stellar_magnitudes, read_spec_file
 from spaceKLIP.pyklippipeline import get_pyklip_filepaths
+from spaceKLIP.utils import write_starfile
 
 import logging
 log = logging.getLogger(__name__)
@@ -128,13 +129,9 @@ class AnalysisTools():
         # Copy the starfile that will be used into this directory
         starfile_ext = os.path.splitext(starfile)[1]
         new_starfile_path = output_dir+'/user_starfile'+starfile_ext
-        header = '#'+starfile.split('/')[-1] + ' /// {}'.format(spectral_type)+'\n'
-        with open(new_starfile_path, 'w') as new_starfile:
-            with open(starfile, 'r') as orig_starfile:
-                new_starfile.write(header)
-                for line in orig_starfile.readlines():
-                    new_starfile.write(line)
-        
+        new_header = '#'+starfile.split('/')[-1] + ' /// {}'.format(spectral_type)+'\n'
+        write_starfile(starfile, new_starfile_path, new_header)
+
         # Loop through concatenations.
         for i, key in enumerate(self.database.red.keys()):
             log.info('--> Concatenation ' + key)
