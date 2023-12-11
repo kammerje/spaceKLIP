@@ -181,26 +181,76 @@ def display_coron_image(filename):
     
     """
     
+    is_pyklip = False
     if ('uncal' in filename):
         raise RuntimeError("Display code does not support showing stage 0 uncal files. Reduce the data further before trying to display it.")
+    elif 'KLmodes' in filename:
+        # PyKLIP output, we have to open this differently, can't use JWST datamodels
+        is_pyklip = True
+        cube_ints = False
+        cube_klmodes = True
+
     elif ('rateints' in filename) or ('calints' in filename):
         modeltype = jwst.datamodels.CubeModel
-        cube = True
+        cube_ints = True
+        cube_klmodes = False
     else:
         modeltype = jwst.datamodels.ImageModel
-        cube = False
-    
-    model = modeltype(filename)  # cubemodel needed for rateints
-    
-    if cube:
-        image = np.nanmean(model.data, axis=0)
-        dq = model.dq[0]
+        cube_ints = False
+        cube_klmodes = False
+
+
+    if not is_pyklip:
+        # Load in JWST pipeline outputs using jwst.datamodel
+
+        model = modeltype(filename)  # cubemodel needed for rateints
+        
+        if cube:
+            image = np.nanmean(model.data, axis=0)
+            dq = model.dq[0]
+            nints = model.meta.nints
+        else:
+            image = model.data
+            dq = model.dq
+        bunit = model.meta.bunit_data
+        is_psf = model.meta.exposure.psf_reference
+
+        annotation_text = f"{model.meta.target.proposer_name}\n{model.meta.instrument.filter}, {model.meta.exposure.readpatt}:{model.meta.exposure.ngroups}:{model.meta.exposure.nints}\n{model.meta.exposure.effective_exposure_time:.2f} s",
+
+        try:
+            wcs = model.meta.wcs
+            # I don't know how to deal with the slightly different API of the GWCS class
+            # so, this is crude, just cast it to a regular WCS and drop the high order distortion stuff
+            # This suffices for our purposes in plotting compass annotations etc.
+            # (There is almost certainly a better way to do this...)
+            wcs = astropy.wcs.WCS(model.meta.wcs.to_fits()[0])
+        except:
+            wcs = model.get_fits_wcs()
+            if cube_ints:
+                wcs = wcs.dropaxis(2)  # drop the nints axis
+
     else:
-        image = model.data
-        dq = model.dq
+        # pyklip outputs aren't compatible with jwst.datamodel
+        # so just load these via astropy.io.fits
+
+        image = fits.getdata(filename)
+        header= fits.getheader(filename)
+        bunit = header['BUNIT']
+        is_psf = False
+        wcs = astropy.wcs.WCS(header)
+        if len(image.shape)==3:
+            image = image[-1] # select the last KL mode
+            wcs = wcs.dropaxis(2)  # drop the nints axis
+        annotation_text = f"pyKLIP results for {header['TARGPROP']}\n{header['FILTER']}\n",
+
     
     bpmask = np.zeros_like(image) + np.nan
-    bpmask[(model.dq[0] & 1) == True] = 1
+    # does this file have DQ extension or not? PyKLIP outputs do not
+    if is_pyklip:
+        bpmask[np.isfinite(image)] = 0
+    else:
+        bpmask[(model.dq[0] & 1) == True] = 1
+        
     
     # Set up image stretch
     #  including reasonable min/max for asinh stretch
@@ -222,35 +272,33 @@ def display_coron_image(filename):
     imdq = ax.imshow(bpmask, vmin=0, vmax=1.5, cmap=matplotlib.cm.inferno)
     
     # Colorbar
-    cb = fig.colorbar(im, pad=0.1, aspect=30, label=model.meta.bunit_data)
+    cb = fig.colorbar(im, pad=0.1, aspect=30, label=bunit)
     cb.ax.set_yscale('asinh')
     
     # Annotations
-    ax.text(0.01, 0.99,
-            f"{model.meta.target.proposer_name}\n{model.meta.instrument.filter}, {model.meta.exposure.readpatt}:{model.meta.exposure.ngroups}:{model.meta.exposure.nints}\n{model.meta.exposure.effective_exposure_time:.2f} s",
+    ax.text(0.01, 0.99, annotation_text,
             transform=ax.transAxes, color='white', verticalalignment='top', fontsize=10)
     ax.set_title(os.path.basename(filename) + "\n", fontsize=14)
     
     ax.set_xlabel("Pixels", fontsize='small')
     ax.set_ylabel("Pixels", fontsize='small')
     ax.tick_params(labelsize='small')
-    
-    if cube:
-        ax.text(0.99, 0.99, f"Showing average of {model.meta.exposure.nints} ints",
+
+    if is_psf:
+        labelstr = 'PSF Reference'
+    elif is_pyklip:
+        labelstr = "Science target after pyKLIP PSF sub."
+    else:
+        labelstr = 'Science target'
+
+    ax.text(0.5, 0.99, labelstr,
+            style='italic', fontsize=10, color='white',
+            horizontalalignment='center', verticalalignment='top', transform=ax.transAxes)
+    if cube_ints:
+        ax.text(0.99, 0.99, f"Showing average of {nints} ints",
                 style='italic', fontsize=10, color='white',
                 horizontalalignment='right', verticalalignment='top', transform=ax.transAxes)
     
-    try:
-        wcs = model.meta.wcs
-        # I don't know how to deal with the slightly different API of the GWCS class
-        # so, this is crude, just cast it to a regular WCS and drop the high order distortion stuff
-        # This suffices for our purposes in plotting compass annotations etc.
-        # (There is almost certainly a better way to do this...)
-        wcs = astropy.wcs.WCS(model.meta.wcs.to_fits()[0])
-    except:
-        wcs = model.get_fits_wcs()
-        if cube:
-            wcs = wcs.dropaxis(2)  # drop the nints axis
     annotate_compass(ax, image, wcs, yf=0.07)
     annotate_scale_bar(ax, image, wcs, yf=0.07)
     
@@ -260,7 +308,7 @@ def display_coron_image(filename):
     # TODO:
     #   add second panel with zoom in on center
 
-def display_coron_dataset(database, restrict_to=None, save_filename=None):
+def display_coron_dataset(database, restrict_to=None, save_filename=None, stage3=None):
     """
     Display multiple files in a coronagraphic dataset.
     
@@ -286,17 +334,37 @@ def display_coron_dataset(database, restrict_to=None, save_filename=None):
     if save_filename:
         from matplotlib.backends.backend_pdf import PdfPages
         pdf = PdfPages(save_filename)
-    
-    for key in database.obs:
-        if (restrict_to is None) or (restrict_to in key):
-            obstable = database.obs[key]
-            for typestr in ['SCI', 'REF']:
-                filenames = obstable[obstable['TYPE'] == typestr]['FITSFILE']
-                
-                for fn in filenames:
-                    display_coron_image(fn)
-                    if save_filename:
-                        pdf.savefig(plt.gcf())
+
+    if stage3 is None:
+        # infer based on db contents whether we have stage3 data or not
+        if hasattr(database, 'red') and len(database.red)>0:
+            stage3 = True
+        else:
+            stage3 = False
+    if not stage3:
+        # Display stage 0,1,2 data
+        for key in database.obs:
+            if (restrict_to is None) or (restrict_to in key):
+                obstable = database.obs[key]
+                for typestr in ['SCI', 'REF']:
+                    filenames = obstable[obstable['TYPE'] == typestr]['FITSFILE']
+                    
+                    for fn in filenames:
+                        display_coron_image(fn)
+                        if save_filename:
+                            pdf.savefig(plt.gcf())
+    else:
+        for key in database.red:
+            if (restrict_to is None) or (restrict_to in key):
+                redtable = database.red[key]
+                for typestr in ['PYKLIP','STAGE3']:
+                    filenames = redtable[redtable['TYPE'] == typestr]['FITSFILE']
+                    
+                    for fn in filenames:
+                        display_coron_image(fn)
+                        if save_filename:
+                            pdf.savefig(plt.gcf())
+ 
     if save_filename:
         pdf.close()
 
