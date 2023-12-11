@@ -34,6 +34,8 @@ from webbpsf_ext import robust
 from webbpsf_ext.coords import dist_image
 from webbpsf_ext.webbpsf_ext_core import _transmission_map
 
+from webbpsf.constants import JWST_CIRCUMSCRIBED_DIAMETER
+
 import logging
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -1288,7 +1290,7 @@ class ImageTools():
                         if self.database.obs[key]['EXP_TYPE'][j] in ['NRC_CORON']:
                             diam = 5.2
                         else:
-                            diam = 6.5
+                            diam = JWST_CIRCUMSCRIBED_DIAMETER
                     else:
                         raise UserWarning('Data originates from unknown telescope')
                     if fact_temp is not None:

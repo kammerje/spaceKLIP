@@ -38,6 +38,8 @@ from spaceKLIP.starphot import get_stellar_magnitudes, read_spec_file
 from spaceKLIP.pyklippipeline import get_pyklip_filepaths
 from spaceKLIP.utils import write_starfile, set_surrounded_pixels
 
+from webbpsf.constants import JWST_CIRCUMSCRIBED_DIAMETER
+
 import logging
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -174,7 +176,7 @@ class AnalysisTools():
                     if self.database.red[key]['EXP_TYPE'][j] in ['NRC_CORON']:
                         diam = 5.2
                     else:
-                        diam = 6.5
+                        diam = JWST_CIRCUMSCRIBED_DIAMETER
                 else:
                     raise UserWarning('Data originates from unknown telescope')
                 resolution = 1e-6 * self.database.red[key]['CWAVEL'][j] / diam / pxsc_rad  # pix
@@ -491,7 +493,7 @@ class AnalysisTools():
                     if self.database.red[key]['EXP_TYPE'][j] in ['NRC_CORON']:
                         diam = 5.2
                     else:
-                        diam = 6.5
+                        diam = JWST_CIRCUMSCRIBED_DIAMETER
                 else:
                     raise UserWarning('Data originates from unknown telescope')
                 resolution = 1e-6 * self.database.red[key]['CWAVEL'][j] / diam / pxsc_rad  # pix
@@ -839,7 +841,7 @@ class AnalysisTools():
                     if self.database.red[key]['EXP_TYPE'][j] in ['NRC_CORON']:
                         diam = 5.2
                     else:
-                        diam = 6.5
+                        diam = JWST_CIRCUMSCRIBED_DIAMETER
                 else:
                     raise UserWarning('Data originates from unknown telescope')
                 resolution = 1e-6 * self.database.red[key]['CWAVEL'][j] / diam / pxsc_rad  # pix
