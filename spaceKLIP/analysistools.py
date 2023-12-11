@@ -590,6 +590,7 @@ class AnalysisTools():
                     all_retr_fluxes = np.load(save_string+'_injrec_retr_fluxes.npy')
                 else:
                     # Run the injection and recovery process
+                    print('Injecting and recovering synthetic companions. This may take a while...')
                     inj_rec = inject_and_recover(pyklip_dataset, 
                                                  injection_psf=offsetpsf,
                                                  injection_seps=inj_seps_pix,
