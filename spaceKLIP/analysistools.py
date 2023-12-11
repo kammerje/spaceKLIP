@@ -368,7 +368,7 @@ class AnalysisTools():
 
                     output_fn =  fitsfile[:-5]+"_contrast.ecsv"
                     results_table.write(output_fn, overwrite=True)
-                    print(f"Contrast results saved to {output_fn}")
+                    print(f"Contrast results and plots saved to {output_fn}")
                 else:
                     # Save outputs as numpy .npy files
                     np.save(fitsfile[:-5] + '_seps.npy', seps)
