@@ -1993,7 +1993,10 @@ class ImageTools():
             f = plt.figure(figsize=(6.4, 4.8))
             ax = plt.gca()
             for index, j in enumerate(ww_sci):
-                ax.scatter(shifts_all[index][:, 0] * self.database.obs[key]['PIXSCALE'][j], shifts_all[index][:, 1] * self.database.obs[key]['PIXSCALE'][j], s=5, color=colors[index%10], marker='o', label='PA = %.0f deg' % self.database.obs[key]['ROLL_REF'][j])
+                ax.scatter(shifts_all[index][:, 0] * self.database.obs[key]['PIXSCALE'][j], 
+                           shifts_all[index][:, 1] * self.database.obs[key]['PIXSCALE'][j], 
+                           s=5, color=colors[index%10], marker='o', 
+                           label='PA = %.0f deg' % self.database.obs[key]['ROLL_REF'][j])
             ax.axhline(0., color='gray', lw=1, zorder=-1)  # set zorder to ensure lines are drawn behind all the scatter points
             ax.axvline(0., color='gray', lw=1, zorder=-1)
 
