@@ -618,11 +618,11 @@ def write_starfile(starfile,
     Parameters
     ----------
     starfile : str
-        Path to original stellar spectrum file
+        Path to original stellar spectrum file.
     new_starfile_path : str
-        Path to new stellar spectrum file
+        Path to new stellar spectrum file.
     new_header : str
-        Header to be inserted 
+        Header to be inserted. 
     
     Returns
     -------
@@ -639,3 +639,31 @@ def write_starfile(starfile,
                 new_starfile.write(text)
             else:
                 new_starfile.write(new_header+text)
+
+def set_surrounded_pixels(array, user_value=np.nan):
+    """
+    Identifies pixels in a 2D array surrounded by NaN values 
+    on all eight sides and sets them to a user-defined value.
+
+    Parameters
+    ----------
+    array : numpy.ndarray
+        2D array containing numeric values and NaNs.
+    user_value : float or any valid value type, optional
+        Value to set for pixels surrounded by NaNs on all eight sides. Defaults to NaN.
+
+    Returns
+    -------
+    numpy.ndarray
+        The input array with pixels surrounded by NaNs on all eight sides set to the user-defined value.
+    """
+    nan_mask = np.isnan(array)
+    surrounded_pixels = (
+        ~nan_mask[1:-1, 1:-1] &
+        nan_mask[:-2, :-2] & nan_mask[:-2, 1:-1] & nan_mask[:-2, 2:] &
+        nan_mask[1:-1, :-2] & nan_mask[1:-1, 2:] &
+        nan_mask[2:, :-2] & nan_mask[2:, 1:-1] & nan_mask[2:, 2:]
+    )
+    
+    array[1:-1, 1:-1][surrounded_pixels] = user_value
+    return array

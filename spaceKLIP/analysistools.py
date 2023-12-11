@@ -36,7 +36,7 @@ from spaceKLIP import utils as ut
 from spaceKLIP.psf import get_offsetpsf, JWST_PSF
 from spaceKLIP.starphot import get_stellar_magnitudes, read_spec_file
 from spaceKLIP.pyklippipeline import get_pyklip_filepaths
-from spaceKLIP.utils import write_starfile
+from spaceKLIP.utils import write_starfile, set_surrounded_pixels
 
 import logging
 log = logging.getLogger(__name__)
@@ -223,7 +223,7 @@ class AnalysisTools():
                     nanmask = np.pad(nanmask, pad)
 
                     # Upsample array to improve centering. 
-                    samp = 15 #Upsampling factor
+                    samp = 1 #Upsampling factor
                     nanmask = nanmask.repeat(samp, axis=0).repeat(samp, axis=1)
 
                     # Define rectangle edges
@@ -231,7 +231,7 @@ class AnalysisTools():
                     thinrect_width = 2*samp #pixels
 
                     cent_rect = [(center[0]+pad)*samp,(center[0]+pad)*samp,
-                                    (center[1]+pad)*samp,(center[1]+pad)*samp]
+                                 (center[1]+pad)*samp,(center[1]+pad)*samp]
                     rect = [int(cent_rect[i]-(rect_width/2*(-1)**(i%2))) for i in range(4)]
                     thinrect = [int(cent_rect[i]-(thinrect_width/2*(-1)**(i%2))) for i in range(4)]
                     
@@ -268,6 +268,7 @@ class AnalysisTools():
                     # Downsample, remove padding, and mask data
                     nanmask = nanmask[::samp,::samp]
                     nanmask = nanmask[pad:-pad,pad:-pad]
+                    nanmask = set_surrounded_pixels(nanmask)
                     data *= nanmask
                 elif self.database.red[key]['EXP_TYPE'][j] in ['MIR_LYOT']:
                     raise NotImplementedError()
