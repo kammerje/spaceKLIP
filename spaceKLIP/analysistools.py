@@ -409,6 +409,7 @@ class AnalysisTools():
                            subtract=True,
                            inject=False,
                            remove_background=True,
+                           save_preklip=False,
                            overwrite=True,
                            subdir='companions'):
         """
@@ -462,6 +463,9 @@ class AnalysisTools():
         remove_background : bool, optional
             Remove a constant background level from the KLIP-subtracted data
             before fitting the FM PSF. The default is True.
+        save_preklip : bool, optional
+            Save the stage 2 files when injecting/killing a companion? The
+            default is False.
         overwrite : bool, optional
             If True, compute a new FM PSF and overwrite any existing one,
             otherwise try to load an existing one and only compute a new one if
@@ -654,9 +658,10 @@ class AnalysisTools():
                     output_dir_fm = os.path.join(output_dir_comp, 'KLIP_FM')
                     if not os.path.exists(output_dir_fm):
                         os.makedirs(output_dir_fm)
-                    output_dir_pk = os.path.join(output_dir_comp, 'PREKLIP')
-                    if not os.path.exists(output_dir_pk):
-                        os.makedirs(output_dir_pk)
+                    if save_preklip:
+                        output_dir_pk = os.path.join(output_dir_comp, 'PREKLIP')
+                        if not os.path.exists(output_dir_pk):
+                            os.makedirs(output_dir_pk)
                     
                     # Offset PSF that is not affected by the coronagraphic
                     # mask, but only the Lyot stop.
@@ -1232,38 +1237,40 @@ class AnalysisTools():
                         thetas = [pa + 90. - all_pa for all_pa in all_pas]
                         fakes.inject_planet(frames=dataset_orig.input, centers=dataset_orig.centers, inputflux=inputflux, astr_hdrs=dataset_orig.wcs, radius=sep, pa=pa, thetas=np.array(thetas), field_dependent_correction=None)
                         
-                        # Copy pre-KLIP files.
-                        for filepath in filepaths:
-                            src = filepath
-                            dst = os.path.join(output_dir_pk, os.path.split(src)[1])
-                            shutil.copy(src, dst)
-                        for psflib_filepath in psflib_filepaths:
-                            src = psflib_filepath
-                            dst = os.path.join(output_dir_pk, os.path.split(src)[1])
-                            shutil.copy(src, dst)
-                        
-                        # Update content of pre-KLIP files.
-                        filenames = dataset_orig.filenames.copy()
-                        for l, filename in enumerate(filenames):
-                            filenames[l] = filename[:filename.find('_INT')]
-                        for filepath in filepaths:
-                            ww_file = filenames == os.path.split(filepath)[1]
-                            file = os.path.join(output_dir_pk, os.path.split(filepath)[1])
-                            hdul = fits.open(file)
-                            hdul['SCI'].data = dataset_orig.input[ww_file]
-                            hdul.writeto(file, output_verify='fix', overwrite=True)
-                            hdul.close()
-                        
-                        # Update and write observations database.
-                        temp = self.database.obs.copy()
-                        for l in range(len(self.database.obs[key])):
-                            file = os.path.split(self.database.obs[key]['FITSFILE'][l])[1]
-                            self.database.obs[key]['FITSFILE'][l] = os.path.join(output_dir_pk, file)
-                        file = os.path.split(self.database.red[key]['FITSFILE'][j])[1]
-                        file = file[file.find('JWST'):file.find('-KLmodes-all')]
-                        file = os.path.join(output_dir_fm, file + '.dat')
-                        self.database.obs[key].write(file, format='ascii', overwrite=True)
-                        self.database.obs = temp
+                        if save_preklip:
+                            
+                            # Copy pre-KLIP files.
+                            for filepath in filepaths:
+                                src = filepath
+                                dst = os.path.join(output_dir_pk, os.path.split(src)[1])
+                                shutil.copy(src, dst)
+                            for psflib_filepath in psflib_filepaths:
+                                src = psflib_filepath
+                                dst = os.path.join(output_dir_pk, os.path.split(src)[1])
+                                shutil.copy(src, dst)
+                            
+                            # Update content of pre-KLIP files.
+                            filenames = dataset_orig.filenames.copy()
+                            for l, filename in enumerate(filenames):
+                                filenames[l] = filename[:filename.find('_INT')]
+                            for filepath in filepaths:
+                                ww_file = filenames == os.path.split(filepath)[1]
+                                file = os.path.join(output_dir_pk, os.path.split(filepath)[1])
+                                hdul = fits.open(file)
+                                hdul['SCI'].data = dataset_orig.input[ww_file]
+                                hdul.writeto(file, output_verify='fix', overwrite=True)
+                                hdul.close()
+                            
+                            # Update and write observations database.
+                            temp = self.database.obs.copy()
+                            for l in range(len(self.database.obs[key])):
+                                file = os.path.split(self.database.obs[key]['FITSFILE'][l])[1]
+                                self.database.obs[key]['FITSFILE'][l] = os.path.join(output_dir_pk, file)
+                            file = os.path.split(self.database.red[key]['FITSFILE'][j])[1]
+                            file = file[file.find('JWST'):file.find('-KLmodes-all')]
+                            file = os.path.join(output_dir_fm, file + '.dat')
+                            self.database.obs[key].write(file, format='ascii', overwrite=True)
+                            self.database.obs = temp
                         
                         # Reduce companion-subtracted data.
                         mode = self.database.red[key]['MODE'][j]
