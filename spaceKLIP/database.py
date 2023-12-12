@@ -1278,12 +1278,14 @@ def create_database(output_dir,
                     bgpaths=None,
                     assoc_using_targname=True,
                     verbose=True,
+                    readlevel3=False,
                     **kwargs):
 
     """ Create a spaceKLIP database from JWST data
 
     Automatically searches for uncal.fits in the input directory and creates 
-    a database of the JWST data. Only works for stage0, stage1, or stage2 data.
+    a database of the JWST data. Only works for stage0, stage1, or stage2 data
+    by default; set readlevel3=True to read in stage 3 outputs.
 
     Parameters
     ----------
@@ -1326,6 +1328,9 @@ def create_database(output_dir,
         Name of aperture (e.g., NRCA5_FULL)
     apername_pps : str
         Name of aperture from PPS (e.g., NRCA5_FULL)
+    readlevel3 : bool
+        Set this to invoke the code for re-reading in level 3 output
+        products. By default, only levels 0,1,2 data will be read and indexed.
     """
 
     from webbpsf_ext.imreg_tools import get_files
@@ -1346,9 +1351,17 @@ def create_database(output_dir,
     # Initialize the spaceKLIP database and read the input FITS files.
     db = Database(output_dir=output_dir)
     db.verbose = verbose
-    db.read_jwst_s012_data(datapaths=datapaths,
-                           psflibpaths=psflibpaths,
-                           bgpaths=bgpaths,
-                           assoc_using_targname=assoc_using_targname)
-    
+
+    if readlevel3:
+        db.read_jwst_s3_data(datapaths=datapaths,
+                             psflibpaths=psflibpaths,
+                             bgpaths=bgpaths,
+                             assoc_using_targname=assoc_using_targname)
+
+    else:
+        db.read_jwst_s012_data(datapaths=datapaths,
+                               psflibpaths=psflibpaths,
+                               bgpaths=bgpaths,
+                               assoc_using_targname=assoc_using_targname)
+
     return db
