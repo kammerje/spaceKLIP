@@ -250,7 +250,7 @@ def display_coron_image(filename):
     bpmask = np.zeros_like(image) + np.nan
     # does this file have DQ extension or not? PyKLIP outputs do not
     if is_pyklip:
-        bpmask[np.isfinite(image)] = 0
+        bpmask[np.isnan(image)] = 1
     else:
         bpmask[(model.dq[0] & 1) == True] = 1
         

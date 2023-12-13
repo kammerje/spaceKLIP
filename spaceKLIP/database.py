@@ -9,6 +9,7 @@ matplotlib.rcParams.update({'font.size': 14})
 # =============================================================================
 
 import os
+import glob
 import pdb
 import sys
 
@@ -1278,7 +1279,7 @@ def create_database(output_dir,
                     bgpaths=None,
                     assoc_using_targname=True,
                     verbose=True,
-                    readlevel3=False,
+                    readlevel='012',
                     **kwargs):
 
     """ Create a spaceKLIP database from JWST data
@@ -1328,8 +1329,8 @@ def create_database(output_dir,
         Name of aperture (e.g., NRCA5_FULL)
     apername_pps : str
         Name of aperture from PPS (e.g., NRCA5_FULL)
-    readlevel3 : bool
-        Set this to invoke the code for re-reading in level 3 output
+    readlevel : str or int
+        Set this to 3 invoke the code for re-reading in level 3 output
         products. By default, only levels 0,1,2 data will be read and indexed.
     """
 
@@ -1352,16 +1353,24 @@ def create_database(output_dir,
     db = Database(output_dir=output_dir)
     db.verbose = verbose
 
-    if readlevel3:
-        db.read_jwst_s3_data(datapaths=datapaths,
-                             psflibpaths=psflibpaths,
-                             bgpaths=bgpaths,
-                             assoc_using_targname=assoc_using_targname)
 
-    else:
+    if str(readlevel) in '012' or str(readlevel) == '012':
         db.read_jwst_s012_data(datapaths=datapaths,
                                psflibpaths=psflibpaths,
                                bgpaths=bgpaths,
                                assoc_using_targname=assoc_using_targname)
+    elif str(readlevel) == '3':
+        # the above get_files usage won't match KLIP outputsa, so find them here
+        datapaths_klip = sorted(glob.glob(os.path.join(input_dir, "*KLmodes-all.fits")))
+
+        db.read_jwst_s3_data(datapaths=datapaths+datapaths_klip,
+                             verbose=verbose
+                            )
+    elif str(readlevel) == '4':
+        db.read_jwst_s4_data(datapaths=datapaths,
+                             verbose=verbose
+                            )
+    else:
+        raise ValueError("Invalid/unknown value for readlevel parameter")
 
     return db
