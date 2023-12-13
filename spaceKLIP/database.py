@@ -47,7 +47,7 @@ setup_logging('WARN', verbose=False)
 # Load NIRCam, NIRISS, and MIRI filters
 wave_nircam, weff_nircam, do_svo = get_filter_info('NIRCAM', return_more=True)
 wave_niriss, weff_niriss = get_filter_info('NIRISS', do_svo=do_svo)
-wave_miri,   weff_miri   = get_filter_info('MIRI',   do_svo=do_svo)
+wave_miri,   weff_miri   = get_filter_info('MIRI',   do_svo=False) 
 
 class Database():
     """
