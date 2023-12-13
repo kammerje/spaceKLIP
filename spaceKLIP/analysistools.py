@@ -598,13 +598,14 @@ class AnalysisTools():
 
                 save_string = output_dir+'/'+file_str[:-5]
                 if use_saved:
+                    log.info('Retrieving saved companion injection and recovery results.')
                     all_inj_seps = np.load(save_string + '_injrec_seps.npy')
                     all_inj_pas = np.load(save_string+'_injrec_pas.npy')
                     all_inj_fluxes = np.load(save_string+'_injrec_inj_fluxes.npy')
                     all_retr_fluxes = np.load(save_string+'_injrec_retr_fluxes.npy')
                 else:
                     # Run the injection and recovery process
-                    print('Injecting and recovering synthetic companions. This may take a while...')
+                    log.info('Injecting and recovering synthetic companions. This may take a while...')
                     inj_rec = inject_and_recover(pyklip_dataset, 
                                                  injection_psf=offsetpsf,
                                                  injection_seps=inj_seps_pix,
@@ -631,7 +632,6 @@ class AnalysisTools():
                 all_inj_fluxes = np.append([1],all_inj_fluxes)
                 zero_sep_retr_flux = 1e-10*np.ones_like(all_retr_fluxes[0])
                 all_retr_fluxes = np.vstack([zero_sep_retr_flux,all_retr_fluxes])
-
 
                 # Separation returned in pixels but we want arcseconds
                 all_inj_seps *= pxsc_arcsec
@@ -681,6 +681,9 @@ class AnalysisTools():
                     all_corrections.append(contrast_correction)
 
                 all_corrections = np.squeeze(all_corrections) #Tidy array
+                # Need to make sure its not 1D for number of different KL modes == 1 case
+                if all_corrections.ndim == 1:
+                    all_corrections = all_corrections[np.newaxis, :]
 
                 # Save the corrected contrasts, as well as the separations for convenience. 
                 np.save(save_string+'_cal_seps.npy', rawseps)
@@ -1726,7 +1729,7 @@ def inject_and_recover(raw_dataset,
                                                                       refinefit=True)
                         retrieved_fluxes.append(retrieved_flux)
                     retrieved_fluxes = np.array(retrieved_fluxes) #Convert to numpy array
-                
+
                     # Flux should never be negative, if it is, assume ~=zero flux retrieved
                     neg_mask = np.where(retrieved_fluxes < 0)
                     retrieved_fluxes[neg_mask]=1e-10 
@@ -1749,5 +1752,9 @@ def inject_and_recover(raw_dataset,
     all_pas = np.array(all_pas)
     all_inj_fluxes = np.array(all_inj_fluxes)
     all_retr_fluxes = np.squeeze(all_retr_fluxes)
+
+    # Ensure dimensions are correct for all_retr_fluxes if # of different KL modes == 1
+    if all_retr_fluxes.ndim == 1:
+        all_retr_fluxes = all_retr_fluxes[:, np.newaxis]
 
     return all_seps, all_pas, all_inj_fluxes, all_retr_fluxes
