@@ -1911,7 +1911,7 @@ class ImageTools():
                                                               model_psf * masksub,
                                                               upsample_factor=1000,
                                                               normalization=None,
-                                                              return_error=False)
+                                                              return_error=True)
             yshift, xshift = shift
             
             # Update star position.

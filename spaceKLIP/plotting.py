@@ -169,6 +169,9 @@ def display_coron_image(filename):
     Display and annotate a coronagraphic image.
     
     Shows image on asinh scale along with some basic metadata, scale bar, and compass.
+
+    This display function is designed to flexibly adapt to several different kinds of input data,
+    including rate, rateints, cal, calints files. And pyKLIP's KLmode cubes.
     
     Parameters
     ----------
@@ -208,14 +211,14 @@ def display_coron_image(filename):
         if cube_ints:
             image = np.nanmean(model.data, axis=0)
             dq = model.dq[0]
-            nints = model.meta.nints
+            nints = model.meta.exposure.nints
         else:
             image = model.data
             dq = model.dq
         bunit = model.meta.bunit_data
         is_psf = model.meta.exposure.psf_reference
 
-        annotation_text = f"{model.meta.target.proposer_name}\n{model.meta.instrument.filter}, {model.meta.exposure.readpatt}:{model.meta.exposure.ngroups}:{model.meta.exposure.nints}\n{model.meta.exposure.effective_exposure_time:.2f} s",
+        annotation_text = f"{model.meta.target.proposer_name}\n{model.meta.instrument.filter}, {model.meta.exposure.readpatt}:{model.meta.exposure.ngroups}:{model.meta.exposure.nints}\n{model.meta.exposure.effective_exposure_time:.2f} s"
 
         try:
             wcs = model.meta.wcs
@@ -241,13 +244,13 @@ def display_coron_image(filename):
         if len(image.shape)==3:
             image = image[-1] # select the last KL mode
             wcs = wcs.dropaxis(2)  # drop the nints axis
-        annotation_text = f"pyKLIP results for {header['TARGPROP']}\n{header['FILTER']}\n",
+        annotation_text = f"pyKLIP results for {header['TARGPROP']}\n{header['FILTER']}\n"
 
     
     bpmask = np.zeros_like(image) + np.nan
     # does this file have DQ extension or not? PyKLIP outputs do not
     if is_pyklip:
-        bpmask[np.isfinite(image)] = 0
+        bpmask[np.isnan(image)] = 1
     else:
         bpmask[(model.dq[0] & 1) == True] = 1
         
@@ -385,7 +388,7 @@ def plot_contrast_images(meta, data, data_masked, pxsc=None, savefile='./maskima
         extl = (data.shape[1]+1.)/2.*pxsc/1000. # arcsec
         extr = (data.shape[1]-1.)/2.*pxsc/1000. # arcsec
         extent = (extl, -extr, -extl, extr)
-        xlabel, ylabel = '$\Delta$RA [arcsec]', '$\Delta$Dec [arcsec]'
+        xlabel, ylabel = '$\\Delta$RA [arcsec]', '$\\Delta$Dec [arcsec]'
 
     # Initialize plots
     f, ax = plt.subplots(1, 2, figsize=(2*6.4, 1*4.8))
