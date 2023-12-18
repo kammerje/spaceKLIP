@@ -1335,11 +1335,13 @@ class ImageTools():
         
         Parameters
         ----------
-        fact : 'auto' or float or dict of list of float or None, optional
+        fact : 'auto' or 'fix23' or float or dict of list of float or None, optional
             FWHM (pix) of the Gaussian filter. If 'auto', will compute the FWHM
             automatically based on the Nyquist sampling criterion for discrete
             data, which is FWHM = lambda / 2.3D, where D = 5.2 m for NIRCam
-            coronagraphy and D = 6.5 m otherwise. If dict of list of float,
+            coronagraphy and D = 6.5 m otherwise. If 'fix23', will always blur
+            the data with a Gaussian kernel of FWHM = 2.3 pix, so that even bad
+            pixels cause no more Fourier ripples. If dict of list of float,
             then the dictionary keys must match the keys of the observations
             database, and the number of entries in the lists must match the
             number of observations in the corresponding concatenation. Then, a
@@ -1397,11 +1399,26 @@ class ImageTools():
                         raise UserWarning('Data originates from unknown telescope')
                     if fact_temp is not None:
                         if str(fact_temp) == 'auto':
-                            wave_min = self.database.obs[key]['CWAVEL'][j] - self.database.obs[key]['DWAVEL'][j]
-                            nyquist = wave_min * 1e-6 / diam * 180. / np.pi * 3600. / 2.3  # see, e.g., Pawley 2006
-                            fact_temp = self.database.obs[key]['PIXSCALE'][j] / nyquist
+                            # wave_min = self.database.obs[key]['CWAVEL'][j] - self.database.obs[key]['DWAVEL'][j]
+                            # nyquist = wave_min * 1e-6 / diam * 180. / np.pi * 3600. / 2.3  # see, e.g., Pawley 2006
+                            # fact_temp = self.database.obs[key]['PIXSCALE'][j] / nyquist
+                            # fact_temp /= np.sqrt(8. * np.log(2.))  # fix from Marshall
+                            # fact_temp *= 2.
+                            wave_min = self.database.obs[key]['CWAVEL'][j] - self.database.obs[key]['DWAVEL'][j]  # micron
+                            fwhm_current = wave_min * 1e-6 / diam * 180. / np.pi * 3600. / self.database.obs[key]['PIXSCALE'][j]  # pix
+                            fwhm_desired = 2.3  # pix; see, e.g., Pawley 2006
+                            fwhm_desired *= 1.5
+                            fact_temp = np.sqrt(fwhm_desired**2 - fwhm_current**2)
                             fact_temp /= np.sqrt(8. * np.log(2.))  # fix from Marshall
-                            fact_temp *= 2.
+                        if str(fact_temp) == 'fix23':
+                            fwhm_current = 1.  # pix
+                            fwhm_desired = 2.3  # pix; see, e.g., Pawley 2006
+                            fact_temp = np.sqrt(fwhm_desired**2 - fwhm_current**2)
+                            fact_temp /= np.sqrt(8. * np.log(2.))  # fix from Marshall
+                        if np.isnan(fact_temp):
+                            fact_temp = None
+                            log.info('  --> Frame blurring: skipped')
+                            continue
                         log.info('  --> Frame blurring: factor = %.3f' % fact_temp)
                         for k in range(data.shape[0]):
                             data[k] = gaussian_filter(data[k], fact_temp)
