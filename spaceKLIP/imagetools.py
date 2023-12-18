@@ -488,25 +488,26 @@ class ImageTools():
         subdir : str, optional
             Name of the directory where the data products shall be saved. The
             default is 'medsub'.
-        
-       None.
-        
-        method : str
+        method : str, optional
             'robust' for a robust median after masking out bright stars,
-            'sigma_clipped' for another version of robust median using astropy sigma_clipped_stats on the whole image,
-            'border' for robust median on the outer border region only, to ignore the bright stellar PSF in the center,
-            or 'simple'  for a simple np.nanmedian
-        sigma : float
-            number of standard deviations to use for the clipping limit in sigma_clipped_stats, if
-            the robust option is selected.
-        borderwidth : int
-            number of pixels to use when defining the outer border region, if the border option is selected.
-            Default is to use the outermost 32 pixels around all sides of the image.
-
+            'sigma_clipped' for another version of robust median using astropy
+                sigma_clipped_stats on the whole image,
+            'border' for robust median on the outer border region only, to
+                ignore the bright stellar PSF in the center,
+            or 'simple'  for a simple np.nanmedian.
+        sigma : float, optional
+            number of standard deviations to use for the clipping limit in
+            sigma_clipped_stats, if the robust option is selected.
+        borderwidth : int, optional
+            number of pixels to use when defining the outer border region, if
+            the border option is selected. Default is to use the outermost 32
+            pixels around all sides of the image.
+        
         Returns
         -------
-        None, but writes out new files to subdir and updates database.
-         """
+        None.
+        
+        """
         
         # Set output directory.
         output_dir = os.path.join(self.database.output_dir, subdir)
@@ -1334,11 +1335,13 @@ class ImageTools():
         
         Parameters
         ----------
-        fact : 'auto' or float or dict of list of float or None, optional
+        fact : 'auto' or 'fix23' or float or dict of list of float or None, optional
             FWHM (pix) of the Gaussian filter. If 'auto', will compute the FWHM
             automatically based on the Nyquist sampling criterion for discrete
             data, which is FWHM = lambda / 2.3D, where D = 5.2 m for NIRCam
-            coronagraphy and D = 6.5 m otherwise. If dict of list of float,
+            coronagraphy and D = 6.5 m otherwise. If 'fix23', will always blur
+            the data with a Gaussian kernel of FWHM = 2.3 pix, so that even bad
+            pixels cause no more Fourier ripples. If dict of list of float,
             then the dictionary keys must match the keys of the observations
             database, and the number of entries in the lists must match the
             number of observations in the corresponding concatenation. Then, a
@@ -1396,10 +1399,26 @@ class ImageTools():
                         raise UserWarning('Data originates from unknown telescope')
                     if fact_temp is not None:
                         if str(fact_temp) == 'auto':
-                            wave_min = self.database.obs[key]['CWAVEL'][j] - self.database.obs[key]['DWAVEL'][j]
-                            nyquist = wave_min * 1e-6 / diam * 180. / np.pi * 3600. / 2.3  # see, e.g., Pawley 2006
-                            fact_temp = self.database.obs[key]['PIXSCALE'][j] / nyquist
+                            # wave_min = self.database.obs[key]['CWAVEL'][j] - self.database.obs[key]['DWAVEL'][j]
+                            # nyquist = wave_min * 1e-6 / diam * 180. / np.pi * 3600. / 2.3  # see, e.g., Pawley 2006
+                            # fact_temp = self.database.obs[key]['PIXSCALE'][j] / nyquist
+                            # fact_temp /= np.sqrt(8. * np.log(2.))  # fix from Marshall
+                            # fact_temp *= 2.
+                            wave_min = self.database.obs[key]['CWAVEL'][j] - self.database.obs[key]['DWAVEL'][j]  # micron
+                            fwhm_current = wave_min * 1e-6 / diam * 180. / np.pi * 3600. / self.database.obs[key]['PIXSCALE'][j]  # pix
+                            fwhm_desired = 2.3  # pix; see, e.g., Pawley 2006
+                            fwhm_desired *= 1.5
+                            fact_temp = np.sqrt(fwhm_desired**2 - fwhm_current**2)
                             fact_temp /= np.sqrt(8. * np.log(2.))  # fix from Marshall
+                        if str(fact_temp) == 'fix23':
+                            fwhm_current = 1.  # pix
+                            fwhm_desired = 2.3  # pix; see, e.g., Pawley 2006
+                            fact_temp = np.sqrt(fwhm_desired**2 - fwhm_current**2)
+                            fact_temp /= np.sqrt(8. * np.log(2.))  # fix from Marshall
+                        if np.isnan(fact_temp):
+                            fact_temp = None
+                            log.info('  --> Frame blurring: skipped')
+                            continue
                         log.info('  --> Frame blurring: factor = %.3f' % fact_temp)
                         for k in range(data.shape[0]):
                             data[k] = gaussian_filter(data[k], fact_temp)
@@ -1434,7 +1453,7 @@ class ImageTools():
         
         Parameters
         ----------
-        fact : 'auto' or float or dict of list of float or None, optional
+        size : 'auto' or float or dict of list of float or None, optional
             FWHM (pix) of the Gaussian filter. If 'auto', will compute the FWHM
             automatically based on the Nyquist sampling criterion for discrete
             data, which is FWHM = lambda / 2.3D, where D = 5.2 m for NIRCam
@@ -1477,7 +1496,7 @@ class ImageTools():
                 mask = ut.read_msk(maskfile)
                 
                 # Skip file types that are not in the list of types.
-                fact_temp = None
+                size_temp = None
                 if self.database.obs[key]['TYPE'][j] in types:
                     
                     # High-pass filter frames.
@@ -1486,7 +1505,7 @@ class ImageTools():
                     try:
                         size_temp = size[key]
                     except:
-                        raise NotImplementedError()
+                        size_temp = float(size)
                     if size_temp is not None:
                         log.info('  --> Frame filtering: HPF FWHM = %.2f pix' % size_temp)
                         fourier_sigma_size = (data.shape[1] / size_temp) / (2. * np.sqrt(2. * np.log(2.)))
@@ -1499,7 +1518,7 @@ class ImageTools():
                 if size_temp is None:
                     pass
                 else:
-                    head_pri['HPFSIZE'] = fact_temp
+                    head_pri['HPFSIZE'] = size_temp
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs)
                 maskfile = ut.write_msk(maskfile, mask, fitsfile)
                 
@@ -1679,7 +1698,7 @@ class ImageTools():
                                                                                   output_dir=output_dir)
                             
                             # Apply the same shift to all SCI and REF frames.
-                            shifts += [np.array([-(xc - data.shape[-1]//2), -(yc - data.shape[-2]//2)])]
+                            shifts += [np.array([-(xc - (data.shape[-1] - 1.) / 2.), -(yc - (data.shape[-2] - 1.) / 2.)])]
                             maskoffs_temp += [np.array([xshift, yshift])]
                             data[k] = ut.imshift(data[k], [shifts[k][0], shifts[k][1]], method=method, kwargs=kwargs)
                             erro[k] = ut.imshift(erro[k], [shifts[k][0], shifts[k][1]], method=method, kwargs=kwargs)
@@ -1688,8 +1707,8 @@ class ImageTools():
                             mask = spline_shift(mask, [shifts[k][1], shifts[k][0]], order=0, mode='constant', cval=np.nanmedian(mask))
                         xoffset = self.database.obs[key]['XOFFSET'][j] - self.database.obs[key]['XOFFSET'][ww_sci[0]]  # arcsec
                         yoffset = self.database.obs[key]['YOFFSET'][j] - self.database.obs[key]['YOFFSET'][ww_sci[0]]  # arcsec
-                        crpix1 = data.shape[-1]//2 + 1  # 1-indexed
-                        crpix2 = data.shape[-2]//2 + 1  # 1-indexed
+                        crpix1 = (data.shape[-1] - 1.) / 2. + 1.  # 1-indexed
+                        crpix2 = (data.shape[-2] - 1.) / 2. + 1.  # 1-indexed
                     
                     # MIRI coronagraphy.
                     elif self.database.obs[key]['EXP_TYPE'][j] in ['MIR_4QPM', 'MIR_LYOT']:
@@ -2111,7 +2130,7 @@ class ImageTools():
             for index, j in enumerate(ww_sci):
                 ax.scatter(shifts_all[index][:, 0] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
                            shifts_all[index][:, 1] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
-                           s=5, color=colors[index], marker='o', 
+                           s=5, color=colors[index % 10], marker='o', 
                            label='PA = %.0f deg' % self.database.obs[key]['ROLL_REF'][j])
             ax.axhline(0., color='gray', lw=1, zorder=-1)  # set zorder to ensure lines are drawn behind all the scatter points
             ax.axvline(0., color='gray', lw=1, zorder=-1)

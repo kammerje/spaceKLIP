@@ -193,6 +193,7 @@ class Database():
         APERNAME = []
         PPS_APER = []
         PIXSCALE = []  # arcsec
+        PIXAR_SR = []  # sr
         BUNIT = []
         CRPIX1 = []  # pix
         CRPIX2 = []  # pix
@@ -276,6 +277,7 @@ class Database():
                 raise UserWarning('Data originates from unknown telescope')
             BLURFWHM += [head.get('BLURFWHM', np.nan)]
             head = hdul['SCI'].header
+            PIXAR_SR += [head.get('PIXAR_SR', np.nan)]
             BUNIT += [head.get('BUNIT', 'NONE')]
             CRPIX1 += [head.get('CRPIX1', np.nan)]
             CRPIX2 += [head.get('CRPIX2', np.nan)]
@@ -311,6 +313,7 @@ class Database():
         APERNAME = np.array(APERNAME)
         PPS_APER = np.array(PPS_APER)
         PIXSCALE = np.array(PIXSCALE)
+        PIXAR_SR = np.array(PIXAR_SR)
         BUNIT = np.array(BUNIT)
         CRPIX1 = np.array(CRPIX1)
         CRPIX2 = np.array(CRPIX2)
@@ -408,6 +411,7 @@ class Database():
                                'APERNAME',
                                'PPS_APER',
                                'PIXSCALE',
+                               'PIXAR_SR',
                                'BUNIT',
                                'CRPIX1',
                                'CRPIX2',
@@ -440,6 +444,7 @@ class Database():
                                'float',
                                'object',
                                'object', 
+                               'float',
                                'float',
                                'object',
                                'float',
@@ -519,6 +524,7 @@ class Database():
                              APERNAME[ww][j],
                              PPS_APER[ww][j],
                              PIXSCALE[ww][j],
+                             PIXAR_SR[ww][j],
                              BUNIT[ww][j],
                              CRPIX1[ww][j],
                              CRPIX2[ww][j],
@@ -624,6 +630,7 @@ class Database():
         APERNAME = []
         PPS_APER = []
         PIXSCALE = []  # arcsec
+        PIXAR_SR = []  # sr
         MODE = []
         ANNULI = []
         SUBSECTS = []
@@ -720,6 +727,7 @@ class Database():
             BLURFWHM += [head.get('BLURFWHM', np.nan)]
             if TYPE[-1] == 'CORON3':
                 head = hdul['SCI'].header
+            PIXAR_SR += [head.get('PIXAR_SR', np.nan)]
             BUNIT += [head.get('BUNIT', 'NONE')]
             CRPIX1 += [head.get('CRPIX1', np.nan)]
             CRPIX2 += [head.get('CRPIX2', np.nan)]
@@ -746,6 +754,7 @@ class Database():
         APERNAME = np.array(APERNAME)
         PPS_APER = np.array(PPS_APER)
         PIXSCALE = np.array(PIXSCALE)
+        PIXAR_SR = np.array(PIXAR_SR)
         MODE = np.array(MODE)
         ANNULI = np.array(ANNULI)
         SUBSECTS = np.array(SUBSECTS)
@@ -787,6 +796,7 @@ class Database():
                                    'APERNAME',
                                    'PPS_APER',
                                    'PIXSCALE',
+                                   'PIXAR_SR',
                                    'MODE',
                                    'ANNULI',
                                    'SUBSECTS',
@@ -815,6 +825,7 @@ class Database():
                                    'object',
                                    'object',
                                    'object',
+                                   'float',
                                    'float',
                                    'object',
                                    'int',
@@ -851,6 +862,7 @@ class Database():
                              APERNAME[ww[j]],
                              PPS_APER[ww[j]],
                              PIXSCALE[ww[j]],
+                             PIXAR_SR[ww[j]],
                              MODE[ww[j]],
                              ANNULI[ww[j]],
                              SUBSECTS[ww[j]],
@@ -1014,8 +1026,10 @@ class Database():
             else:
                 print_tab.remove_columns(['TARG_RA', 'TARG_DEC', 'EXPSTART', 'APERNAME', 'PPS_APER', 
                                           'CRPIX1', 'CRPIX2', 'RA_REF', 'DEC_REF', 'FITSFILE', 'MASKFILE'])
+            print_tab['XOFFSET'] *= 1e3
             print_tab['XOFFSET'] = np.round(print_tab['XOFFSET'])
             print_tab['XOFFSET'][print_tab['XOFFSET'] == 0.] = 0.
+            print_tab['YOFFSET'] *= 1e3
             print_tab['YOFFSET'] = np.round(print_tab['YOFFSET'])
             print_tab['YOFFSET'][print_tab['YOFFSET'] == 0.] = 0.
             print_tab.pprint()
