@@ -177,7 +177,9 @@ class AnalysisTools():
                 filt = self.database.red[key]['FILTER'][j]
                 offsetpsf = get_offsetpsf(self.database.obs[key])
                 fstar = fzero[filt] / 10.**(mstar[filt] / 2.5) / 1e6 * np.max(offsetpsf)  # MJy
-                
+                # Get PSF subtraction strategy used, for use in plot labels below.
+                psfsub_strategy = f"{head_pri['MODE']} with {head_pri['ANNULI']} annuli." if head_pri['ANNULI']>1 else head_pri['MODE']
+
                 # Set the inner and outer working angle and compute the
                 # resolution element. Account for possible blurring.
                 iwa = 1  # pix
@@ -333,7 +335,7 @@ class AnalysisTools():
                           extent=extent)
                 ax.set_xlabel(r'$\Delta$RA [arcsec]')
                 ax.set_ylabel(r'$\Delta$Dec [arcsec]')
-                ax.set_title(f'Masked data in {filt} ({klmodes[-1]} KL)')
+                ax.set_title(f'Masked data in {filt}, {psfsub_strategy} ({klmodes[-1]} KL)')
                 for r in [5,10]:
                     ax.add_patch(matplotlib.patches.Circle((0,0), r, ls='--', facecolor='none', edgecolor='cyan', clip_on=True))
                     ax.text(r, 0, f" {r}''", color='cyan')
@@ -366,7 +368,7 @@ class AnalysisTools():
                 ax.legend(loc='upper right', ncols=3,
                           title=None if mask is None else 'Dashed lines exclude coronagraph mask throughput',
                           title_fontsize=10)
-                ax.set_title(f'Raw contrast in {filt}')
+                ax.set_title(f'Raw contrast in {filt}, {psfsub_strategy}')
                 plt.tight_layout()
                 plt.savefig(fitsfile[:-5] + '_rawcon.pdf')
 
@@ -399,7 +401,6 @@ class AnalysisTools():
                 else:
                     raise ValueError('File save format not supported, options are "npy" or "ecsv".')
 
-        pass
 
     def calibrate_contrast(self,
                            subdir='calcon',
@@ -547,6 +548,8 @@ class AnalysisTools():
                 filt = self.database.red[key]['FILTER'][j]
                 fstar = fzero[filt] / 10.**(mstar[filt] / 2.5) / 1e6 * np.max(offsetpsf)  # MJy
                 fstar *= ((180./np.pi)*3600.)**2/pxsc_arcsec**2 # MJy/sr
+                # Get PSF subtraction strategy used, for use in plot labels below.
+                psfsub_strategy = f"{head_pri['MODE']} with {head_pri['ANNULI']} annuli." if head_pri['ANNULI']>1 else head_pri['MODE']
 
                 ### Now want to perform the injection and recovery of companions. 
                 # Define the seps and PAs to inject companions at
@@ -752,7 +755,7 @@ class AnalysisTools():
                     KLmodes = klip_args['numbasis'][ci]
                     ax.plot(rawseps[ci], corr, label='KL = {}'.format(KLmodes))
                 ax.legend(ncol=3, fontsize=10)
-                standardize_plots_annotate_save(ax, title=f'Injected companions in {filt}, all KL modes',
+                standardize_plots_annotate_save(ax, title=f'Injected companions in {filt}, {psfsub_strategy}, all KL modes',
                                                 ylabel='Throughput',
                                                 filename=save_string + '_allKL_throughput.pdf')
 
@@ -771,7 +774,7 @@ class AnalysisTools():
                            label='Individual Injections')
                 ax.legend(fontsize=10)
                 standardize_plots_annotate_save(ax,
-                                                title=f"Injected companions in {filt} for KL={klip_args['numbasis'][median_KL_index]}",
+                                                title=f"Injected companions in {filt}, {psfsub_strategy}, for KL={klip_args['numbasis'][median_KL_index]}",
                                                 ylabel='Throughput',
                                                 filename=save_string + '_medKL_throughput.pdf')
 
@@ -787,7 +790,7 @@ class AnalysisTools():
                           title = 'Dashed lines exclude coronagraph mask throughput',
                           title_fontsize=10)
                 standardize_plots_annotate_save(ax,
-                                                title=f'Calibrated contrast in {filt}',
+                                                title=f'Calibrated contrast in {filt}, {psfsub_strategy}',
                                                 ylabel='Contrast',
                                                 filename=save_string + '_calcon.pdf')
 
@@ -803,7 +806,7 @@ class AnalysisTools():
                           title = 'Solid lines = calibrated, dotted lines = raw',
                           title_fontsize=10)
                 standardize_plots_annotate_save(ax,
-                                                title=f'Calibrated contrast vs Raw contrast in {filt}',
+                                                title=f'Calibrated contrast vs Raw contrast in {filt}, {psfsub_strategy}',
                                                 ylabel='Contrast',
                                                 filename=save_string + '_calcon_vs_rawcon.pdf')
 
