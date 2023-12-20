@@ -85,7 +85,8 @@ class AnalysisTools():
                      companions=None,
                      overwrite_crpix=None,
                      subdir='rawcon',
-                     output_filetype='npy'):
+                     output_filetype='npy',
+                     plot_xlim=(0,10)):
         """
         Compute the raw contrast relative to the provided host star flux.
         
@@ -147,6 +148,8 @@ class AnalysisTools():
             nfitsfiles = len(self.database.red[key])
             for j in range(nfitsfiles):
                 
+                log.info('Analyzing file ' + self.database.red[key]['FITSFILE'][j])
+
                 # Get stellar magnitudes and filter zero points.
                 mstar, fzero = get_stellar_magnitudes(starfile, spectral_type, self.database.red[key]['INSTRUME'][j], output_dir=output_dir)  # vegamag, Jy
                 
@@ -159,6 +162,8 @@ class AnalysisTools():
                 data, head_pri, head_sci, is2d = ut.read_red(fitsfile)
                 maskfile = self.database.red[key]['MASKFILE'][j]
                 mask = ut.read_msk(maskfile)
+                if mask is None:
+                    log.warning("No mask file provided; MASKFILE is None. This may cause problems!!")
                 
                 # Compute the pixel area in steradian.
                 pxsc_arcsec = self.database.red[key]['PIXSCALE'][j] # arcsec
@@ -197,6 +202,7 @@ class AnalysisTools():
                 # Mask coronagraph spiders, 4QPM edges, etc. 
                 if self.database.red[key]['EXP_TYPE'][j] in ['NRC_CORON']:
                     if 'WB' in self.database.red[key]['CORONMSK'][j]:
+                        log.info('  Masking out areas for NIRCam bar coronagraph')
                         xr = np.arange(data.shape[-1]) - center[0]
                         yr = np.arange(data.shape[-2]) - center[1]
                         xx, yy = np.meshgrid(xr, yr)
@@ -223,6 +229,7 @@ class AnalysisTools():
                     # This is MIRI 4QPM data, want to mask edges. However, close
                     # to the center you don't have a choice. So, want to use 
                     # rectangles with a gap in the center. 
+                    log.info('  Masking out areas for MIRI 4QPM coronagraph')
 
                     # Create array and pad slightly
                     nanmask = np.zeros_like(data[0])
@@ -282,6 +289,8 @@ class AnalysisTools():
                 
                 # Mask companions.
                 if companions is not None:
+
+                    log.info(f'  Masking out {len(companions)} known companions using provided parameters.')
                     for k in range(len(companions)):
                         ra, dec, rad = companions[k]  # arcsec, arcsec, lambda/D
                         yy, xx = np.indices(data.shape[1:])  # pix
@@ -292,6 +301,7 @@ class AnalysisTools():
                 # Compute raw contrast.
                 seps = []
                 cons = []
+                log.info(f'  Measuring raw contrast in annuli')
                 for k in range(data.shape[0]):
                     sep, con = klip.meas_contrast(dat=data[k] * pxar / fstar, iwa=iwa, owa=owa, resolution=resolution, center=center, low_pass_filter=False)
                     seps += [sep * self.database.red[key]['PIXSCALE'][j]]   # arcsec
@@ -303,6 +313,7 @@ class AnalysisTools():
                 # computing the raw contrast.
                 if mask is not None:
                     cons_mask = []
+                    log.info(f'  Measuring raw contrast for masked data')
                     for k in range(data.shape[0]):
                         _, con_mask = klip.meas_contrast(dat=np.true_divide(data[k], mask) * pxar / fstar, iwa=iwa, owa=owa, resolution=resolution, center=center, low_pass_filter=False)
                         cons_mask += [con_mask]
@@ -377,6 +388,7 @@ class AnalysisTools():
                     np.save(fitsfile[:-5] + '_cons.npy', cons)
                     if mask is not None:
                         np.save(fitsfile[:-5] + '_cons_mask.npy', cons_mask)
+                    print(f"Contrast results and plots saved to {fitsfile[:-5] + '_seps.npy'}, {fitsfile[:-5] + '_cons.npy'}")
                 else:
                     raise ValueError('File save format not supported, options are "npy" or "ecsv".')
 
@@ -476,6 +488,8 @@ class AnalysisTools():
                 data, head_pri, head_sci, is2d = ut.read_red(fitsfile)
                 maskfile = self.database.red[key]['MASKFILE'][j]
                 mask = ut.read_msk(maskfile)
+
+                log.info('Analyzing file ' + fitsfile)
 
                 # Get the raw contrast information with and without mask correction
                 file_str = fitsfile.split('/')[-1]
