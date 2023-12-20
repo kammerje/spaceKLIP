@@ -327,15 +327,23 @@ class AnalysisTools():
                 xx = np.arange(data.shape[2]) - center[0]  # pix
                 yy = np.arange(data.shape[1]) - center[1]  # pix
                 extent = (-(xx[0] - 0.5) * pxsc_arcsec, -(xx[-1] + 0.5) * pxsc_arcsec, (yy[0] - 0.5) * pxsc_arcsec, (yy[-1] + 0.5) * pxsc_arcsec)
-                ax.imshow(data[-1], origin='lower', cmap='inferno', extent=extent)
+                vmax = np.nanmax(data[-1])
+                ax.imshow(data[-1], origin='lower', cmap='inferno',
+                          norm=matplotlib.colors.SymLogNorm(vmin=-vmax, vmax=vmax, linthresh=vmax/100 ),
+                          extent=extent)
                 ax.set_xlabel(r'$\Delta$RA [arcsec]')
                 ax.set_ylabel(r'$\Delta$Dec [arcsec]')
-                ax.set_title('Masked data (' + klmodes[-1] + ' KL)')
+                ax.set_title(f'Masked data in {filt} ({klmodes[-1]} KL)')
+                for r in [5,10]:
+                    ax.add_patch(matplotlib.patches.Circle((0,0), r, ls='--', facecolor='none', edgecolor='cyan', clip_on=True))
+                    ax.text(r, 0, f" {r}''", color='cyan')
+                import textwrap
+                ax.text(0.01, 0.99, textwrap.fill(os.path.basename(fitsfile), width=40),
+                                    transform=ax.transAxes, color='black', verticalalignment='top', fontsize=9)
+                plt.colorbar(mappable=ax.images[0], label=self.database.red[key]['BUNIT'][j])
                 plt.tight_layout()
                 plt.savefig(fitsfile[:-5] + '_masked.pdf')
-                # plt.show()
-                plt.close()
-                
+
                 # Plot raw contrast.
                 klmodes = self.database.red[key]['KLMODES'][j].split(',')
                 fitsfile = os.path.join(output_dir, os.path.split(fitsfile)[1])
@@ -347,21 +355,20 @@ class AnalysisTools():
                     if mask is None:
                         ax.plot(seps[k], cons[k], color=colors[k % mod], label=klmodes[k] + ' KL')
                     else:
-                        ax.plot(seps[k], cons[k], color=colors[k % mod], alpha=0.3)
+                        ax.plot(seps[k], cons[k], color=colors[k % mod], alpha=0.3, ls='--')
                         ax.plot(seps[k], cons_mask[k], color=colors[k % mod], label=klmodes[k] + ' KL')
                 ax.set_yscale('log')
                 ax.set_ylim([None,1])
+                if plot_xlim is not None:
+                    ax.set_xlim(plot_xlim)
                 ax.set_xlabel('Separation [arcsec]')
                 ax.set_ylabel(r'5-$\sigma$ contrast')
-                ax.legend(loc='upper right', ncols=3)
-                if mask is None:
-                    ax.set_title('Raw contrast')
-                else:
-                    ax.set_title('Raw contrast (transparent lines excl. mask TP)')
+                ax.legend(loc='upper right', ncols=3,
+                          title=None if mask is None else 'Dashed lines exclude coronagraph mask throughput',
+                          title_fontsize=10)
+                ax.set_title(f'Raw contrast in {filt}')
                 plt.tight_layout()
                 plt.savefig(fitsfile[:-5] + '_rawcon.pdf')
-                # plt.show()
-                plt.close()
 
                 if output_filetype.lower()=='ecsv':
                     # Save outputs as astropy ECSV text tables
@@ -404,7 +411,8 @@ class AnalysisTools():
                            injection_flux_sigma=20,
                            multi_injection_spacing=None,
                            use_saved=False,
-                           thrput_fit_method='median'
+                           thrput_fit_method='median',
+                           plot_xlim=(0,10)
                            ):
         """ 
         Compute a calibrated contrast curve relative to the host star flux. 
@@ -702,27 +710,54 @@ class AnalysisTools():
                 # Save the corrected contrasts, as well as the separations for convenience. 
                 np.save(save_string+'_cal_seps.npy', rawseps)
                 np.save(save_string+'_cal_cons.npy', rawcons_corr)
-                np.save(save_string+'_cal_maskcons.npy', rawcons_corr)
+                np.save(save_string+'_cal_maskcons.npy', maskcons_corr)
 
-                # Plot measured KLIP throughputs
-                fig = plt.figure(figsize=(6.4, 4.8))
-                ax = plt.gca()
-                color = plt.cm.tab10(np.linspace(0, 1, 10))
-                cc = (cycler(linestyle=['-', ':', '--'])*cycler(color=color))
-                ax.set_prop_cycle(cc)
+                # Define some local utilty functions for plot setup.
+                # This makes the plotting code below less repetitive and more consistent
+                def standardize_plots_setup():
+                    fig = plt.figure(figsize=(6.4, 4.8))
+                    ax = plt.gca()
+                    color = plt.cm.tab10(np.linspace(0, 1, 10))
+                    cc = (cycler(linestyle=['-', ':', '--'])*cycler(color=color))
+                    ax.set_prop_cycle(cc)
+                    return fig, ax
+
+                def standardize_plots_annotate_save(ax, title="",
+                                                    ylabel='Throughput',
+                                                    xlim=plot_xlim,
+                                                    filename=None):
+                    ax.set_xlabel('Separation (")')
+                    ax.set_title(title, fontsize=11)
+                    if ylabel=='Throughput':
+                        ax.set_ylim(0,1)
+                        ax.set_ylabel('Throughput')
+                    else: # or else it's contrast on a log scale
+                        ax.set_yscale('log')
+                        ax.set_ylabel(r'5-$\sigma$ contrast')
+                        ax.set_ylim(None, 1)
+                    if xlim is not None:
+                        ax.set_xlim(*xlim)
+                    ax.grid(axis='both', alpha=0.15)
+                    if filename is not None:
+                        plt.savefig(filename,
+                                    bbox_inches='tight', dpi=300)
+
+
+
+
+                # Plot measured KLIP throughputs, for all KL modes
+                fig, ax = standardize_plots_setup()
+
                 for ci, corr in enumerate(all_corrections):
                     KLmodes = klip_args['numbasis'][ci]
                     ax.plot(rawseps[ci], corr, label='KL = {}'.format(KLmodes))
                 ax.legend(ncol=3, fontsize=10)
-                ax.set_xlabel('Separation (")')
-                ax.set_ylabel('Throughput')
-                ax.grid(axis='both', alpha=0.15)
-                plt.savefig(save_string + '_allKL_throughput.pdf', 
-                            bbox_inches='tight', dpi=300)
+                standardize_plots_annotate_save(ax, title=f'Injected companions in {filt}, all KL modes',
+                                                ylabel='Throughput',
+                                                filename=save_string + '_allKL_throughput.pdf')
 
                 # Plot individual measurements for median KL mode
-                fig = plt.figure(figsize=(6.4, 4.8))
-                ax = plt.gca()
+                fig, ax = standardize_plots_setup()
 
                 ax.plot(rawseps[median_KL_index], 
                         all_corrections[median_KL_index],
@@ -735,31 +770,43 @@ class AnalysisTools():
                            alpha=0.5,
                            label='Individual Injections')
                 ax.legend(fontsize=10)
-                ax.set_xlabel('Separation (")')
-                ax.set_ylabel('Throughput')
-                ax.grid(axis='both', alpha=0.15)
-                plt.savefig(save_string + '_medKL_throughput.pdf', 
-                            bbox_inches='tight', dpi=300)
+                standardize_plots_annotate_save(ax,
+                                                title=f"Injected companions in {filt} for KL={klip_args['numbasis'][median_KL_index]}",
+                                                ylabel='Throughput',
+                                                filename=save_string + '_medKL_throughput.pdf')
 
                 # Plot calibrated contrast curves
-                fig = plt.figure(figsize=(6.4, 4.8))
-                ax = plt.gca()
-                ax.set_prop_cycle(cc)
+                fig, ax = standardize_plots_setup()
                 for si, seps in enumerate(rawseps):
                     KLmodes = klip_args['numbasis'][si]
-                    ax.plot(seps, maskcons_corr[si], 
-                            label='KL = {}'.format(KLmodes))
-                    ax.plot(seps, rawcons_corr[si], alpha=0.3)
-                ax.set_yscale('log')
-                ax.set_ylim([None,1])
-                ax.set_xlabel('Separation [arcsec]')
-                ax.set_ylabel(r'5-$\sigma$ contrast')
-                ax.legend(loc='upper right', ncols=3, fontsize=10)
-                ax.set_title('Calibrated contrast (transparent lines excl. mask TP)',
-                             fontsize=11)
-                plt.savefig(save_string + '_calcon.pdf', 
-                            bbox_inches='tight', dpi=300)
-    
+                    ax.plot(seps, maskcons_corr[si],
+                            label=f'KL = {KLmodes}', color=f'C{si}')
+                    ax.plot(seps, rawcons_corr[si], alpha=0.3, ls='--',
+                            color=f'C{si}')
+                ax.legend(loc='upper right', ncols=3, fontsize=10,
+                          title = 'Dashed lines exclude coronagraph mask throughput',
+                          title_fontsize=10)
+                standardize_plots_annotate_save(ax,
+                                                title=f'Calibrated contrast in {filt}',
+                                                ylabel='Contrast',
+                                                filename=save_string + '_calcon.pdf')
+
+                # Plot calibrated contrast curves compared to raw
+                fig, ax = standardize_plots_setup()
+                for si, seps in enumerate(rawseps):
+                    KLmodes = klip_args['numbasis'][si]
+                    ax.plot(seps, maskcons_corr[si],
+                            label=f'KL = {KLmodes}', color=f'C{si}')
+                    ax.plot(seps, maskcons[si], alpha=0.3, ls=':',
+                            color=f'C{si}')
+                ax.legend(loc='upper right', ncols=3, fontsize=10,
+                          title = 'Solid lines = calibrated, dotted lines = raw',
+                          title_fontsize=10)
+                standardize_plots_annotate_save(ax,
+                                                title=f'Calibrated contrast vs Raw contrast in {filt}',
+                                                ylabel='Contrast',
+                                                filename=save_string + '_calcon_vs_rawcon.pdf')
+
     def extract_companions(self,
                            companions,
                            starfile,
