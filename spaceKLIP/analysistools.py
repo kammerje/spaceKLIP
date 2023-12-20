@@ -930,7 +930,7 @@ class AnalysisTools():
                     resolution = np.hypot(resolution, self.database.obs[key]['BLURFWHM'][j])
                 
                 # Find science and reference files.
-                filepaths, psflib_filepaths, maxnumbasis = get_pyklip_filepaths(database, key, return_maxbasis=True)
+                filepaths, psflib_filepaths, maxnumbasis = get_pyklip_filepaths(self.database, key, return_maxbasis=True)
                 if 'maxnumbasis' not in kwargs_temp.keys() or kwargs_temp['maxnumbasis'] is None:
                     kwargs_temp['maxnumbasis'] = maxnumbasis
                 
