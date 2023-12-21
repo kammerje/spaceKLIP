@@ -10,7 +10,7 @@ build:
     python: "3.11"
 
 python:
-  version: 3.8
+  version: 3.11
   install:
     - requirements: requirements.txt
     - requirements: requirements-dev.txt
