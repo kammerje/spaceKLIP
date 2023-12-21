@@ -592,6 +592,103 @@ class ImageTools():
                 # Update spaceKLIP database.
                 self.database.update_obs(key, j, fitsfile, maskfile)
     
+    def subtract_background_godoy(self,
+                                  types=['SCI', 'REF'],
+                                  subdir='bgsub'):
+
+        # Set output directory.
+        output_dir = os.path.join(self.database.output_dir, subdir)
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+
+        # Loop through concatenations.
+        for i, key in enumerate(self.database.obs.keys()):
+
+            # Load in bunch of stuff
+            # Find science, reference, and background files.
+            ww_sci = np.where(self.database.obs[key]['TYPE'] == 'SCI')[0]
+            ww_ref = np.where(self.database.obs[key]['TYPE'] == 'REF')[0]
+            ww_sci_bg = np.where(self.database.obs[key]['TYPE'] == 'SCI_BG')[0]
+            ww_ref_bg = np.where(self.database.obs[key]['TYPE'] == 'REF_BG')[0]
+
+            # Loop over science and reference files
+            for typ in types:
+                if typ == 'SCI':
+                    ww, ww_bg = ww_sci, ww_sci_bg
+                elif typ == 'REF':
+                    ww, ww_bg = ww_ref, ww_ref_bg
+
+                # Gather background files.
+                if len(ww_bg) == 0:
+                    raise UserWarning('Could not find any background files.')
+                else:
+                    bg_data, bg_erro, bg_pxdq  = [], [], []
+                    for j in ww_bg:
+                        # Read  background file.
+                        fitsfile = self.database.obs[key]['FITSFILE'][j]
+                        data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs = ut.read_obs(fitsfile)
+
+                        # Compute median science background.
+                        bg_data += [data]
+                        bg_erro += [erro]
+                        bg_pxdq += [pxdq]
+                    bg_data, bg_erro, bg_pxdq = np.array(bg_data), np.array(bg_erro), np.array(bg_pxdq)
+
+                    # If multiple files, take the median. Otherwise, carry on. 
+                    if bg_data.ndim == 4:
+                        bg_data = np.nanmedian(bg_data, axis=0)
+
+                # Loop over individual files
+                for j in ww:
+                    # Read FITS file.
+                    fitsfile = self.database.obs[key]['FITSFILE'][j]
+                    data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs = ut.read_obs(fitsfile)
+
+                    # Subtract the background per frame
+                    data -= bg_data
+
+                    # Loop over integrations
+                    data_bg_sub = np.empty_like(data)
+                    for k in range(data.shape[0]):
+                        # Subtract median of corresponding background frame from the frame
+                        bg_submed = bg_data[k,:,:] - np.nanmedian(bg_data[k,:,:])
+                        # Do the same for the data
+                        data_submed = data[k,:,:] - np.nanmedian(data[k,:,:])
+
+                        # Specify sections for initial guess
+                        # sect1 = data_submed[108:118,12:62]/bg_submed[108:118,12:62]
+                        # sect2 = data_submed[93:106,152:207]/bg_submed[93:106,152:207]
+                        sect1 = data_submed[112:118,4:10]/bg_submed[112:118,4:10]
+                        sect2 = data_submed[95:101,207:212]/bg_submed[95:101,207:212]
+
+                        # Reshape into 1d arrays and concatenate
+                        s1 = sect1.reshape(1,sect1.shape[0]*sect1.shape[1])
+                        s2 = sect2.reshape(1,sect2.shape[0]*sect2.shape[1])
+                        s12 = np.concatenate((s1[0,:],s2[0,:])) 
+
+                        # Take median of concatenated array
+                        cte = np.nanmedian(s12)
+
+                        # Run minimisation function 
+                        res = minimize(ut.bg_minimize, x0=cte*100,args=(data_submed, bg_submed), method='L-BFGS-B', tol=1e-7)
+
+                        # Get scaling value for median subtracted background frame
+                        scale = res.x/100
+
+                        # Get residuals between scaled background and science frame
+                        resid = data_submed - bg_submed*scale
+
+                        # Magic part, new data is the residuals - median of residuals
+                        data_bg_sub[k] = resid - np.nanmedian(resid)
+
+                    # Write FITS file and PSF mask.
+                    fitsfile = ut.write_obs(fitsfile, output_dir, data_bg_sub, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs)
+                    
+                    # Update spaceKLIP database.
+                    self.database.update_obs(key, j, fitsfile)
+        
+        pass
+
     def subtract_background(self,
                             nints_per_med=None,
                             subdir='bgsub'):
@@ -2192,4 +2289,5 @@ class ImageTools():
                 plt.savefig(output_file)
                 log.info(f" Plot saved in {output_file}")
                 plt.close()
+
 

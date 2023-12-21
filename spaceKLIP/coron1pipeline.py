@@ -19,6 +19,8 @@ import numpy as np
 from tqdm.auto import trange
 
 from jwst.lib import reffile_utils
+from jwst.stpipe import Step
+from jwst import datamodels
 from jwst.datamodels import dqflags, RampModel, SaturationModel
 from jwst.pipeline import Detector1Pipeline, Image2Pipeline, Coron3Pipeline
 from .fnoise_clean import kTCSubtractStep, OneOverfStep
@@ -72,6 +74,7 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         
         """
 
+        self.step_defs['mask_groups'] = MaskGroupsStep
         self.step_defs['subtract_ktc'] = kTCSubtractStep
         self.step_defs['subtract_1overf'] = OneOverfStep
         
@@ -135,6 +138,7 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
             input = self.do_refpix(input)
             input = self.run_step(self.charge_migration, input)
             input = self.run_step(self.jump, input)
+            input = self.run_step(self.mask_groups, input)
             # TODO: Include same / similar subtract_1overf step???
         else:
             input = self.run_step(self.group_scale, input)
@@ -642,6 +646,10 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     skip_vert = kwargs.get('skip_fnoise_vert', False)
     pipeline.subtract_1overf.vertical_corr = not skip_vert
 
+    pipeline.mask_groups.groups_to_mask = kwargs.get('groups_to_mask', [])
+    if not pipeline.mask_groups.groups_to_mask:
+        pipeline.mask_groups.skip = True
+
     # Skip dark current for subarray by default, but not full frame
     skip_dark     = kwargs.get('skip_dark', None)
     if skip_dark is None:
@@ -848,6 +856,14 @@ def run_obs(database,
                 if not quiet: log.info('  --> Coron1Pipeline: skipping non-stage 0 file ' + tail)
                 continue
 
+            # Want to adjust certain pipeline steps depending on the type of file
+            if 'mask_groups' in steps:
+                if 'types' in steps['mask_groups']:
+                    if database.obs[key]['TYPE'][j] not in steps['mask_groups']['types']:
+                        steps['mask_groups']['skip'] = True
+                    else:
+                        steps['mask_groups']['skip'] = False
+
             # Get expected output file name
             outfile_name = tail.replace('uncal.fits', 'rateints.fits')
             fitsout_path = os.path.join(output_dir, outfile_name)
@@ -862,3 +878,20 @@ def run_obs(database,
             
             # Update spaceKLIP database.
             database.update_obs(key, j, fitsout_path)
+
+
+class MaskGroupsStep(Step):
+    """
+    Mask particular groups prior to ramp fitting
+    """
+    class_alias = "maskgroups"
+
+    def process(self, input):
+        """Mask particular groups prior to ramp fitting"""
+        with datamodels.open(input) as input_model:
+            datamodel = input_model.copy()
+            
+            # Set particular groups to DO_NOT_USE
+            datamodel.groupdq[:,self.groups_to_mask,:,:] = 1
+
+        return datamodel
