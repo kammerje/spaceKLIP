@@ -32,7 +32,7 @@ You will also need to install some other specific packages, namely:
 
 ::
 
-	pip install git+https://bitbucket.org/pyKLIP/pyklip.git@jwst
+	pip install git+https://bitbucket.org/pyKLIP/pyklip.git@jwst_new
 	pip install git+https://github.com/JarronL/webbpsf_ext.git
 
 Finally, and very importantly, you will need to download reference files to support the functioning of 

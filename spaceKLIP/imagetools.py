@@ -36,6 +36,8 @@ from webbpsf_ext import robust
 from webbpsf_ext.coords import dist_image
 from webbpsf_ext.webbpsf_ext_core import _transmission_map
 
+from webbpsf.constants import JWST_CIRCUMSCRIBED_DIAMETER
+
 import logging
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -605,6 +607,7 @@ class ImageTools():
             set to 5, a median of every 5 background images will be subtracted from
             the corresponding 5 target images. The default is None (i.e. a median 
             across all images).
+
         subdir : str, optional
             Name of the directory where the data products shall be saved. The
             default is 'bgsub'.
@@ -659,6 +662,7 @@ class ImageTools():
                 sci_bg_data = np.concatenate(sci_bg_data)
                 sci_bg_erro = np.concatenate(sci_bg_erro)
                 sci_bg_pxdq = np.concatenate(sci_bg_pxdq)
+
                 sci_bg_data_split = np.array_split(sci_bg_data, split_inds, axis=0)
                 sci_bg_erro_split = np.array_split(sci_bg_erro, split_inds, axis=0)
                 sci_bg_pxdq_split = np.array_split(sci_bg_pxdq, split_inds, axis=0)
@@ -695,6 +699,7 @@ class ImageTools():
                 ref_bg_data = np.concatenate(ref_bg_data)
                 ref_bg_erro = np.concatenate(ref_bg_erro)
                 ref_bg_pxdq = np.concatenate(ref_bg_pxdq)
+
                 ref_bg_data_split = np.array_split(ref_bg_data, split_inds, axis=0)
                 ref_bg_erro_split = np.array_split(ref_bg_erro, split_inds, axis=0)
                 ref_bg_pxdq_split = np.array_split(ref_bg_pxdq, split_inds, axis=0)
@@ -1391,7 +1396,7 @@ class ImageTools():
                         if self.database.obs[key]['EXP_TYPE'][j] in ['NRC_CORON']:
                             diam = 5.2
                         else:
-                            diam = 6.5
+                            diam = JWST_CIRCUMSCRIBED_DIAMETER
                     else:
                         raise UserWarning('Data originates from unknown telescope')
                     if fact_temp is not None:
@@ -2094,8 +2099,8 @@ class ImageTools():
                         log.warning('  --> The following frames might not be properly aligned: '+str(ww))
                 
                 # Write FITS file and PSF mask.
-                head_pri['XOFFSET'] = xoffset
-                head_pri['YOFFSET'] = yoffset
+                head_pri['XOFFSET'] = xoffset #arcseconds
+                head_pri['YOFFSET'] = yoffset #arcseconds 
                 head_sci['CRPIX1'] = crpix1
                 head_sci['CRPIX2'] = crpix2
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs)
@@ -2115,6 +2120,7 @@ class ImageTools():
                            label='PA = %.0f deg' % self.database.obs[key]['ROLL_REF'][j])
             ax.axhline(0., color='gray', lw=1, zorder=-1)  # set zorder to ensure lines are drawn behind all the scatter points
             ax.axvline(0., color='gray', lw=1, zorder=-1)
+
             ax.set_aspect('equal')
             xlim = ax.get_xlim()
             ylim = ax.get_ylim()
@@ -2186,3 +2192,4 @@ class ImageTools():
                 plt.savefig(output_file)
                 log.info(f" Plot saved in {output_file}")
                 plt.close()
+
