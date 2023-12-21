@@ -6,3 +6,5 @@ matplotlib
 numpy
 scipy
 webbpsf
+webbpsf_ext
+pyklip
