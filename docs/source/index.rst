@@ -47,7 +47,7 @@ adapted by the user if necessary.
 Compatible Simulated Data: `Here <https://stsci.box.com/s/cktghuyrwrallb401rw5y5da2g5ije6t>`_
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Getting Started
    :hidden:
 
@@ -55,11 +55,11 @@ Compatible Simulated Data: `Here <https://stsci.box.com/s/cktghuyrwrallb401rw5y5
    Installation-and-dependencies
 
 .. toctree::
-   :maxdepth: 3
+   :maxdepth: 1
    :caption: Tutorials
    :hidden:
 
-   tutos
+   tutorials
    tutorials/tutorial_NIRCam_reductions.ipynb
    tutorials/tutorial_MIRI_reductions.ipynb
    tutorials/tutorial_NIRCam_contrast_analyses.ipynb
@@ -67,7 +67,7 @@ Compatible Simulated Data: `Here <https://stsci.box.com/s/cktghuyrwrallb401rw5y5
    tutorials/MAST query tools for coronagraphic datasets.ipynb
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: spaceKLIP Functionality (Unfinished)
    :hidden:
 
@@ -78,7 +78,7 @@ Compatible Simulated Data: `Here <https://stsci.box.com/s/cktghuyrwrallb401rw5y5
    analysistools
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: About
    :hidden:
 
@@ -86,10 +86,14 @@ Compatible Simulated Data: `Here <https://stsci.box.com/s/cktghuyrwrallb401rw5y5
    Attribution
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Package Content
+   :maxdepth: 1
+   :caption: Package content
    :hidden:
 
    spaceKLIP
    gen_index
+
+
+
+
 
