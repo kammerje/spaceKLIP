@@ -48,13 +48,11 @@ Compatible Simulated Data: `Here <https://stsci.box.com/s/cktghuyrwrallb401rw5y5
 
 .. toctree::
    :maxdepth: 2
-   :caption: Getting started
+   :caption: Getting Started
    :hidden:
 
    TLDR
    Installation-and-dependencies
-   imagetools
-   analysistools
 
 .. toctree::
    :maxdepth: 3
@@ -62,12 +60,22 @@ Compatible Simulated Data: `Here <https://stsci.box.com/s/cktghuyrwrallb401rw5y5
    :hidden:
 
    tutos
-   tutorials/Introduction.ipynb
    tutorials/tutorial_NIRCam_reductions.ipynb
    tutorials/tutorial_MIRI_reductions.ipynb
    tutorials/tutorial_NIRCam_contrast_analyses.ipynb
    tutorials/tutorial_MIRI_contrast_analyses.ipynb
    tutorials/MAST query tools for coronagraphic datasets.ipynb
+
+.. toctree::
+   :maxdepth: 2
+   :caption: spaceKLIP Functionality (Unfinished)
+   :hidden:
+
+   stage1
+   stage2
+   imagetools
+   subtraction
+   analysistools
 
 .. toctree::
    :maxdepth: 2
@@ -79,7 +87,7 @@ Compatible Simulated Data: `Here <https://stsci.box.com/s/cktghuyrwrallb401rw5y5
 
 .. toctree::
    :maxdepth: 2
-   :caption: Package content
+   :caption: Package Content
    :hidden:
 
    spaceKLIP

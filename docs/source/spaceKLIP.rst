@@ -1,4 +1,4 @@
-spaceKLIP detailed API
+Detailed spaceKLIP API
 ======================
 
 spaceKLIP.analysistools module
