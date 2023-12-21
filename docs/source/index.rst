@@ -31,7 +31,7 @@ On a high level, spaceKLIP consists of three different reduction steps:
 SpaceKLIP also provides additional functions for post-pipeline scientific analyses of the PSF subtracted images. These functions can be found in the :ref:`analysistools` module. There are functions to:
 
  * retrieve the properties of detected companions 
- * to compute basic contrast curves
+ * to compute basic and calibrated contrast curves
  * to inject one or more companions into a given data set. 
 
 There are several tutorial Jupyter notebooks which show how to use these
