@@ -128,7 +128,7 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
             input = self.run_step(self.group_scale, input)
             input = self.run_step(self.dq_init, input)
             input = self.run_step(self.saturation, input)
-            input = self.run_step(self.ipc, input)
+            #input = self.run_step(self.ipc, input) Not run for MIRI
             input = self.run_step(self.firstframe, input)
             input = self.run_step(self.lastframe, input)
             input = self.run_step(self.reset, input)
@@ -136,7 +136,7 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
             input = self.run_step(self.rscd, input)
             input = self.run_step(self.dark_current, input)
             input = self.do_refpix(input)
-            input = self.run_step(self.charge_migration, input)
+            #input = self.run_step(self.charge_migration, input) Not run for MIRI
             input = self.run_step(self.jump, input)
             input = self.run_step(self.mask_groups, input)
             # TODO: Include same / similar subtract_1overf step???
