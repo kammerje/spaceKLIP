@@ -7,4 +7,4 @@ numpy
 scipy
 webbpsf
 webbpsf_ext
-pyklip
+pyklip @ git+https://bitbucket.org/pyKLIP/pyklip.git@jwst_new
