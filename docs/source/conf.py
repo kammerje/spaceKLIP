@@ -23,9 +23,13 @@ import sys
 import matplotlib
 matplotlib.use("agg")
 
-import spaceKLIP
-
-version = spaceKLIP.__version__
+# Read in package version, without importing this package directly
+# (to avoid needing to install all the webbpsf datafiles as part of the readthedocs build)
+# This might also use sphinx-pyproject eventually, tbd
+from pkg_resources import get_distribution
+version = get_distribution('spaceKLIP').version
+#import spaceKLIP
+#version = spaceKLIP.__version__
 
 # -- General configuration ------------------------------------------------
 # Add any Sphinx extension module names here, as strings. They can be

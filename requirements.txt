@@ -7,3 +7,5 @@ numpy
 pysynphot
 scipy
 webbpsf
+webbpsf_ext
+pyklip @ git+https://bitbucket.org/pyKLIP/pyklip.git@jwst_new
