@@ -1296,12 +1296,12 @@ class AnalysisTools():
                         hdul[0].header = head
                         hdul.writeto(temp, output_verify='fix', overwrite=True)
                         hdul.close()
+                    
+                    # Restore original pyKLIP dataset.
+                    if subtract:
+                        dataset = dataset_orig
                 
                 # Update source database.
                 self.database.update_src(key, j, tab)
-                
-                # Restore original pyKLIP dataset.
-                if subtract:
-                    dataset = dataset_orig
         
         pass
