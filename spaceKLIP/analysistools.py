@@ -215,15 +215,15 @@ class AnalysisTools():
                     #     ww_sci = np.where(self.database.obs[key]['TYPE'] == 'SCI')[0]
                     #     for ww in ww_sci:
                     #         roll_ref = self.database.obs[key]['ROLL_REF'][ww]  # deg
-                    #         pa1 = (119.1 - 30. + roll_ref) % 360.
-                    #         pa2 = (119.1 + 30. + roll_ref) % 360.
+                    #         pa1 = (119.1 - 75. + roll_ref) % 360.
+                    #         pa2 = (119.1 + 75. + roll_ref) % 360.
                     #         if pa1 > pa2:
                     #             temp = (pa > pa1) | (pa < pa2)
                     #         else:
                     #             temp = (pa > pa1) & (pa < pa2)
                     #         data[:, temp] = np.nan
-                    #         pa1 = (299.1 - 30. + roll_ref) % 360.
-                    #         pa2 = (299.1 + 30. + roll_ref) % 360.
+                    #         pa1 = (299.1 - 75. + roll_ref) % 360.
+                    #         pa2 = (299.1 + 75. + roll_ref) % 360.
                     #         if pa1 > pa2:
                     #             temp = (pa > pa1) | (pa < pa2)
                     #         else:
@@ -301,7 +301,7 @@ class AnalysisTools():
                 seps = []
                 cons = []
                 for k in range(data.shape[0]):
-                    sep, con = klip.meas_contrast(dat=data[k] * pxar / fstar, iwa=iwa, owa=owa, resolution=resolution, center=center, low_pass_filter=False)
+                    sep, con = klip.meas_contrast(dat=np.abs(data[k]) * pxar / fstar, iwa=iwa, owa=owa, resolution=resolution, center=center, low_pass_filter=False)
                     seps += [sep * self.database.red[key]['PIXSCALE'][j]]   # arcsec
                     cons += [con]
                 seps = np.array(seps)
@@ -312,7 +312,7 @@ class AnalysisTools():
                 if mask is not None:
                     cons_mask = []
                     for k in range(data.shape[0]):
-                        _, con_mask = klip.meas_contrast(dat=np.true_divide(data[k], mask) * pxar / fstar, iwa=iwa, owa=owa, resolution=resolution, center=center, low_pass_filter=False)
+                        _, con_mask = klip.meas_contrast(dat=np.true_divide(np.abs(data[k]), mask) * pxar / fstar, iwa=iwa, owa=owa, resolution=resolution, center=center, low_pass_filter=False)
                         cons_mask += [con_mask]
                     cons_mask = np.array(cons_mask)
                 
@@ -827,14 +827,14 @@ class AnalysisTools():
                         
                         # Compute the FM dataset.
                         mode = self.database.red[key]['MODE'][j]
-                        # annuli = 1
-                        # subsections = 1
-                        annuli = [[guess_sep - 35., guess_sep + 35.]]  # pix
-                        if guess_sep < 35.:
-                            dpa = np.pi  # rad
-                        else:
-                            dpa = 35. / guess_sep  # rad
-                        subsections = [[np.deg2rad(guess_pa) - dpa, np.deg2rad(guess_pa) + dpa]]
+                        annuli = int(self.database.red[key]['ANNULI'][j])
+                        subsections = int(self.database.red[key]['SUBSECTS'][j])
+                        # annuli = [[guess_sep - 35., guess_sep + 35.]]  # pix
+                        # if guess_sep < 35.:
+                        #     dpa = np.pi  # rad
+                        # else:
+                        #     dpa = 35. / guess_sep  # rad
+                        # subsections = [[np.deg2rad(guess_pa) - dpa, np.deg2rad(guess_pa) + dpa]]
                         if not isinstance(highpass, bool):
                             if k == 0:
                                 highpass_temp = float(highpass)
@@ -913,8 +913,8 @@ class AnalysisTools():
                         dr = 5  # pix
                         exclusion_radius = 3 * resolution  # pix
                         corr_len_guess = 3.  # pix
-                        xrange = 2.  # pix
-                        yrange = 2.  # pix
+                        xrange = 3.  # pix
+                        yrange = 3.  # pix
                         # xrange = 0.001  # pix
                         # yrange = 0.001  # pix
                         frange = 10.  # mag

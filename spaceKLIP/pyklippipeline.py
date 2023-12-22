@@ -142,6 +142,13 @@ class SpaceTelescope(Data):
         self._IWA = newval
     
     @property
+    def OWA(self):
+        return self._OWA
+    @OWA.setter
+    def OWA(self, newval):
+        self._OWA = newval
+    
+    @property
     def psflib(self):
         return self._psflib
     @psflib.setter
@@ -244,6 +251,7 @@ class SpaceTelescope(Data):
             iwa_all = 0.5 * np.min(wvs_all) / 6.5 * 180. / np.pi * 3600. / PIXSCALE[0]  # pix
         else:
             iwa_all = 1.  # pix
+        owa_all = np.sum(np.array(input_all.shape[1:]) / 2.)  # pix
 
         # Recenter science images.
         new_center = (np.array(data.shape[1:]) - 1.) / 2.
@@ -262,6 +270,7 @@ class SpaceTelescope(Data):
         self._wvs = wvs_all
         self._wcs = wcs_all
         self._IWA = iwa_all
+        self._OWA = owa_all
         
         pass
     
