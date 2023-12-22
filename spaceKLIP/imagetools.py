@@ -596,6 +596,25 @@ class ImageTools():
                                   types=['SCI', 'REF'],
                                   subdir='bgsub'):
 
+        """
+        Subtract the corresponding background observations from the SCI and REF
+        data in the spaceKLIP database using a method developed by Nico Godoy. 
+        
+        Parameters
+        ----------
+        types : list of str
+            File types to run the subtraction over.
+
+        subdir : str, optional
+            Name of the directory where the data products shall be saved. The
+            default is 'bgsub'.
+        
+        Returns
+        -------
+        None.
+        
+        """
+
         # Set output directory.
         output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
@@ -669,8 +688,17 @@ class ImageTools():
                         # Take median of concatenated array
                         cte = np.nanmedian(s12)
 
+                        # Use filter to determine mask for estimating BG scaling
+                        # at the moment only have it working for F1140C. 
+                        filt = self.database.obs[key]['FILTER'][j]
+                        if filt != 'F1140C':
+                            raise NotImplementedError('Godoy subtraction is only supported for F1140C at this time!')
+                        else:
+                            bgmaskbase = os.path.split(os.path.abspath(__file__))[0]
+                            bgmaskfile = os.path.join(bgmaskbase, 'resources/miri_bg_masks/godoy_mask_f1140c.fits')
+
                         # Run minimisation function 
-                        res = minimize(ut.bg_minimize, x0=cte*100,args=(data_submed, bg_submed), method='L-BFGS-B', tol=1e-7)
+                        res = minimize(ut.bg_minimize, x0=cte*100,args=(data_submed, bg_submed, bgmaskfile), method='L-BFGS-B', tol=1e-7)
 
                         # Get scaling value for median subtracted background frame
                         scale = res.x/100
