@@ -32,7 +32,7 @@ version = get_distribution('spaceKLIP').version
 #version = spaceKLIP.__version__
 
 # Hack together a WEBBPSF_PATH and version file to avoid API compilation errors
-os.environ['WEBBPSF_PATH'] == '../'
+os.environ['WEBBPSF_PATH'] = '../'
 with open('../version.txt', 'w') as file:
     file.write('9.9.9')
 
