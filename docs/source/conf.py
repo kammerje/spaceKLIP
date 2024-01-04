@@ -31,6 +31,11 @@ version = get_distribution('spaceKLIP').version
 #import spaceKLIP
 #version = spaceKLIP.__version__
 
+# Hack together a WEBBPSF_PATH and version file to avoid API compilation errors
+os.environ['WEBBPSF_PATH'] == '../'
+with open('../version.txt', 'w') as file:
+    file.write('9.9.9')
+
 # -- General configuration ------------------------------------------------
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
