@@ -136,9 +136,11 @@ class AnalysisTools():
 
         # Copy the starfile that will be used into this directory
         starfile_ext = os.path.splitext(starfile)[1]
-        new_starfile_path = output_dir+'/user_starfile'+starfile_ext
-        self.new_starfile_path = new_starfile_path
-        self.contrast_spectral_type = spectral_type
+        new_starfile_path = output_dir+'/'+starfile.split('/')[-1]
+        new_header = '#'+starfile.split('/')[-1] + ' /// {}'.format(spectral_type)+'\n'
+        contrast_curve_info_path = output_dir+'/contrast_curve_info.txt'
+        with open(contrast_curve_info_path, 'w') as ccinfo:
+            ccinfo.write(new_header)
         log.info('Copying starfile {} to {}'.format(starfile, new_starfile_path))
         write_starfile(starfile, new_starfile_path)
 
@@ -540,9 +542,12 @@ class AnalysisTools():
                 resolution_fwhm = 1.025*resolution
 
                 # Get stellar magnitudes and filter zero points, but use the same file as rawcon
-                starfile = self.new_starfile_path
+                ccinfo = os.path.join(rawcon_dir, 'contrast_curve_info.txt')
+                with open(ccinfo) as cci:
+                    starfile, spectral_type = cci.readline().strip('\n').split(' /// ')
+                    starfile = os.path.join(rawcon_dir, starfile.replace('#',''))
                 mstar, fzero = get_stellar_magnitudes(starfile,
-                                                      self.contrast_spectral_type,
+                                                      spectral_type,
                                                       self.database.red[key]['INSTRUME'][j],
                                                       output_dir=output_dir)  # vegamag, Jy
                 filt = self.database.red[key]['FILTER'][j]
