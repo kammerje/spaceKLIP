@@ -39,13 +39,24 @@ def get_nrcmask_from_apname(apname):
     """Get mask name from aperture name
     
     The aperture name is of the form:
-        NRC[A/B][1-5]_[FULL]_[MASK]_[FILTER]
+    NRC[A/B][1-5]_[FULL]_[MASK]_[FILTER]
     where MASK is the name of the coronagraphic mask used.
 
     For target acquisition apertures the mask name can be
     prependend with "TA" (eg., TAMASK335R).
 
     Return 'NONE' if MASK not in input aperture name.
+
+    Parameters
+    ----------
+    apname : str
+        String aperture name as described above
+
+    Returns
+    -------
+    image_mask : str
+        String for image mask
+
     """
 
     if 'MASK' not in apname:

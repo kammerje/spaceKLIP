@@ -23,18 +23,9 @@ import sys
 import matplotlib
 matplotlib.use("agg")
 
-# Read in package version, without importing this package directly
-# (to avoid needing to install all the webbpsf datafiles as part of the readthedocs build)
-# This might also use sphinx-pyproject eventually, tbd
-from pkg_resources import get_distribution
-version = get_distribution('spaceKLIP').version
-#import spaceKLIP
-#version = spaceKLIP.__version__
+import spaceKLIP
 
-# Hack together a WEBBPSF_PATH and version file to avoid API compilation errors
-os.environ['WEBBPSF_PATH'] = '../'
-with open('../version.txt', 'w') as file:
-    file.write('9.9.9')
+version = spaceKLIP.__version__
 
 # -- General configuration ------------------------------------------------
 # Add any Sphinx extension module names here, as strings. They can be
@@ -45,7 +36,7 @@ extensions = [
     'sphinx.ext.todo',
     'sphinx.ext.mathjax',
     'sphinx.ext.viewcode',
-    'sphinx.ext.napoleon',
+    'sphinx_automodapi.automodapi',
     'nbsphinx'
     # 'sphinx.ext.githubpages',
 ]

@@ -47,6 +47,7 @@ def run_obs(database,
     kwargs : dict, optional
         Keyword arguments for the classical PSF subtraction method. Available
         keywords are:
+
         - combine_dithers : bool, optional
             Combine all dither positions into a single reference PSF or
             subtract each dither position individually? The default is True.
@@ -54,16 +55,18 @@ def run_obs(database,
             Save each processed roll separately? The default is False.
         - mask_bright : float, optional
             Mask all pixels brighter than this value before minimizing the
-            PSF subtraction residuals.
+            PSF subtraction residuals. 
+
         The default is {}.
+
     subdir : str, optional
         Name of the directory where the data products shall be saved. The
         default is 'psfsub'.
-    
+
     Returns
     -------
     None.
-    
+
     """
     
     # Check input.

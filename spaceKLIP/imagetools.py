@@ -490,9 +490,6 @@ class ImageTools():
         subdir : str, optional
             Name of the directory where the data products shall be saved. The
             default is 'medsub'.
-        
-       None.
-        
         method : str
             'robust' for a robust median after masking out bright stars,
             'sigma_clipped' for another version of robust median using astropy sigma_clipped_stats on the whole image,
@@ -784,13 +781,14 @@ class ImageTools():
                        restrict_to=None):
         """
         Identify and fix bad pixels.
-        
+
         Parameters
         ----------
         method : str, optional
             Sequence of bad pixel identification and cleaning methods to be run
             on the data. Different methods must be joined by a '+' sign without
             whitespace. Available methods are:
+
             - bpclean: use sigma clipping to identify additional bad pixels.
             - custom: use a custom bad pixel map.
             - timemed: replace pixels which are only bad in some frames with
@@ -798,9 +796,11 @@ class ImageTools():
             - dqmed: replace bad pixels with the median value of their
                      surrounding good pixels.
             - medfilt: replace bad pixels with an image plane median filter.
+
             The default is 'timemed+dqmed+medfilt'.
         bpclean_kwargs : dict, optional
             Keyword arguments for the 'bpclean' method. Available keywords are:
+
             - sigclip : float, optional
                 Sigma clipping threshold. The default is 5.
             - shift_x : list of int, optional
@@ -809,6 +809,7 @@ class ImageTools():
             - shift_y : list of int, optional
                 Pixels in y-direction to which each pixel shall be compared to.
                 The default is [-1, 0, 1].
+
             The default is {}.
         custom_kwargs : dict, optional
             Keyword arguments for the 'custom' method. The dictionary keys must
@@ -817,21 +818,27 @@ class ImageTools():
             same shape as the corresponding data. The default is {}.
         timemed_kwargs : dict, optional
             Keyword arguments for the 'timemed' method. Available keywords are:
+
             - n/a
+
             The default is {}.
         dqmed_kwargs : dict, optional
             Keyword arguments for the 'dqmed' method. Available keywords are:
+
             - shift_x : list of int, optional
                 Pixels in x-direction from which the median shall be computed.
                 The default is [-1, 0, 1].
             - shift_y : list of int, optional
                 Pixels in y-direction from which the median shall be computed.
                 The default is [-1, 0, 1].
+
             The default is {}.
         medfilt_kwargs : dict, optional
             Keyword arguments for the 'medfilt' method. Available keywords are:
+
             - size : int, optional
                 Kernel size of the median filter to be used. The default is 4.
+
             The default is {}.
         types : list of str, optional
             List of data types for which bad pixels shall be identified and
@@ -844,7 +851,7 @@ class ImageTools():
         Returns
         -------
         None.
-        
+
         """
         
         # Set output directory.
@@ -951,6 +958,7 @@ class ImageTools():
             be modified by the routine.
         bpclean_kwargs : dict, optional
             Keyword arguments for the 'bpclean' method. Available keywords are:
+
             - sigclip : float, optional
                 Sigma clipping threshold. The default is 5.
             - shift_x : list of int, optional
@@ -959,12 +967,13 @@ class ImageTools():
             - shift_y : list of int, optional
                 Pixels in y-direction to which each pixel shall be compared to.
                 The default is [-1, 0, 1].
+
             The default is {}.
         
         Returns
         -------
         None.
-        
+
         """
         
         # Check input.
@@ -1152,18 +1161,20 @@ class ImageTools():
             the routine to exclude the fixed bad pixels.
         dqmed_kwargs : dict, optional
             Keyword arguments for the 'dqmed' method. Available keywords are:
+
             - shift_x : list of int, optional
                 Pixels in x-direction from which the median shall be computed.
                 The default is [-1, 0, 1].
             - shift_y : list of int, optional
                 Pixels in y-direction from which the median shall be computed.
                 The default is [-1, 0, 1].
+
             The default is {}.
         
         Returns
         -------
         None.
-        
+
         """
         
         # Check input.
@@ -1240,14 +1251,16 @@ class ImageTools():
             the routine to exclude the fixed bad pixels.
         medfilt_kwargs : dict, optional
             Keyword arguments for the 'medfilt' method. Available keywords are:
+
             - size : int, optional
                 Kernel size of the median filter to be used. The default is 4.
+
             The default is {}.
-        
+
         Returns
         -------
         None.
-        
+
         """
         
         # Check input.
