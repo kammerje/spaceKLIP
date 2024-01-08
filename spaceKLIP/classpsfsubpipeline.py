@@ -55,16 +55,18 @@ def run_obs(database,
             Save each processed roll separately? The default is False.
         - mask_bright : float, optional
             Mask all pixels brighter than this value before minimizing the
-            PSF subtraction residuals. The default is {}.
+            PSF subtraction residuals. 
+
+        The default is {}.
 
     subdir : str, optional
         Name of the directory where the data products shall be saved. The
         default is 'psfsub'.
-    
+
     Returns
     -------
     None.
-    
+
     """
     
     # Check input.

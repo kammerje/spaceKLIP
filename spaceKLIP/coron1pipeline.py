@@ -780,6 +780,7 @@ def run_obs(database,
             max number of parallel processes to create during ramp fitting.
             'none', 'quarter', 'half', or 'all'. Default: 'quarter'.
 
+        Default is {}.
         Each of these parameters can be passed directly through `kwargs`.
     subdir : str, optional
         Name of the directory where the data products shall be saved. The
