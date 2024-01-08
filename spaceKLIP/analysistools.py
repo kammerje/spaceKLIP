@@ -137,8 +137,10 @@ class AnalysisTools():
         # Copy the starfile that will be used into this directory
         starfile_ext = os.path.splitext(starfile)[1]
         new_starfile_path = output_dir+'/user_starfile'+starfile_ext
-        new_header = '#'+starfile.split('/')[-1] + ' /// {}'.format(spectral_type)+'\n'
-        write_starfile(starfile, new_starfile_path, new_header)
+        self.new_starfile_path = new_starfile_path
+        self.contrast_spectral_type = spectral_type
+        log.info('Copying starfile {} to {}'.format(starfile, new_starfile_path))
+        write_starfile(starfile, new_starfile_path)
 
         # Loop through concatenations.
         for i, key in enumerate(self.database.red.keys()):
@@ -538,12 +540,10 @@ class AnalysisTools():
                 resolution_fwhm = 1.025*resolution
 
                 # Get stellar magnitudes and filter zero points, but use the same file as rawcon
-                starfile = os.path.join(rawcon_dir, 'user_starfile.txt')
-                with open(starfile) as sf:
-                    spectral_type = sf.readline().strip('\n').split(' /// ')[-1]
-                mstar, fzero = get_stellar_magnitudes(starfile, 
-                                                      spectral_type, 
-                                                      self.database.red[key]['INSTRUME'][j], 
+                starfile = self.new_starfile_path
+                mstar, fzero = get_stellar_magnitudes(starfile,
+                                                      self.contrast_spectral_type,
+                                                      self.database.red[key]['INSTRUME'][j],
                                                       output_dir=output_dir)  # vegamag, Jy
                 filt = self.database.red[key]['FILTER'][j]
                 fstar = fzero[filt] / 10.**(mstar[filt] / 2.5) / 1e6 * np.max(offsetpsf)  # MJy
