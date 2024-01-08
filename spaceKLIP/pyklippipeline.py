@@ -49,6 +49,7 @@ def run_obs(database,
     kwargs : dict, optional
         Keyword arguments for the pyklip.parallelized.klip_dataset method.
         Available keywords are:
+
         - mode : list of str, optional
             Subtraction modes that shall be looped over. Possible values are
             'ADI', 'RDI', and 'ADI+RDI'. The default is ['ADI+RDI'].
@@ -68,6 +69,7 @@ def run_obs(database,
             Verbose mode? The default is False.
         - save_rolls : bool, optional
             Save each processed roll separately? The default is False.
+
         The default is {}.
     subdir : str, optional
         Name of the directory where the data products shall be saved. The
@@ -76,7 +78,7 @@ def run_obs(database,
     Returns
     -------
     None.
-    
+
     """
     
     # Check input.

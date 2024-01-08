@@ -314,7 +314,10 @@ def display_coron_image(filename):
 def display_coron_dataset(database, restrict_to=None, save_filename=None, stage3=None):
     """
     Display multiple files in a coronagraphic dataset.
-    
+
+    # TODO potentially provide other ways of filtering the data, e.g. to show
+    only the PSF stars or only references, etc.
+
     Parameters
     ----------
     database : spaceklip.Database
@@ -325,13 +328,11 @@ def display_coron_dataset(database, restrict_to=None, save_filename=None, stage3
         Most simply, set this to a filter name to only plot images with that filter.
     save_filename : str
         If provided, the plots will be saved to a PDF file with this name.
-    # TODO potentially provide other ways of filtering the data, e.g. to show
-    only the PSF stars or only references, etc.
     
     Returns
     -------
     None.
-    
+
     """
     
     if save_filename:

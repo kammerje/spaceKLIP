@@ -462,6 +462,7 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         -------
         res : jwst.datamodel
             Output JWST datamodel.
+
         """
         
         # Get number of custom reference pixel rows & columns.
@@ -527,6 +528,7 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     WARNING: Will overwrite exiting files.
 
     This customized implementation can:
+
     - Do a custom saturation correction where only the bottom/top/left/right
       and not the diagonal pixels next to a saturated pixel are flagged.
     - Do a pseudo reference pixel correction. Therefore, flag the requested
@@ -534,7 +536,7 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
       step, and unflag the pseudo reference pixels again. Only applicable for
       subarray data.
     - Remove 1/f noise spatial striping in NIRCam data.
-    
+
     Parameters
     ----------
     fitspath : str
@@ -545,6 +547,7 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
         See here for how to use the steps parameter:
         https://jwst-pipeline.readthedocs.io/en/latest/jwst/user_documentation/running_pipeline_python.html#configuring-a-pipeline-step-in-python
         Custom step parameters are:
+
         - saturation/grow_diagonal : bool, optional
             Flag also diagonal pixels (or only bottom/top/left/right)? 
             The default is True.
@@ -563,6 +566,7 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
             Save the calibrated ramp? The default is False.
 
         Additional useful step parameters:
+
         - saturation/n_pix_grow_sat : int, optional
             Number of pixels to grow for saturation flagging. Default is 1.
         - ramp_fit/suppress_one_group : bool, optional
@@ -621,7 +625,7 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     Returns
     -------
     Pipeline output, either rate or rateint data model.
-    
+
     """
 
     from webbpsf_ext.analysis_tools import nrc_ref_info
@@ -730,6 +734,7 @@ def run_obs(database,
     """
     Run the JWST stage 1 detector pipeline on the input observations database.
     This customized implementation can:
+
     - Do a custom saturation correction where only the bottom/top/left/right
       and not the diagonal pixels next to a saturated pixel are flagged.
     - Do a pseudo reference pixel correction. Therefore, flag the requested
@@ -746,6 +751,7 @@ def run_obs(database,
         See here for how to use the steps parameter:
         https://jwst-pipeline.readthedocs.io/en/latest/jwst/user_documentation/running_pipeline_python.html#configuring-a-pipeline-step-in-python
         Custom step parameters are:
+
         - saturation/grow_diagonal : bool, optional
             Flag also diagonal pixels (or only bottom/top/left/right)? 
             The default is True.
@@ -764,6 +770,7 @@ def run_obs(database,
             Save the calibrated ramp? The default is False.
 
         Additional useful step parameters:
+
         - saturation/n_pix_grow_sat : int, optional
             Number of pixels to grow for saturation flagging. Default is 1.
         - ramp_fit/suppress_one_group : bool, optional
@@ -772,7 +779,7 @@ def run_obs(database,
         - ramp_fit/maximum_cores : str, optional
             max number of parallel processes to create during ramp fitting.
             'none', 'quarter', 'half', or 'all'. Default: 'quarter'.
-        The default is {}. 
+
         Each of these parameters can be passed directly through `kwargs`.
     subdir : str, optional
         Name of the directory where the data products shall be saved. The
@@ -832,7 +839,7 @@ def run_obs(database,
     Returns
     -------
     None.
-    
+
     """
 
     # Set output directory.
