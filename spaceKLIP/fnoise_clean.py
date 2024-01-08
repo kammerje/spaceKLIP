@@ -8,6 +8,7 @@ import multiprocessing as mp
 
 from jwst.stpipe import Step
 from jwst import datamodels
+from jwst.datamodels import dqflags
 
 from webbpsf_ext import robust
 from webbpsf_ext.image_manip import expand_mask
@@ -230,7 +231,10 @@ class OneOverfStep(Step):
             worker_arguments = []
             for i in range(nints):
                 # Cumulative sum of group DQ flags
-                bpmask_arr = np.cumsum(datamodel.groupdq[i], axis=0) > 0
+                groupdq = datamodel.groupdq[i]
+                mask_dnu = (groupdq & dqflags.pixel['DO_NOT_USE']) > 0
+                bpmask_arr = np.cumsum(mask_dnu, axis=0) > 0
+                # bpmask_arr = np.cumsum(datamodel.groupdq[i], axis=0) > 0
                 for j in range(ngroups):
                     im_diff = data_diff[i,j]
 
@@ -313,7 +317,8 @@ class OneOverfStep(Step):
             for i in range(nints):
                 # Work on residual image
                 im_diff = data_diff[i]
-                bpmask = datamodel.dq[i] > 0
+                dq_mask = datamodel.dq[i]
+                bpmask = (dq_mask & dqflags.pixel['DO_NOT_USE']) > 0
                 im_mask = create_bkg_mask(im_diff, bpmask=bpmask)
 
                 input_args = (im_diff, im_mask, noutputs, slowaxis, flatten_model, 
@@ -504,7 +509,9 @@ def fit_slopes_to_ramp_data(input, sat_frac=0.5, combine_ints=False):
         # Get group-level bpmask for this integration
         groupdq = input.groupdq[i]
         # Make sure to accumulate the group-level dq mask
-        bpmask_arr = np.cumsum(groupdq, axis=0) > 0
+        mask_dnu = (groupdq & dqflags.pixel['DO_NOT_USE']) > 0
+        bpmask_arr = np.cumsum(mask_dnu, axis=0) > 0
+        # bpmask_arr = np.cumsum(groupdq, axis=0) > 0
         cf = cube_fit(tarr, data[i], bpmask_arr=bpmask_arr,
                       sat_vals=sat_thresh, sat_frac=sat_frac)
         bias_arr.append(cf[0])
@@ -520,7 +527,9 @@ def fit_slopes_to_ramp_data(input, sat_frac=0.5, combine_ints=False):
             # Get group-level bpmask for this integration
             groupdq = input.groupdq[i]
             # Make sure to accumulate the group-level dq mask
-            bpmask_arr = np.cumsum(groupdq, axis=0) > 0
+            mask_dnu = (groupdq & dqflags.pixel['DO_NOT_USE']) > 0
+            bpmask_arr = np.cumsum(mask_dnu, axis=0) > 0
+            # bpmask_arr = np.cumsum(groupdq, axis=0) > 0
             # Exclude bad pixels
             data[i][bpmask_arr] = np.nan
 
@@ -1237,6 +1246,12 @@ def create_bkg_mask(data, bpmask=None, nsigma=3, niter=3):
 
     if bpmask is None:
         bpmask = np.zeros_like(data, dtype=np.bool_)
+    else:
+        # Ensure bpmask isn't all True
+        if np.alltrue(bpmask):
+            bpmask = np.zeros_like(data, dtype=np.bool_)
+
+    # Excpliitly mask out NaNs
     bpmask[np.isnan(data)] = True
 
     mask_good = ~bpmask
@@ -1249,7 +1264,7 @@ def create_bkg_mask(data, bpmask=None, nsigma=3, niter=3):
     diff = data_good[bg_pixels] - median
     # Get 1 sigma of the distribution and its reflection
     one_sigma = robust.medabsdev(np.array([diff, -diff]))
-    # Mask values that deviate betwen some nsigma
+    # Mask out values that deviate betwen some nsigma
     ind_bad = np.abs(data - median) > (nsigma*one_sigma)
     mask_good[ind_bad] = False
     data_bgsub = data - np.median(data[mask_good])
