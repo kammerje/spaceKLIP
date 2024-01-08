@@ -18,14 +18,32 @@
 #
 import os
 import sys
+from pathlib import Path
+
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
 
 # fix for `ImportError: No module named _tkinter`:
 import matplotlib
 matplotlib.use("agg")
 
-import spaceKLIP
 
-version = spaceKLIP.__version__
+#### Get version 
+with open(Path(__file__).parent.parent.parent / "pyproject.toml", "rb") as metadata_file:
+    configuration = tomllib.load(metadata_file)
+    metadata = configuration["project"]
+    project = metadata["name"]
+
+    # The short X.Y version.
+    try:
+        version = project.__version__.split("-", 1)[0]
+        # The full version, including alpha/beta/rc tags.
+        release = project.__version__
+    except AttributeError:
+        version = "dev"
+        release = "dev"
 
 # -- General configuration ------------------------------------------------
 # Add any Sphinx extension module names here, as strings. They can be
