@@ -531,6 +531,8 @@ def run_obs(database,
         kwargs_temp['save_rolls'] = False
     else:
         kwargs_temp['save_ints'] = kwargs_temp['save_rolls']
+    if 'highpass' not in kwargs_temp.keys():
+        kwargs_temp['highpass'] = False
     
     # Set output directory.
     output_dir = os.path.join(database.output_dir, subdir)

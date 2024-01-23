@@ -1602,6 +1602,7 @@ class ImageTools():
                         subpix_first_sci_only=False,
                         spectral_type='G2V',
                         kwargs={},
+                        highpass=False,
                         subdir='recentered'):
         """
         Recenter frames so that the host star position is data.shape // 2. For
@@ -1695,7 +1696,8 @@ class ImageTools():
                                                                                   j=j,
                                                                                   spectral_type=spectral_type,
                                                                                   date=head_pri['DATE-BEG'],
-                                                                                  output_dir=output_dir)
+                                                                                  output_dir=output_dir,
+                                                                                  highpass=highpass)
                             
                             # Apply the same shift to all SCI and REF frames.
                             shifts += [np.array([-(xc - (data.shape[-1] - 1.) / 2.), -(yc - (data.shape[-2] - 1.) / 2.)])]
@@ -1825,7 +1827,8 @@ class ImageTools():
                             output_dir=None,
                             fov_pix=65,
                             oversample=2,
-                            use_coeff=False):
+                            use_coeff=False,
+                            highpass=False):
         """
         Find the star position behind the coronagraphic mask using a WebbPSF
         model.
@@ -1897,6 +1900,13 @@ class ImageTools():
         xoff = (crpix1 + 1) - xsciref
         yoff = (crpix2 + 1) - ysciref
         model_psf = psf.gen_psf_idl((0, 0), coord_frame='idl', return_oversample=False, quick=True)
+        if not isinstance(highpass, bool):
+            highpass = float(highpass)
+            fourier_sigma_size = (model_psf.shape[0] / highpass) / (2. * np.sqrt(2. * np.log(2.)))
+            model_psf = parallelized.high_pass_filter_imgs(np.array([model_psf]), numthreads=None, filtersize=fourier_sigma_size)[0]
+        else:
+            if highpass:
+                raise NotImplementedError()
         if not np.isnan(self.database.obs[key]['BLURFWHM'][j]):
             gauss_sigma = self.database.obs[key]['BLURFWHM'][j] / np.sqrt(8. * np.log(2.))
             model_psf = gaussian_filter(model_psf, gauss_sigma)

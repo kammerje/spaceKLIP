@@ -215,15 +215,15 @@ class AnalysisTools():
                     #     ww_sci = np.where(self.database.obs[key]['TYPE'] == 'SCI')[0]
                     #     for ww in ww_sci:
                     #         roll_ref = self.database.obs[key]['ROLL_REF'][ww]  # deg
-                    #         pa1 = (119.1 - 75. + roll_ref) % 360.
-                    #         pa2 = (119.1 + 75. + roll_ref) % 360.
+                    #         pa1 = (119.1 - 15. + roll_ref) % 360.
+                    #         pa2 = (119.1 + 15. + roll_ref) % 360.
                     #         if pa1 > pa2:
                     #             temp = (pa > pa1) | (pa < pa2)
                     #         else:
                     #             temp = (pa > pa1) & (pa < pa2)
                     #         data[:, temp] = np.nan
-                    #         pa1 = (299.1 - 75. + roll_ref) % 360.
-                    #         pa2 = (299.1 + 75. + roll_ref) % 360.
+                    #         pa1 = (299.1 - 15. + roll_ref) % 360.
+                    #         pa2 = (299.1 + 15. + roll_ref) % 360.
                     #         if pa1 > pa2:
                     #             temp = (pa > pa1) | (pa < pa2)
                     #         else:
@@ -301,7 +301,7 @@ class AnalysisTools():
                 seps = []
                 cons = []
                 for k in range(data.shape[0]):
-                    sep, con = klip.meas_contrast(dat=np.abs(data[k]) * pxar / fstar, iwa=iwa, owa=owa, resolution=resolution, center=center, low_pass_filter=False)
+                    sep, con = klip.meas_contrast(dat=data[k] * pxar / fstar, iwa=iwa, owa=owa, resolution=resolution, center=center, low_pass_filter=False)
                     seps += [sep * self.database.red[key]['PIXSCALE'][j]]   # arcsec
                     cons += [con]
                 seps = np.array(seps)
@@ -312,7 +312,7 @@ class AnalysisTools():
                 if mask is not None:
                     cons_mask = []
                     for k in range(data.shape[0]):
-                        _, con_mask = klip.meas_contrast(dat=np.true_divide(np.abs(data[k]), mask) * pxar / fstar, iwa=iwa, owa=owa, resolution=resolution, center=center, low_pass_filter=False)
+                        _, con_mask = klip.meas_contrast(dat=np.true_divide(data[k], mask) * pxar / fstar, iwa=iwa, owa=owa, resolution=resolution, center=center, low_pass_filter=False)
                         cons_mask += [con_mask]
                     cons_mask = np.array(cons_mask)
                 
