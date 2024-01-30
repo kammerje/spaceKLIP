@@ -39,20 +39,31 @@ def get_nrcmask_from_apname(apname):
     """Get mask name from aperture name
     
     The aperture name is of the form:
-        NRC[A/B][1-5]_[FULL]_[MASK]_[FILTER]
+    NRC[A/B][1-5]_[FULL]_[MASK]_[FILTER]
     where MASK is the name of the coronagraphic mask used.
 
     For target acquisition apertures the mask name can be
     prependend with "TA" (eg., TAMASK335R).
 
     Return 'NONE' if MASK not in input aperture name.
+
+    Parameters
+    ----------
+    apname : str
+        String aperture name as described above
+
+    Returns
+    -------
+    image_mask : str
+        String for image mask
+
     """
 
     if 'MASK' not in apname:
         return 'NONE'
 
-    pps_str_arr = apname.split('_')
-    for s in pps_str_arr:
+    ap_str_arr = apname.split('_')
+    for s in ap_str_arr:
         if 'MASK' in s:
             image_mask = s
             break
@@ -653,6 +664,66 @@ def _get_tp_comsubst(instrume,
     # Return.
     return tp_comsubst
 
+def write_starfile(starfile,  
+                   new_starfile_path,
+                   new_header=None):
+    """
+    Save stellar spectrum file to a different location, and insert
+    a header to the start if needed. 
+    
+    Parameters
+    ----------
+    starfile : str
+        Path to original stellar spectrum file.
+    new_starfile_path : str
+        Path to new stellar spectrum file.
+    new_header : str
+        Header to be inserted. 
+    
+    Returns
+    -------
+    None
+    
+    """ 
+    if not os.path.exists(starfile):
+        raise FileNotFoundError("The specified starfile does not exist.")
+    
+    with open(starfile, 'r') as orig_starfile:
+        text=orig_starfile.read()
+        with open(new_starfile_path, 'w') as new_starfile:
+            if new_header is None:
+                new_starfile.write(text)
+            else:
+                new_starfile.write(new_header+text)
+
+def set_surrounded_pixels(array, user_value=np.nan):
+    """
+    Identifies pixels in a 2D array surrounded by NaN values 
+    on all eight sides and sets them to a user-defined value.
+
+    Parameters
+    ----------
+    array : numpy.ndarray
+        2D array containing numeric values and NaNs.
+    user_value : float or any valid value type, optional
+        Value to set for pixels surrounded by NaNs on all eight sides. Defaults to NaN.
+
+    Returns
+    -------
+    numpy.ndarray
+        The input array with pixels surrounded by NaNs on all eight sides set to the user-defined value.
+    """
+    nan_mask = np.isnan(array)
+    surrounded_pixels = (
+        ~nan_mask[1:-1, 1:-1] &
+        nan_mask[:-2, :-2] & nan_mask[:-2, 1:-1] & nan_mask[:-2, 2:] &
+        nan_mask[1:-1, :-2] & nan_mask[1:-1, 2:] &
+        nan_mask[2:, :-2] & nan_mask[2:, 1:-1] & nan_mask[2:, 2:]
+    )
+    
+    array[1:-1, 1:-1][surrounded_pixels] = user_value
+    return array
+
 def get_tp_comsubst(instrume,
                     subarray,
                     filt):
@@ -915,3 +986,46 @@ def chisqr_red(yvals, yfit=None, err=None, dof=None,
         chi_red = chi_red.reshape(sh_orig[-2:])
         
     return chi_red
+
+def cube_outlier_detection(data, sigma_cut=10, nint_min=10):
+    """Get outlier pixels in a cube model (e.g., rateints or calints)
+    
+    Parameters
+    ----------
+    data : ndarray
+        Data array to use for outlier detection.
+        Must be a cube with shape (nint, ny, nx).
+
+    Keyword Args
+    ------------
+    sigma_cut : float
+        Sigma cut for outlier detection.
+        Default is 5.
+    nint_min : int
+        Minimum number of integrations required for outlier detection.
+        Default is 5.
+
+    Returns
+    -------
+    Mask of bad pixels with same shape as input cube.
+    """
+
+    from webbpsf_ext import robust
+
+    # Get bad pixels
+    ndim = len(data.shape)
+    if ndim < 3:
+        log.warning(f'Skipping rateints outlier flagging. Only {ndim} dimensions.')
+        return np.zeros_like(data, dtype=bool)
+    
+    nint = data.shape[0]
+    if nint < nint_min:
+        log.warning(f'Skipping rateints outlier flagging. Only {nint} INTS.')
+        return np.zeros_like(data, dtype=bool)
+
+    # Get outliers
+    indgood = robust.mean(data, Cut=sigma_cut, axis=0, return_mask=True)
+    indbad = ~indgood
+
+    return indbad
+

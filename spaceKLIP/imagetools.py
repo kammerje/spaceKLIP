@@ -36,6 +36,8 @@ from webbpsf_ext import robust
 from webbpsf_ext.coords import dist_image
 from webbpsf_ext.webbpsf_ext_core import _transmission_map
 
+from webbpsf.constants import JWST_CIRCUMSCRIBED_DIAMETER
+
 import logging
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -488,9 +490,6 @@ class ImageTools():
         subdir : str, optional
             Name of the directory where the data products shall be saved. The
             default is 'medsub'.
-        
-       None.
-        
         method : str
             'robust' for a robust median after masking out bright stars,
             'sigma_clipped' for another version of robust median using astropy sigma_clipped_stats on the whole image,
@@ -605,6 +604,7 @@ class ImageTools():
             set to 5, a median of every 5 background images will be subtracted from
             the corresponding 5 target images. The default is None (i.e. a median 
             across all images).
+
         subdir : str, optional
             Name of the directory where the data products shall be saved. The
             default is 'bgsub'.
@@ -659,6 +659,7 @@ class ImageTools():
                 sci_bg_data = np.concatenate(sci_bg_data)
                 sci_bg_erro = np.concatenate(sci_bg_erro)
                 sci_bg_pxdq = np.concatenate(sci_bg_pxdq)
+
                 sci_bg_data_split = np.array_split(sci_bg_data, split_inds, axis=0)
                 sci_bg_erro_split = np.array_split(sci_bg_erro, split_inds, axis=0)
                 sci_bg_pxdq_split = np.array_split(sci_bg_pxdq, split_inds, axis=0)
@@ -695,6 +696,7 @@ class ImageTools():
                 ref_bg_data = np.concatenate(ref_bg_data)
                 ref_bg_erro = np.concatenate(ref_bg_erro)
                 ref_bg_pxdq = np.concatenate(ref_bg_pxdq)
+
                 ref_bg_data_split = np.array_split(ref_bg_data, split_inds, axis=0)
                 ref_bg_erro_split = np.array_split(ref_bg_erro, split_inds, axis=0)
                 ref_bg_pxdq_split = np.array_split(ref_bg_pxdq, split_inds, axis=0)
@@ -767,93 +769,6 @@ class ImageTools():
         pass
     
 
-    def subtract_1overf_stripe_noise(self,
-                                     types = ['SCI', 'SCI_BG', 'REF',  'REF_BG'],
-                                     subdir = 'destripe',
-                                     restrict_to = None,
-                                     destripe_columns=True,
-                                     ):
-        """Destripe by subtracting a model of 1/f noise in rows and columns
-
-        The method relies on having multiple integrations in a given exposure, and the
-        assumption that all integrations should be the same apart from random noise.
-        If we look at the difference between a given integration and the mean of all
-        integrations, the contributions from photon noise and read noise should be
-        zero mean in each row or column. Thus any significant variations in median
-        values across the columns or rows can be considered due to 1/f noise or similar.
-
-        Empirically, measuring the stripe noise on the difference relative to the mean
-        integration seems an effective way to exclude the bright stellar PSFs from biasing
-        the estimation of the stripe noise.
-
-        There are other methods to remove 1/f noise, e.g the image1overf.py script from
-        https://github.com/chriswillott/jwst, and many others. However these methods often
-        rely on the assumption that images typically contain large regions of blank sky, which
-        is not sufficiently true for coronagraphic data that may have a very bright PSF over
-        much or most of the array. So empirically those methods have at times proven
-        not well suited for use on coronagraphic data, hence this alternative.
-
-        Note, since this won't work on TA files, the default types is set to exclude those.
-
-        Parameters
-        ----------
-        types : list of st
-            List of data types from which the frames shall be coadded. The
-            default is ['SCI', 'SCI_BG', 'REF', 'REF_BG'].
-        subdir :  str
-            Subdirectory name to save output to. Default is 'destripe'
-        restrict_to : str or None.
-            Optional. String pattern to use in selecting only a subset of data to apply
-            this step to. Used for a pattern match in the concatenation keys. May be
-            e.g. a filter name like 'F444W', a coron mask like 'MASK335R' or any other
-            string subset used in the concatenation keys.
-        destripe_columns : bool
-            Rows are always destriped. Optionally, columns may also be destriped.
-            Set this flag to control whether or not column variations should be subtracted.
-
-        Returns
-        -------
-
-
-        """
-        output_dir = self._get_output_dir(subdir)
-
-        # First we define how to destripe one file, then we iterate that function over all files in the database
-        def destripe_one_file(filename):
-
-            model = jwst.datamodels.open(filename)
-            if (model.meta.exposure.nints == 1) or (len(model.data.shape) < 3):
-                raise RuntimeError("This operation only works on datasets that have multiple integrations available")
-
-            # Construct difference of each integration versus the median integration
-            medianimage = np.nanmedian(model.data, axis=0)
-            diffs = model.data - medianimage
-
-            # for each integration's difference, take row and column medians and construct a stripe model to subtract
-            for i in range(model.meta.exposure.nints):
-
-                rowmeds = np.nanmedian(diffs[i], axis=1, keepdims=True)
-                diffs[i] -= rowmeds # remove row medians before computing col medians
-                if destripe_columns:
-                    colmeds = np.nanmedian(diffs[i], axis=0, keepdims=True)
-
-                stripemodel = np.zeros(model.data.shape[1:])
-                stripemodel += rowmeds
-                if destripe_columns:
-                    stripemodel += colmeds
-
-                model.data[i] -= stripemodel
-                # error propagation in dq frame could be done here too, but low priority to add
-
-
-            output_filename = os.path.join(output_dir, os.path.basename(filename))
-            model.write(output_filename)
-            log.info(f"  --> Destriped {os.path.basename(filename)}")
-            return output_filename
-
-        self._iterate_function_over_files(types, destripe_one_file, restrict_to=restrict_to)
-
-
     def fix_bad_pixels(self,
                        method='timemed+dqmed+medfilt',
                        bpclean_kwargs={},
@@ -866,13 +781,14 @@ class ImageTools():
                        restrict_to=None):
         """
         Identify and fix bad pixels.
-        
+
         Parameters
         ----------
         method : str, optional
             Sequence of bad pixel identification and cleaning methods to be run
             on the data. Different methods must be joined by a '+' sign without
             whitespace. Available methods are:
+
             - bpclean: use sigma clipping to identify additional bad pixels.
             - custom: use a custom bad pixel map.
             - timemed: replace pixels which are only bad in some frames with
@@ -880,9 +796,11 @@ class ImageTools():
             - dqmed: replace bad pixels with the median value of their
                      surrounding good pixels.
             - medfilt: replace bad pixels with an image plane median filter.
+
             The default is 'timemed+dqmed+medfilt'.
         bpclean_kwargs : dict, optional
             Keyword arguments for the 'bpclean' method. Available keywords are:
+
             - sigclip : float, optional
                 Sigma clipping threshold. The default is 5.
             - shift_x : list of int, optional
@@ -891,6 +809,7 @@ class ImageTools():
             - shift_y : list of int, optional
                 Pixels in y-direction to which each pixel shall be compared to.
                 The default is [-1, 0, 1].
+
             The default is {}.
         custom_kwargs : dict, optional
             Keyword arguments for the 'custom' method. The dictionary keys must
@@ -899,21 +818,27 @@ class ImageTools():
             same shape as the corresponding data. The default is {}.
         timemed_kwargs : dict, optional
             Keyword arguments for the 'timemed' method. Available keywords are:
+
             - n/a
+
             The default is {}.
         dqmed_kwargs : dict, optional
             Keyword arguments for the 'dqmed' method. Available keywords are:
+
             - shift_x : list of int, optional
                 Pixels in x-direction from which the median shall be computed.
                 The default is [-1, 0, 1].
             - shift_y : list of int, optional
                 Pixels in y-direction from which the median shall be computed.
                 The default is [-1, 0, 1].
+
             The default is {}.
         medfilt_kwargs : dict, optional
             Keyword arguments for the 'medfilt' method. Available keywords are:
+
             - size : int, optional
                 Kernel size of the median filter to be used. The default is 4.
+
             The default is {}.
         types : list of str, optional
             List of data types for which bad pixels shall be identified and
@@ -926,7 +851,7 @@ class ImageTools():
         Returns
         -------
         None.
-        
+
         """
         
         # Set output directory.
@@ -1033,6 +958,7 @@ class ImageTools():
             be modified by the routine.
         bpclean_kwargs : dict, optional
             Keyword arguments for the 'bpclean' method. Available keywords are:
+
             - sigclip : float, optional
                 Sigma clipping threshold. The default is 5.
             - shift_x : list of int, optional
@@ -1041,12 +967,13 @@ class ImageTools():
             - shift_y : list of int, optional
                 Pixels in y-direction to which each pixel shall be compared to.
                 The default is [-1, 0, 1].
+
             The default is {}.
         
         Returns
         -------
         None.
-        
+
         """
         
         # Check input.
@@ -1234,18 +1161,20 @@ class ImageTools():
             the routine to exclude the fixed bad pixels.
         dqmed_kwargs : dict, optional
             Keyword arguments for the 'dqmed' method. Available keywords are:
+
             - shift_x : list of int, optional
                 Pixels in x-direction from which the median shall be computed.
                 The default is [-1, 0, 1].
             - shift_y : list of int, optional
                 Pixels in y-direction from which the median shall be computed.
                 The default is [-1, 0, 1].
+
             The default is {}.
         
         Returns
         -------
         None.
-        
+
         """
         
         # Check input.
@@ -1322,14 +1251,16 @@ class ImageTools():
             the routine to exclude the fixed bad pixels.
         medfilt_kwargs : dict, optional
             Keyword arguments for the 'medfilt' method. Available keywords are:
+
             - size : int, optional
                 Kernel size of the median filter to be used. The default is 4.
+
             The default is {}.
-        
+
         Returns
         -------
         None.
-        
+
         """
         
         # Check input.
@@ -1478,7 +1409,7 @@ class ImageTools():
                         if self.database.obs[key]['EXP_TYPE'][j] in ['NRC_CORON']:
                             diam = 5.2
                         else:
-                            diam = 6.5
+                            diam = JWST_CIRCUMSCRIBED_DIAMETER
                     else:
                         raise UserWarning('Data originates from unknown telescope')
                     if fact_temp is not None:
@@ -1989,11 +1920,12 @@ class ImageTools():
                                     npix=fov_pix)
             
             # Determine relative shift between data and model PSF.
-            yshift, xshift = phase_cross_correlation(datasub * masksub,
-                                                     model_psf * masksub,
-                                                     upsample_factor=1000,
-                                                     normalization=None,
-                                                     return_error=False)
+            shift, error, phasediff = phase_cross_correlation(datasub * masksub,
+                                                              model_psf * masksub,
+                                                              upsample_factor=1000,
+                                                              normalization=None,
+                                                              return_error=True)
+            yshift, xshift = shift
             
             # Update star position.
             xc = np.mean(xsub_indarr) + xshift
@@ -2180,8 +2112,8 @@ class ImageTools():
                         log.warning('  --> The following frames might not be properly aligned: '+str(ww))
                 
                 # Write FITS file and PSF mask.
-                head_pri['XOFFSET'] = xoffset
-                head_pri['YOFFSET'] = yoffset
+                head_pri['XOFFSET'] = xoffset #arcseconds
+                head_pri['YOFFSET'] = yoffset #arcseconds 
                 head_sci['CRPIX1'] = crpix1
                 head_sci['CRPIX2'] = crpix2
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs)
@@ -2201,6 +2133,7 @@ class ImageTools():
                            label='PA = %.0f deg' % self.database.obs[key]['ROLL_REF'][j])
             ax.axhline(0., color='gray', lw=1, zorder=-1)  # set zorder to ensure lines are drawn behind all the scatter points
             ax.axvline(0., color='gray', lw=1, zorder=-1)
+
             ax.set_aspect('equal')
             xlim = ax.get_xlim()
             ylim = ax.get_ylim()
@@ -2272,3 +2205,4 @@ class ImageTools():
                 plt.savefig(output_file)
                 log.info(f" Plot saved in {output_file}")
                 plt.close()
+

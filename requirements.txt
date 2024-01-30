@@ -4,5 +4,8 @@ jdaviz
 jwst
 matplotlib
 numpy
+pysynphot
 scipy
 webbpsf
+webbpsf_ext @ git+https://github.com/JarronL/webbpsf_ext.git@develop
+pyklip @ git+https://bitbucket.org/pyKLIP/pyklip.git@jwst_new

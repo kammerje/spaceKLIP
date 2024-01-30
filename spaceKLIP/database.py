@@ -9,6 +9,7 @@ matplotlib.rcParams.update({'font.size': 14})
 # =============================================================================
 
 import os
+import glob
 import pdb
 import sys
 
@@ -47,7 +48,7 @@ setup_logging('WARN', verbose=False)
 # Load NIRCam, NIRISS, and MIRI filters
 wave_nircam, weff_nircam, do_svo = get_filter_info('NIRCAM', return_more=True)
 wave_niriss, weff_niriss = get_filter_info('NIRISS', do_svo=do_svo)
-wave_miri,   weff_miri   = get_filter_info('MIRI',   do_svo=do_svo)
+wave_miri,   weff_miri   = get_filter_info('MIRI',   do_svo=False) 
 
 class Database():
     """
@@ -258,7 +259,7 @@ class Database():
             apname = nircam_apname(head) if INSTRUME[-1] == 'NIRCAM' else head.get('APERNAME', 'UNKNOWN')
             APERNAME += [apname]
             PPS_APER += [head.get('PPS_APER', 'UNKNOWN')]
-            coronmask = get_nrcmask_from_apname(APERNAME[-1]) if INSTRUME[-1] == 'NIRCAM' else head.get('CORONMSK', 'NONE')
+            coronmask = get_nrcmask_from_apname(PPS_APER[-1]) if INSTRUME[-1] == 'NIRCAM' else head.get('CORONMSK', 'NONE')
             CORONMSK += [coronmask]
             if TELESCOP[-1] == 'JWST':
                 if INSTRUME[-1] == 'NIRCAM':
@@ -301,8 +302,8 @@ class Database():
         EXPSTART = np.array(EXPSTART)
         NINTS = np.array(NINTS)
         EFFINTTM = np.array(EFFINTTM)
-        IS_PSF = np.array(IS_PSF)
-        SELFREF = np.array(SELFREF)
+        IS_PSF = np.array(IS_PSF, dtype='<U5')
+        SELFREF = np.array(SELFREF, dtype='<U5')
         SUBARRAY = np.array(SUBARRAY)
         NUMDTHPT = np.array(NUMDTHPT)
         XOFFSET = np.array(XOFFSET)
@@ -368,9 +369,9 @@ class Database():
                 for j in range(len(exp_type)):
                     if 'TA' in exp_type[j]:
                         is_psf[j] = 'False'
-                if 'NONE' not in is_psf.astype(str):
-                    ww_sci = np.where(is_psf == False)[0]
-                    ww_ref = np.where(is_psf == True)[0]
+                if 'NONE' not in is_psf:
+                    ww_sci = np.where(is_psf == 'False')[0]
+                    ww_ref = np.where(is_psf == 'True')[0]
                 else:
                     log.warning('  --> Could not find IS_PSF header keyword')
                     numdthpt = NUMDTHPT[ww]
@@ -677,7 +678,7 @@ class Database():
             apname = nircam_apname(head) if INSTRUME[-1] == 'NIRCAM' else head.get('APERNAME', 'UNKNOWN')
             APERNAME += [apname]
             PPS_APER += [head.get('PPS_APER', 'UNKNOWN')]
-            coronmask = get_nrcmask_from_apname(APERNAME[-1]) if INSTRUME[-1] == 'NIRCAM' else head.get('CORONMSK', 'NONE')
+            coronmask = get_nrcmask_from_apname(PPS_APER[-1]) if INSTRUME[-1] == 'NIRCAM' else head.get('CORONMSK', 'NONE')
             CORONMSK += [coronmask]
             if TELESCOP[-1] == 'JWST':
                 if INSTRUME[-1] == 'NIRCAM':
@@ -1278,12 +1279,14 @@ def create_database(output_dir,
                     bgpaths=None,
                     assoc_using_targname=True,
                     verbose=True,
+                    readlevel='012',
                     **kwargs):
 
     """ Create a spaceKLIP database from JWST data
 
     Automatically searches for uncal.fits in the input directory and creates 
-    a database of the JWST data. Only works for stage0, stage1, or stage2 data.
+    a database of the JWST data. Only works for stage0, stage1, or stage2 data
+    by default; set readlevel=3 to read in stage 3 outputs.
 
     Parameters
     ----------
@@ -1306,6 +1309,11 @@ def create_database(output_dir,
         default is None.
     assoc_using_targname : bool, optional
         Associate observations using the TARGNAME keyword. The default is True.
+    readlevel : str or int
+        Level of data products to read in, either '012' (or an integer 0,1,2) to read in
+        individual exposures, or '3' to read in level-3 PSF-subtracted products,
+        or '4' to read in extracted PSF fitting products.
+
     verbose : bool, optional
         Print information to the screen. The default is True.
     
@@ -1326,6 +1334,9 @@ def create_database(output_dir,
         Name of aperture (e.g., NRCA5_FULL)
     apername_pps : str
         Name of aperture from PPS (e.g., NRCA5_FULL)
+    readlevel : str or int
+        Set this to 3 invoke the code for re-reading in level 3 output
+        products. By default, only levels 0,1,2 data will be read and indexed.
     """
 
     from webbpsf_ext.imreg_tools import get_files
@@ -1335,7 +1346,7 @@ def create_database(output_dir,
         input_dir = os.path.join(mast_dir, f'{pid:05d}')
 
     # Check if obsids is not a list, tuple, or numpy array
-    if (obsids is not None) and not isinstance(obsids, (list, tuple, np.ndarray)):
+    if not isinstance(obsids, (list, tuple, np.ndarray)):
         obsids = [obsids]
 
     # Cycle through all obsids and get the files in a single list
@@ -1346,9 +1357,22 @@ def create_database(output_dir,
     # Initialize the spaceKLIP database and read the input FITS files.
     db = Database(output_dir=output_dir)
     db.verbose = verbose
-    db.read_jwst_s012_data(datapaths=datapaths,
-                           psflibpaths=psflibpaths,
-                           bgpaths=bgpaths,
-                           assoc_using_targname=assoc_using_targname)
-    
+
+
+    if str(readlevel) in '012' or str(readlevel) == '012':
+        db.read_jwst_s012_data(datapaths=datapaths,
+                               psflibpaths=psflibpaths,
+                               bgpaths=bgpaths,
+                               assoc_using_targname=assoc_using_targname)
+    elif str(readlevel) == '3':
+        # the above get_files usage won't match KLIP outputsa, so find them here
+        datapaths_klip = sorted(glob.glob(os.path.join(input_dir, "*KLmodes-all.fits")))
+        db.read_jwst_s3_data(datapaths=datapaths+datapaths_klip,
+                            )
+    elif str(readlevel) == '4':
+        db.read_jwst_s4_data(datapaths=datapaths,
+                            )
+    else:
+        raise ValueError("Invalid/unknown value for readlevel parameter")
+
     return db
