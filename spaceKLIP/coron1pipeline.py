@@ -713,7 +713,7 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
             res = pipeline.run(fitspath)
     except Exception as e:
         raise RuntimeError(
-            'Caught exception during pipeline processing.'
+            'Caught exception during coron1pipeline processing.'
             '\nException: {}'.format(e)
         )
     finally:

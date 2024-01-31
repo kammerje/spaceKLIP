@@ -145,9 +145,6 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     subdir : str, optional
         Name of the directory where the data products shall be saved. The
         default is 'stage2'.
-    do_rates : bool, optional
-        In addition to processing rateints files, also process rate files
-        if they exist? The default is False.
     overwrite : bool, optional
         Overwrite existing files? Default is False.
     quiet : bool, optional
@@ -179,7 +176,7 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
 
     Returns
     -------
-    None.
+    Pipeline output, either cal or calints data model.
     """
     # Print all info message if verbose, otherwise only errors or critical.
     from .logging_tools import all_logging_disabled
@@ -198,7 +195,7 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     pipeline.save_intermediates   = kwargs.get('save_intermediates', False)
 
     # Skip certain steps?
-    pipeline.bkg_subtract.skip = kwargs.get('skip_bg', True)
+    pipeline.bkg_subtract.skip = kwargs.get('skip_bg', False)
     pipeline.photom.skip       = kwargs.get('skip_photom', False)
     pipeline.resample.skip     = kwargs.get('skip_resample', False)
     pipeline.assign_wcs.skip   = kwargs.get('skip_wcs', False)
@@ -223,7 +220,7 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
             res = pipeline.run(fitspath)
     except Exception as e:
         raise RuntimeError(
-            'Caught exception during pipeline processing.'
+            'Caught exception during coron2pipeline processing.'
             '\nException: {}'.format(e)
         )
     finally:
