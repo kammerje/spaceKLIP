@@ -66,7 +66,7 @@ class JWST_PSF():
     intensity of these PSFs include throughput attenuation at intermediate optics 
     such as the NIRCam Lyot stops and occulting masks. During PSF generation, set
     `normalize='exit_pupil'` for PSFs that have are normalized to 1.0 when summed
-    out to infinity.  
+    out to infinity. Only works for `quick=False`.
     """
     
     def __init__(self, apername, filt, date=None, fov_pix=65, oversample=2, 
@@ -440,6 +440,7 @@ class JWST_PSF():
             How to normalize the PSF. Options are:
                 * 'first': Normalize to 1.0 at entrance pupil
                 * 'exit_pupil': Normalize to 1.0 at exit pupil
+            Only works for `quick=False`.
         
         Returns
         -------
@@ -550,6 +551,7 @@ class JWST_PSF():
             How to normalize the PSF. Options are:
                 * 'first': Normalize to 1.0 at entrance pupil
                 * 'exit_pupil': Normalize to 1.0 at exit pupil
+            Only works for `quick=False`.
                         
         Keyword Args
         ------------
