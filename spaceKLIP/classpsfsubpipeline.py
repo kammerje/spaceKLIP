@@ -1,8 +1,6 @@
 from __future__ import division
 
 import matplotlib
-matplotlib.rcParams.update({'font.size': 14})
-
 
 # =============================================================================
 # IMPORTS
