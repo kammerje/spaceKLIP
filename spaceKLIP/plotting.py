@@ -36,6 +36,15 @@ log.setLevel(logging.INFO)
 # MAIN
 # =============================================================================
 
+def load_plt_style(style='spaceKLIP.sk_style'):
+    """
+    Load the matplotlib style for spaceKLIP plots.
+    
+    Load the style sheet in `sk_style.mplstyle`, which is a modified version of the
+    style sheet from the `webbpsf_ext` package.
+    """
+    plt.style.use(style)
+
 def annotate_compass(ax, image, wcs, xf=0.9, yf=0.1, length_fraction=0.07, color='white', fontsize=12, ):
     """
     Plot a compass annotation onto an image, to indicate North and East
@@ -164,6 +173,7 @@ def annotate_secondary_axes_arcsec(ax, image, wcs):
     secax.tick_params(labelsize='small')
     secay.tick_params(labelsize='small')
 
+@plt.style.context('spaceKLIP.sk_style')
 def display_coron_image(filename):
     """
     Display and annotate a coronagraphic image.
@@ -311,6 +321,7 @@ def display_coron_image(filename):
     # TODO:
     #   add second panel with zoom in on center
 
+@plt.style.context('spaceKLIP.sk_style')
 def display_coron_dataset(database, restrict_to=None, save_filename=None, stage3=None):
     """
     Display multiple files in a coronagraphic dataset.
@@ -372,7 +383,7 @@ def display_coron_dataset(database, restrict_to=None, save_filename=None, stage3
     if save_filename:
         pdf.close()
 
-
+@plt.style.context('spaceKLIP.sk_style')
 def plot_contrast_images(meta, data, data_masked, pxsc=None, savefile='./maskimage.pdf'):
     """
     Plot subtracted images to be used for contrast estimation, one with
@@ -424,6 +435,7 @@ def plot_contrast_images(meta, data, data_masked, pxsc=None, savefile='./maskima
 
     return
 
+@plt.style.context('spaceKLIP.sk_style')
 def plot_contrast_raw(meta, seps, cons, labels='default', savefile='./rawcontrast.pdf'):
     """
     Plot raw contrast curves for different KL modes.
@@ -463,6 +475,7 @@ def plot_contrast_raw(meta, seps, cons, labels='default', savefile='./rawcontras
 
     return
 
+@plt.style.context('spaceKLIP.sk_style')
 def plot_injected_locs(meta, data, transmission, seps, pas, pxsc=None, savefile='./injected.pdf'):
     '''
     Plot subtracted image and 2D transmission alongside locations of injected planets. 
@@ -523,7 +536,8 @@ def plot_injected_locs(meta, data, transmission, seps, pas, pxsc=None, savefile=
     plt.close()
 
     return
-            
+
+@plt.style.context('spaceKLIP.sk_style')
 def plot_contrast_calibrated(thrput, med_thrput, fit_thrput, con_seps, cons, corr_cons, savefile='./calcontrast.pdf'):
     '''
     Plot calibrated throughput alongside calibrated contrast curves. 
@@ -555,6 +569,7 @@ def plot_contrast_calibrated(thrput, med_thrput, fit_thrput, con_seps, cons, cor
 
     return
 
+@plt.style.context('spaceKLIP.sk_style')
 def plot_fm_psf(meta, fm_frame, data_frame, guess_flux, pxsc=None, j=0, savefile='./fmpsf.pdf'):
     '''
     Plot forward model psf
@@ -598,6 +613,7 @@ def plot_fm_psf(meta, fm_frame, data_frame, guess_flux, pxsc=None, j=0, savefile
 
     return
 
+@plt.style.context('spaceKLIP.sk_style')
 def plot_chains(chain, savefile):
     '''
     Plot MCMC chains from companion fitting
@@ -620,6 +636,7 @@ def plot_chains(chain, savefile):
     plt.savefig(savefile)
     plt.close()
 
+@plt.style.context('spaceKLIP.sk_style')
 def plot_subimages(imgdirs, subdirs, filts, submodes, numKL, 
                    window_size=2.5, cmaps_list=['viridis'],
                    imgVmin=[-40], imgVmax=[40], subVmin=[-10], subVmax=[10],
