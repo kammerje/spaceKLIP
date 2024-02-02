@@ -11,7 +11,6 @@ import pdb
 import sys
 
 import astropy.io.fits as pyfits
-import matplotlib.pyplot as plt
 import numpy as np
 
 import json

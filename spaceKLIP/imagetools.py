@@ -1813,6 +1813,7 @@ class ImageTools():
         
         pass
     
+    @plt.style.context('spaceKLIP.sk_style')
     def find_nircam_centers(self,
                             data0,
                             key,
@@ -1933,7 +1934,7 @@ class ImageTools():
         
         # Plot data, model PSF, and scene overview.
         if output_dir is not None:
-            f, ax = plt.subplots(1, 3, figsize=(3 * 6.4, 1 * 4.8))
+            fig, ax = plt.subplots(1, 3, figsize=(3 * 6.4, 1 * 4.8))
             ax[0].imshow(datasub, origin='lower', cmap='Reds')
             ax[0].contourf(masksub, levels=[0.00, 0.25, 0.50, 0.75], cmap='Greys_r', vmin=0., vmax=2., alpha=0.5)
             ax[0].set_title('1. SCI frame & transmission mask')
@@ -1963,11 +1964,12 @@ class ImageTools():
             plt.savefig(output_file)
             log.info(f" Plot saved in {output_file}")
             # plt.show()
-            plt.close()
+            plt.close(fig)
         
         # Return star position.
         return xc, yc, xshift, yshift
     
+    @plt.style.context('spaceKLIP.sk_style')
     def align_frames(self,
                      method='fourier',
                      align_algo='leastsq',
@@ -2122,7 +2124,7 @@ class ImageTools():
             
             # Plot science frame alignment.
             colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
-            f = plt.figure(figsize=(6.4, 4.8))
+            fig = plt.figure(figsize=(6.4, 4.8))
             ax = plt.gca()
             for index, j in enumerate(ww_sci):
                 ax.scatter(shifts_all[index][:, 0] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
@@ -2150,12 +2152,12 @@ class ImageTools():
             output_file = os.path.join(output_dir, key + '_align_sci.pdf')
             plt.savefig(output_file)
             log.info(f" Plot saved in {output_file}")
-            plt.close()
+            plt.close(fig)
             
             # Plot reference frame alignment.
             if len(ww_ref) > 0:
                 colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
-                f = plt.figure(figsize=(6.4, 4.8))
+                fig = plt.figure(figsize=(6.4, 4.8))
                 ax = plt.gca()
                 seen = []
                 reps = []
@@ -2202,5 +2204,5 @@ class ImageTools():
                 output_file = os.path.join(output_dir, key + '_align_ref.pdf')
                 plt.savefig(output_file)
                 log.info(f" Plot saved in {output_file}")
-                plt.close()
+                plt.close(fig)
 
