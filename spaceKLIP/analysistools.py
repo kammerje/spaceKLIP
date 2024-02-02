@@ -1,8 +1,6 @@
 from __future__ import division
 
 import matplotlib
-import matplotlib.pyplot as plt
-
 
 # =============================================================================
 # IMPORTS
@@ -13,6 +11,7 @@ import pdb
 import sys
 
 import astropy.io.fits as fits
+import matplotlib.pyplot as plt
 from astropy.table import Table
 import astropy.units as u
 
