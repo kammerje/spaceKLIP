@@ -3,10 +3,6 @@ from __future__ import division
 import matplotlib
 import matplotlib.pyplot as plt
 
-# Update the matplotlib plotting style
-from spaceKLIP import plotting
-plotting.load_plt_style()
-
 
 # =============================================================================
 # IMPORTS
