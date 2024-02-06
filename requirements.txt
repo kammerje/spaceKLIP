@@ -4,7 +4,8 @@ jdaviz
 jwst
 matplotlib
 numpy
-pysynphot
+synphot
+stsynphot
 scipy
 webbpsf
 webbpsf_ext @ git+https://github.com/JarronL/webbpsf_ext.git@develop
