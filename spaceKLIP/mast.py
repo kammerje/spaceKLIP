@@ -39,6 +39,8 @@ def query_coron_datasets(inst,
                          ignore_ta=True,
                          verbose=False,
                          level=None,
+                         ignore_exclusive_access=False,
+                         exp_type=None,
                          return_filenames=False):
     """
     Query MAST to make a summary table of existing JWST coronagraphic datasets.
@@ -69,6 +71,16 @@ def query_coron_datasets(inst,
         desirable to ignore the NIRCam coronagraphic flux calibration data
         sets, which otherwise look like science data to this query (programs
         1537 and 1538 for example).
+    exp_type : list of strings, or None
+        By default, the value for the MAST query field on exposure type is
+        determined automatically, based on whether or not ignore_ta is set.
+        Set this optional parameter if you want to control the exp_type value
+        used in the query directly.
+    ignore_exclusive_access : bool
+        Whether or not to ignore (filter out from query results) any data which
+        is still under exclusive access restrictions to the original proposing team.
+        For example, query for kind='REF', ignore_exclusive_access=True to find
+        only the publicly-available PSF references that can be downloaded by anyone.
     return_filenames : bool
         Return a shorter summary table of observations, versus returning a
         more comprehensive longer table of individual exposures and filenames?
@@ -108,9 +120,12 @@ def query_coron_datasets(inst,
     if mask is not None:
         keywords['coronmsk'] = [mask]
     if ignore_cal:
-        keywords['category'] = ['COM', 'ERS', 'GTO', 'GO']  # but not CAL
+        keywords['category'] = ['COM', 'ERS', 'GTO', 'GO', 'DD',]  # but not CAL
     if ignore_ta:
         keywords['exp_type'] = ['NRC_CORON', 'MIR_LYOT', 'MIR_4QPM']  # but not NRC_TACQ or MIRI_TACQ or NRC_TACONFIRM
+    if exp_type:
+        # Optional, allow user to custom override exp_type, for instance to query specifically for TA_CONFIRM exposures
+        keywords['exp_type'] = exp_type
 
     # Optional, restrict to one apt program
     if program is not None:
@@ -142,7 +157,7 @@ def query_coron_datasets(inst,
     # Currently, this works by retrieving all level2b (i.e., cal/calints)
     # files, including all dithers etc., and then trimming to one unique row
     # per observation.
-    collist = 'filename, productLevel, filter, coronmsk, targname, duration, effexptm, effinttm, exp_type, bkgdtarg, bstrtime, is_psf, nexposur, nframes, nints, numdthpt, obs_id, obslabel, pi_name, program, subarray, template, title, visit_id, visitsta, vststart_mjd, isRestricted'
+    collist = 'filename, productLevel, filter, coronmsk, targname, duration, effexptm, effinttm, exp_type, bkgdtarg, bstrtime, is_psf, nexposur, nframes, nints, numdthpt, obs_id, observtn, obslabel, pi_name, program, subarray, template, title, visit_id, visitsta, vststart_mjd, isRestricted, publicReleaseDate_mjd'
     all_columns = False
 
     parameters = {'columns': '*' if all_columns else collist,
@@ -169,6 +184,11 @@ def query_coron_datasets(inst,
         kind[responsetable.columns['exp_type'] == ta_type] = 'TA'
     kind[kind == ''] = 'SCI'
     responsetable.add_column(astropy.table.Column(kind), index=2, name='kind')
+
+    if ignore_exclusive_access:
+        mjd_now = astropy.time.Time.now().mjd
+        public_data = responsetable['publicReleaseDate_mjd'] < mjd_now
+        responsetable = responsetable[public_data]
 
     if return_filenames:
 
