@@ -1,8 +1,6 @@
 from __future__ import division
 
 import matplotlib
-matplotlib.rcParams.update({'font.size': 14})
-
 
 # =============================================================================
 # IMPORTS
@@ -13,7 +11,6 @@ import pdb
 import sys
 
 from astropy.io import fits 
-import matplotlib.pyplot as plt
 import numpy as np
 
 import json

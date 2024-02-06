@@ -1,7 +1,11 @@
 from __future__ import division
 
 import matplotlib
-matplotlib.rcParams.update({'font.size': 14})
+import matplotlib.pyplot as plt
+
+# Update the matplotlib plotting style
+from spaceKLIP import plotting
+plotting.load_plt_style()
 
 
 # =============================================================================
@@ -13,7 +17,6 @@ import pdb
 import sys
 
 import astropy.io.fits as pyfits
-import matplotlib.pyplot as plt
 import numpy as np
 
 from spaceKLIP import database, imagetools, coron1pipeline, coron2pipeline, coron3pipeline, pyklippipeline, contrast
