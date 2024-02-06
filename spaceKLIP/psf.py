@@ -200,17 +200,8 @@ class JWST_PSF():
         
         # Renormalize spectrum to have 1 e-/sec within bandpass to obtain normalized PSFs
         if sp is not None:
-            try:
-                sp = sp.renorm(1, 'counts', inst_on.bandpass)
-            except:
-                # Our spectrum was probably made in synphot
-                wave = sp.waveset
-                flux = sp(wave)
-                wunit = wave.unit.to_string()
-                funit = flux.unit.to_string()
-                sp = S.ArraySpectrum(wave.value, flux.value, 
-                                     waveunits=wunit, fluxunits=funit, name=sp.meta['name'])
-                sp = sp.renorm(1, 'counts', inst_on.bandpass)
+            sp = _sp_to_spext(sp, **kwargs)
+            sp = sp.renorm(1, 'counts', inst_on.bandpass)
         
         # On axis PSF
         log.info('Generating on-axis and off-axis PSFs...')
@@ -457,6 +448,7 @@ class JWST_PSF():
         
         # Renormalize spectrum to have 1 e-/sec within bandpass to obtain normalized PSFs
         if sp is not None:
+            sp = _sp_to_spext(sp)
             sp = sp.renorm(1, 'counts', self.bandpass)
         
         if self.name.upper()=='NIRCAM' and quick:
@@ -602,6 +594,25 @@ class JWST_PSF():
         psf = psf.squeeze()
         
         return psf
+
+
+def _sp_to_spext(sp, **kwargs):
+    """Check if input spectrum is a synphot spectrum and convert to webbpsf_ext spectrum"""
+
+    try:
+        wave = sp.wave
+        flux = sp.flux
+    except AttributeError:
+        # Assume it's a synphot spectrum
+        wave = sp.waveset
+        flux = sp(sp.wave)
+        wunit = wave.unit.to_string()
+        funit = flux.unit.to_string()
+        sp = S.ArraySpectrum(wave.value, flux.value, waveunits=wunit, fluxunits=funit, 
+                             name=sp.meta['name'], **kwargs)
+
+    return sp
+
 
 def recenter_jens(image):
     """
