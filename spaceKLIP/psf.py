@@ -13,8 +13,8 @@ import sys
 import astropy.io.fits as pyfits
 import numpy as np
 
-import pysynphot as S
 import webbpsf, webbpsf_ext
+from webbpsf_ext import synphot_ext as S
 
 from pyklip.klip import rotate as nanrotate
 from scipy.ndimage import rotate
@@ -83,7 +83,7 @@ class JWST_PSF():
             rather than pixel corner / boundaries.
         oversample : int
             Size of oversampling.
-        sp : pysynphot spectrum
+        sp : :class:`webbpsf_ext.synphot_ext.Spectrum`
             Spectrum to use for PSF wavelength weighting. If None, then default is G2V.
         use_coeff : bool
             Generate PSFs from webbpsf_ext coefficient library. If set to False, then
@@ -203,10 +203,13 @@ class JWST_PSF():
             try:
                 sp = sp.renorm(1, 'counts', inst_on.bandpass)
             except:
-                # Our spectrum was probably made in synphot not pysynphot, 
-                wunit = sp.waveset.unit.to_string()
-                funit = sp(sp.waveset).unit.to_string()
-                sp = S.ArraySpectrum(sp.waveset.value, sp(sp.waveset).value, wunit, funit, name=sp.meta['name'])
+                # Our spectrum was probably made in synphot
+                wave = sp.waveset
+                flux = sp(wave)
+                wunit = wave.unit.to_string()
+                funit = flux.unit.to_string()
+                sp = S.ArraySpectrum(wave.value, flux.value, 
+                                     waveunits=wunit, fluxunits=funit, name=sp.meta['name'])
                 sp = sp.renorm(1, 'counts', inst_on.bandpass)
         
         # On axis PSF
@@ -425,7 +428,7 @@ class JWST_PSF():
             10s of msec, compared to standard calculations using coefficients 
             (~1 sec) or on-the-fly calcs w/ webbpsf (10s of sec).
             Only applicable for NIRCam.
-        sp : pysynphot spectrum
+        sp : :class:`webbpsf_ext.synphot_ext.Spectrum`
             Manually specify spectrum to get a desired wavelength weighting. 
             Only applicable if ``quick=False``. If not set, defaults to ``self.sp``.
         return_oversample : bool
@@ -558,7 +561,7 @@ class JWST_PSF():
             10s of msec, compared to standard calculations using coefficients 
             (~1 sec) or on-the-fly calcs w/ webbpsf (10s of sec).
             Only applicable for NIRCam.
-        sp : pysynphot spectrum
+        sp : :class:`webbpsf_ext.synphot_ext.Spectrum`
             Manually specify spectrum to get a desired wavelength weighting. 
             Only applicable if ``quick=False``. If not set, defaults to ``self.sp``.
         

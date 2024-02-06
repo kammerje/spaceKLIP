@@ -1,7 +1,11 @@
--r requirements.txt
-sphinx
-pandoc
-nbsphinx
-sphinx-rtd-theme
+astropy
+astroquery
+jwst
+matplotlib
+numpy
+synphot
+stsynphot
+scipy
+webbpsf
 webbpsf_ext
-sphinx_automodapi
+pyklip
