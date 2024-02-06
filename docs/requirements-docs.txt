@@ -1,0 +1,16 @@
+astropy
+astroquery
+jwst
+matplotlib
+numpy
+synphot
+stsynphot
+scipy
+webbpsf
+webbpsf_ext @ git+https://github.com/JarronL/webbpsf_ext.git@develop
+pyklip @ git+https://bitbucket.org/pyKLIP/pyklip.git@jwst_new
+sphinx
+pandoc
+nbsphinx
+sphinx-rtd-theme
+sphinx_automodapi
