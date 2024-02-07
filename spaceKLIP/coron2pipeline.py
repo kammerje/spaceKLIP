@@ -41,10 +41,6 @@ class Coron2Pipeline_spaceKLIP(Image2Pipeline):
         save_intermediates = boolean(default=False) # Save all intermediate step results
     """
 
-    spec = """
-        save_intermediates = boolean(default=False) # Save all intermediate step results
-    """
-
     def __init__(self,
                  **kwargs):
         """
