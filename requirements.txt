@@ -8,5 +8,5 @@ synphot
 stsynphot
 scipy
 webbpsf
-webbpsf_ext @ git+https://github.com/JarronL/webbpsf_ext.git@synphot
+webbpsf_ext @ git+https://github.com/JarronL/webbpsf_ext.git@synphot_update
 pyklip @ git+https://bitbucket.org/pyKLIP/pyklip.git@jwst_new
