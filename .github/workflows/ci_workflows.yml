@@ -46,6 +46,14 @@ jobs:
            tar -xzvf /tmp/minimal-webbpsf-data.tar.gz
            echo "WEBBPSF_PATH=${{github.workspace}}/webbpsf-data" >> $GITHUB_ENV
 
+    - name: Set webbpsf_ext Data
+      run: | # Set up webbpsf_ext data environment variable
+        echo "WEBBPSF_EXT_PATH=$(mktemp -d)" >> $GITHUB_ENV
+
+    - name: Set CDBS Data Path
+      run: | # Set up pycdbs environment variable
+        echo "PYSYN_CDBS=$(mktemp -d)" >> $GITHUB_ENV
+           
     - name: Get SpaceKLIP test Data
       if: ${{ contains(matrix.toxenv,'test') }}
       run: |  
