@@ -1,6 +1,5 @@
 astropy
 astroquery
-jdaviz
 jwst
 matplotlib
 numpy

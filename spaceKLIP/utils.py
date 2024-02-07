@@ -1026,3 +1026,52 @@ def cube_outlier_detection(data, sigma_cut=10, nint_min=10):
 
     return indbad
 
+def interpret_dq_value(dq_value):
+    """Interpret DQ value using DQ definition
+
+    Parameters
+    ----------
+    dq_value : int
+        DQ value to interpret.
+
+    Returns
+    -------
+    str
+        Interpretation of DQ value.
+    """
+
+    from stdatamodels.jwst.datamodels.dqflags import pixel, dqflags_to_mnemonics
+
+    if dq_value == 0:
+        return {'GOOD'}
+    return dqflags_to_mnemonics(dq_value, pixel)
+
+def get_dqmask(dqarr, bitvalues):
+    """Get DQ mask from DQ array
+    
+    Given some DQ array and a list of bit values, return a mask
+    for the pixels that have any of the specified bit values.
+
+    Parameters
+    ----------
+    dqarr : ndarray
+        DQ array. Either 2D or 3D.
+    bitvalues : list
+        List of bit values to use for DQ mask. 
+        These values must be powers of 2 (e.g., 1, 2, 4, 8, 16, ...),
+        representing the specific DQ bit flags.
+    """
+
+    from astropy.nddata.bitmask import _is_bit_flag
+
+    for v in bitvalues:
+        if not _is_bit_flag(v):
+            raise ValueError(
+                f"Input list contains invalid (not powers of two) bit flag: {v}"
+            )
+
+    dqmask = np.zeros_like(dqarr, dtype=bool)
+    for bitval in bitvalues:
+        dqmask = dqmask | (dqarr & bitval)
+
+    return dqmask
