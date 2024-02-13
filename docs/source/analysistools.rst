@@ -1,6 +1,6 @@
 .. _analysistools:
 
-spaceklip.analysistools 
---------------------
+Analysis Tools
+--------------
 
-Documentation of the ``spaceklip.analysistools`` module will go here.
+TBD: Detailed documentation of the ``spaceklip.analysistools`` module will go here.

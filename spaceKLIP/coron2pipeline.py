@@ -1,8 +1,6 @@
 from __future__ import division
 
 import matplotlib
-matplotlib.rcParams.update({'font.size': 14})
-
 
 # =============================================================================
 # IMPORTS
@@ -13,7 +11,6 @@ import pdb
 import sys
 
 import astropy.io.fits as pyfits
-import matplotlib.pyplot as plt
 import numpy as np
 
 from tqdm import tqdm, trange
@@ -39,6 +36,10 @@ class Coron2Pipeline_spaceKLIP(Image2Pipeline):
     """
     
     class_alias = "calwebb_coron2"
+    
+    spec = """
+        save_intermediates = boolean(default=False) # Save all intermediate step results
+    """
 
     def __init__(self,
                  **kwargs):

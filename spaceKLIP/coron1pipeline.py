@@ -1,8 +1,6 @@
 from __future__ import division
 
 import matplotlib
-matplotlib.rcParams.update({'font.size': 14})
-
 
 # =============================================================================
 # IMPORTS
@@ -13,10 +11,9 @@ import pdb
 import sys
 
 import astropy.io.fits as pyfits
-import matplotlib.pyplot as plt
 import numpy as np
 
-from tqdm.auto import trange
+from tqdm import trange
 
 from jwst.lib import reffile_utils
 from jwst.datamodels import dqflags, RampModel, SaturationModel
@@ -54,6 +51,7 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         save_intermediates = boolean(default=False) # Save all intermediate step results
         rate_int_outliers  = boolean(default=False) # Flag outlier pixels in rateints
         return_rateints    = boolean(default=False) # Return rateints or rate product?
+        stage_1overf       = string(default='ints') # Where in process to perform 1/f noise removal; groups or ints
     """
     
     def __init__(self,
@@ -149,7 +147,8 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
             input = self.run_step(self.charge_migration, input)
             input = self.run_step(self.jump, input)
             input = self.run_step(self.subtract_ktc, input)
-            input = self.run_step(self.subtract_1overf, input)
+            if 'groups' in self.stage_1overf:
+                input = self.run_step(self.subtract_1overf, input)
         
         # save the corrected ramp data, if requested
         if self.ramp_fit.save_calibrated_ramp or self.save_calibrated_ramp or self.save_intermediates:
@@ -175,7 +174,16 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         else:
             self.gain_scale.suffix = 'rate'
             input = self.run_step(self.gain_scale, input, save_results=False)
-        
+
+        # Perform 1/f correction on rateints if requested
+        if ('ints' in self.stage_1overf) and ('MIRI' not in instrument):
+            # Apply 1/f noise correction to rateints
+            if ints_model is not None:
+                ints_model = self.run_step(self.subtract_1overf, ints_model)
+            if (input is not None) and (ints_model is not None):
+                # TODO: Find better method to average rateints. Weighted mean?
+                input.data = np.nanmean(ints_model.data, axis=0)
+
         # apply the gain scale step to the multi-integration product,
         # if it exists, and then save it
         if ints_model is not None:
@@ -451,6 +459,7 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         -------
         res : jwst.datamodel
             Output JWST datamodel.
+
         """
         
         # Get number of custom reference pixel rows & columns.
@@ -516,6 +525,7 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     WARNING: Will overwrite exiting files.
 
     This customized implementation can:
+
     - Do a custom saturation correction where only the bottom/top/left/right
       and not the diagonal pixels next to a saturated pixel are flagged.
     - Do a pseudo reference pixel correction. Therefore, flag the requested
@@ -523,7 +533,7 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
       step, and unflag the pseudo reference pixels again. Only applicable for
       subarray data.
     - Remove 1/f noise spatial striping in NIRCam data.
-    
+
     Parameters
     ----------
     fitspath : str
@@ -534,6 +544,7 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
         See here for how to use the steps parameter:
         https://jwst-pipeline.readthedocs.io/en/latest/jwst/user_documentation/running_pipeline_python.html#configuring-a-pipeline-step-in-python
         Custom step parameters are:
+
         - saturation/grow_diagonal : bool, optional
             Flag also diagonal pixels (or only bottom/top/left/right)? 
             The default is True.
@@ -552,6 +563,7 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
             Save the calibrated ramp? The default is False.
 
         Additional useful step parameters:
+
         - saturation/n_pix_grow_sat : int, optional
             Number of pixels to grow for saturation flagging. Default is 1.
         - ramp_fit/suppress_one_group : bool, optional
@@ -560,10 +572,8 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
         - ramp_fit/maximum_cores : str, optional
             max number of parallel processes to create during ramp fitting.
             'none', 'quarter', 'half', or 'all'. Default: 'quarter'.
+
         The default is {}. 
-    subdir : str, optional
-        Name of the directory where the data products shall be saved. The
-        default is 'stage1'.
     
     Keyword Args
     ------------
@@ -583,6 +593,9 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
         a minimum of 5 integrations.
     flag_rcsat : bool, optional
         Flag known RC pixels as always saturated? Default is False.
+    stage_1overf : str, optional
+        Where in the pipeline process to perform 1/f noise removal?
+        Either at the 'groups' or 'ints' level. Default is 'ints'.
     skip_ktc : bool, optional
         Remove kTC noise by fitting ramp data to get bias? 
         Useful for looking at linearized ramp data.
@@ -608,8 +621,8 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
 
     Returns
     -------
-    None.
-    
+    Pipeline output, either rate or rateint data model.
+
     """
 
     from webbpsf_ext.analysis_tools import nrc_ref_info
@@ -631,6 +644,9 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     pipeline.save_calibrated_ramp = kwargs.get('save_calibrated_ramp', False)
     pipeline.save_intermediates   = kwargs.get('save_intermediates', False)
     pipeline.return_rateints      = kwargs.get('return_rateints', False)
+
+    # Level of data product to perform 1/f correction ('groups' or 'ints')
+    pipeline.stage_1overf = kwargs.get('stage_1overf', 'ints')
 
     # Skip certain steps?
     pipeline.charge_migration.skip = kwargs.get('skip_charge', False)
@@ -715,6 +731,7 @@ def run_obs(database,
     """
     Run the JWST stage 1 detector pipeline on the input observations database.
     This customized implementation can:
+
     - Do a custom saturation correction where only the bottom/top/left/right
       and not the diagonal pixels next to a saturated pixel are flagged.
     - Do a pseudo reference pixel correction. Therefore, flag the requested
@@ -731,6 +748,7 @@ def run_obs(database,
         See here for how to use the steps parameter:
         https://jwst-pipeline.readthedocs.io/en/latest/jwst/user_documentation/running_pipeline_python.html#configuring-a-pipeline-step-in-python
         Custom step parameters are:
+
         - saturation/grow_diagonal : bool, optional
             Flag also diagonal pixels (or only bottom/top/left/right)? 
             The default is True.
@@ -749,6 +767,7 @@ def run_obs(database,
             Save the calibrated ramp? The default is False.
 
         Additional useful step parameters:
+
         - saturation/n_pix_grow_sat : int, optional
             Number of pixels to grow for saturation flagging. Default is 1.
         - ramp_fit/suppress_one_group : bool, optional
@@ -757,7 +776,8 @@ def run_obs(database,
         - ramp_fit/maximum_cores : str, optional
             max number of parallel processes to create during ramp fitting.
             'none', 'quarter', 'half', or 'all'. Default: 'quarter'.
-        The default is {}. 
+
+        Default is {}.
         Each of these parameters can be passed directly through `kwargs`.
     subdir : str, optional
         Name of the directory where the data products shall be saved. The
@@ -788,6 +808,9 @@ def run_obs(database,
         a minimum of 5 integrations.
     flag_rcsat : bool, optional
         Flag known RC pixels as always saturated? Default is False.
+    stage_1overf : str, optional
+        Where in the pipeline process to perform 1/f noise removal?
+        Either at the 'groups' or 'ints' level. Default is 'ints'.
     skip_ktc : bool, optional
         Remove kTC noise by fitting ramp data to get bias? 
         Useful for looking at linearized ramp data.
@@ -814,7 +837,7 @@ def run_obs(database,
     Returns
     -------
     None.
-    
+
     """
 
     # Set output directory.
@@ -857,8 +880,8 @@ def run_obs(database,
                 if not quiet: log.info('  --> Coron1Pipeline: skipping already processed file ' + tail)
             else:
                 if not quiet: log.info('  --> Coron1Pipeline: processing ' + tail)
-                res = run_single_file(fitspath, output_dir, steps=steps, 
-                                      verbose=verbose, **kwargs)
+                _ = run_single_file(fitspath, output_dir, steps=steps, 
+                                    verbose=verbose, **kwargs)
             
             # Update spaceKLIP database.
             database.update_obs(key, j, fitsout_path)

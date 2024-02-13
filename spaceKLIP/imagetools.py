@@ -1,8 +1,6 @@
 from __future__ import division
 
 import matplotlib
-matplotlib.rcParams.update({'font.size': 14})
-
 
 # =============================================================================
 # IMPORTS
@@ -35,6 +33,8 @@ from spaceKLIP.xara import core
 from webbpsf_ext import robust
 from webbpsf_ext.coords import dist_image
 from webbpsf_ext.webbpsf_ext_core import _transmission_map
+
+from webbpsf.constants import JWST_CIRCUMSCRIBED_DIAMETER
 
 import logging
 log = logging.getLogger(__name__)
@@ -488,9 +488,6 @@ class ImageTools():
         subdir : str, optional
             Name of the directory where the data products shall be saved. The
             default is 'medsub'.
-        
-       None.
-        
         method : str
             'robust' for a robust median after masking out bright stars,
             'sigma_clipped' for another version of robust median using astropy sigma_clipped_stats on the whole image,
@@ -605,6 +602,7 @@ class ImageTools():
             set to 5, a median of every 5 background images will be subtracted from
             the corresponding 5 target images. The default is None (i.e. a median 
             across all images).
+
         subdir : str, optional
             Name of the directory where the data products shall be saved. The
             default is 'bgsub'.
@@ -659,6 +657,7 @@ class ImageTools():
                 sci_bg_data = np.concatenate(sci_bg_data)
                 sci_bg_erro = np.concatenate(sci_bg_erro)
                 sci_bg_pxdq = np.concatenate(sci_bg_pxdq)
+
                 sci_bg_data_split = np.array_split(sci_bg_data, split_inds, axis=0)
                 sci_bg_erro_split = np.array_split(sci_bg_erro, split_inds, axis=0)
                 sci_bg_pxdq_split = np.array_split(sci_bg_pxdq, split_inds, axis=0)
@@ -695,6 +694,7 @@ class ImageTools():
                 ref_bg_data = np.concatenate(ref_bg_data)
                 ref_bg_erro = np.concatenate(ref_bg_erro)
                 ref_bg_pxdq = np.concatenate(ref_bg_pxdq)
+
                 ref_bg_data_split = np.array_split(ref_bg_data, split_inds, axis=0)
                 ref_bg_erro_split = np.array_split(ref_bg_erro, split_inds, axis=0)
                 ref_bg_pxdq_split = np.array_split(ref_bg_pxdq, split_inds, axis=0)
@@ -779,13 +779,14 @@ class ImageTools():
                        restrict_to=None):
         """
         Identify and fix bad pixels.
-        
+
         Parameters
         ----------
         method : str, optional
             Sequence of bad pixel identification and cleaning methods to be run
             on the data. Different methods must be joined by a '+' sign without
             whitespace. Available methods are:
+
             - bpclean: use sigma clipping to identify additional bad pixels.
             - custom: use a custom bad pixel map.
             - timemed: replace pixels which are only bad in some frames with
@@ -793,9 +794,11 @@ class ImageTools():
             - dqmed: replace bad pixels with the median value of their
                      surrounding good pixels.
             - medfilt: replace bad pixels with an image plane median filter.
+
             The default is 'timemed+dqmed+medfilt'.
         bpclean_kwargs : dict, optional
             Keyword arguments for the 'bpclean' method. Available keywords are:
+
             - sigclip : float, optional
                 Sigma clipping threshold. The default is 5.
             - shift_x : list of int, optional
@@ -804,6 +807,7 @@ class ImageTools():
             - shift_y : list of int, optional
                 Pixels in y-direction to which each pixel shall be compared to.
                 The default is [-1, 0, 1].
+
             The default is {}.
         custom_kwargs : dict, optional
             Keyword arguments for the 'custom' method. The dictionary keys must
@@ -812,21 +816,27 @@ class ImageTools():
             same shape as the corresponding data. The default is {}.
         timemed_kwargs : dict, optional
             Keyword arguments for the 'timemed' method. Available keywords are:
+
             - n/a
+
             The default is {}.
         dqmed_kwargs : dict, optional
             Keyword arguments for the 'dqmed' method. Available keywords are:
+
             - shift_x : list of int, optional
                 Pixels in x-direction from which the median shall be computed.
                 The default is [-1, 0, 1].
             - shift_y : list of int, optional
                 Pixels in y-direction from which the median shall be computed.
                 The default is [-1, 0, 1].
+
             The default is {}.
         medfilt_kwargs : dict, optional
             Keyword arguments for the 'medfilt' method. Available keywords are:
+
             - size : int, optional
                 Kernel size of the median filter to be used. The default is 4.
+
             The default is {}.
         types : list of str, optional
             List of data types for which bad pixels shall be identified and
@@ -839,7 +849,7 @@ class ImageTools():
         Returns
         -------
         None.
-        
+
         """
         
         # Set output directory.
@@ -946,6 +956,7 @@ class ImageTools():
             be modified by the routine.
         bpclean_kwargs : dict, optional
             Keyword arguments for the 'bpclean' method. Available keywords are:
+
             - sigclip : float, optional
                 Sigma clipping threshold. The default is 5.
             - shift_x : list of int, optional
@@ -954,12 +965,13 @@ class ImageTools():
             - shift_y : list of int, optional
                 Pixels in y-direction to which each pixel shall be compared to.
                 The default is [-1, 0, 1].
+
             The default is {}.
         
         Returns
         -------
         None.
-        
+
         """
         
         # Check input.
@@ -1148,18 +1160,20 @@ class ImageTools():
             the routine to exclude the fixed bad pixels.
         dqmed_kwargs : dict, optional
             Keyword arguments for the 'dqmed' method. Available keywords are:
+
             - shift_x : list of int, optional
                 Pixels in x-direction from which the median shall be computed.
                 The default is [-1, 0, 1].
             - shift_y : list of int, optional
                 Pixels in y-direction from which the median shall be computed.
                 The default is [-1, 0, 1].
+
             The default is {}.
         
         Returns
         -------
         None.
-        
+
         """
         
         # Check input.
@@ -1236,14 +1250,16 @@ class ImageTools():
             the routine to exclude the fixed bad pixels.
         medfilt_kwargs : dict, optional
             Keyword arguments for the 'medfilt' method. Available keywords are:
+
             - size : int, optional
                 Kernel size of the median filter to be used. The default is 4.
+
             The default is {}.
-        
+
         Returns
         -------
         None.
-        
+
         """
         
         # Check input.
@@ -1392,7 +1408,7 @@ class ImageTools():
                         if self.database.obs[key]['EXP_TYPE'][j] in ['NRC_CORON']:
                             diam = 5.2
                         else:
-                            diam = 6.5
+                            diam = JWST_CIRCUMSCRIBED_DIAMETER
                     else:
                         raise UserWarning('Data originates from unknown telescope')
                     if fact_temp is not None:
@@ -1798,6 +1814,7 @@ class ImageTools():
         
         pass
     
+    @plt.style.context('spaceKLIP.sk_style')
     def find_nircam_centers(self,
                             data0,
                             key,
@@ -1907,7 +1924,7 @@ class ImageTools():
                                                               model_psf * masksub,
                                                               upsample_factor=1000,
                                                               normalization=None,
-                                                              return_error=False)
+                                                              return_error=True)
             yshift, xshift = shift
             
             # Update star position.
@@ -1918,7 +1935,7 @@ class ImageTools():
         
         # Plot data, model PSF, and scene overview.
         if output_dir is not None:
-            f, ax = plt.subplots(1, 3, figsize=(3 * 6.4, 1 * 4.8))
+            fig, ax = plt.subplots(1, 3, figsize=(3 * 6.4, 1 * 4.8))
             ax[0].imshow(datasub, origin='lower', cmap='Reds')
             ax[0].contourf(masksub, levels=[0.00, 0.25, 0.50, 0.75], cmap='Greys_r', vmin=0., vmax=2., alpha=0.5)
             ax[0].set_title('1. SCI frame & transmission mask')
@@ -1948,11 +1965,12 @@ class ImageTools():
             plt.savefig(output_file)
             log.info(f" Plot saved in {output_file}")
             # plt.show()
-            plt.close()
+            plt.close(fig)
         
         # Return star position.
         return xc, yc, xshift, yshift
     
+    @plt.style.context('spaceKLIP.sk_style')
     def align_frames(self,
                      method='fourier',
                      align_algo='leastsq',
@@ -2095,8 +2113,8 @@ class ImageTools():
                         log.warning('  --> The following frames might not be properly aligned: '+str(ww))
                 
                 # Write FITS file and PSF mask.
-                head_pri['XOFFSET'] = xoffset
-                head_pri['YOFFSET'] = yoffset
+                head_pri['XOFFSET'] = xoffset #arcseconds
+                head_pri['YOFFSET'] = yoffset #arcseconds 
                 head_sci['CRPIX1'] = crpix1
                 head_sci['CRPIX2'] = crpix2
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs)
@@ -2107,7 +2125,7 @@ class ImageTools():
             
             # Plot science frame alignment.
             colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
-            f = plt.figure(figsize=(6.4, 4.8))
+            fig = plt.figure(figsize=(6.4, 4.8))
             ax = plt.gca()
             for index, j in enumerate(ww_sci):
                 ax.scatter(shifts_all[index][:, 0] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
@@ -2116,6 +2134,7 @@ class ImageTools():
                            label='PA = %.0f deg' % self.database.obs[key]['ROLL_REF'][j])
             ax.axhline(0., color='gray', lw=1, zorder=-1)  # set zorder to ensure lines are drawn behind all the scatter points
             ax.axvline(0., color='gray', lw=1, zorder=-1)
+
             ax.set_aspect('equal')
             xlim = ax.get_xlim()
             ylim = ax.get_ylim()
@@ -2134,12 +2153,12 @@ class ImageTools():
             output_file = os.path.join(output_dir, key + '_align_sci.pdf')
             plt.savefig(output_file)
             log.info(f" Plot saved in {output_file}")
-            plt.close()
+            plt.close(fig)
             
             # Plot reference frame alignment.
             if len(ww_ref) > 0:
                 colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
-                f = plt.figure(figsize=(6.4, 4.8))
+                fig = plt.figure(figsize=(6.4, 4.8))
                 ax = plt.gca()
                 seen = []
                 reps = []
@@ -2186,4 +2205,5 @@ class ImageTools():
                 output_file = os.path.join(output_dir, key + '_align_ref.pdf')
                 plt.savefig(output_file)
                 log.info(f" Plot saved in {output_file}")
-                plt.close()
+                plt.close(fig)
+
