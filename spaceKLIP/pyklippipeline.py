@@ -206,7 +206,10 @@ class SpaceTelescope(Data):
             hdul = pyfits.open(filepath)
             TELESCOP = hdul[0].header['TELESCOP']
             data = hdul['SCI'].data
-            pxdq = hdul['DQ'].data
+            try:
+                pxdq = hdul['DQ'].data
+            except:
+                pxdq = np.zeros_like(data).astype('int')
             if data.ndim == 2:
                 data = data[np.newaxis, :]
                 pxdq = pxdq[np.newaxis, :]
@@ -310,7 +313,10 @@ class SpaceTelescope(Data):
             # Read reference file.
             hdul = pyfits.open(filepath)
             data = hdul['SCI'].data
-            pxdq = hdul['DQ'].data
+            try:
+                pxdq = hdul['DQ'].data
+            except:
+                pxdq = np.zeros_like(data).astype('int')
             if data.ndim == 2:
                 data = data[np.newaxis, :]
                 pxdq = pxdq[np.newaxis, :]

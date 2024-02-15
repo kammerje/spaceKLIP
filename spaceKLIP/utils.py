@@ -115,8 +115,14 @@ def read_obs(fitsfile,
     # Read FITS file.
     hdul = pyfits.open(fitsfile)
     data = hdul['SCI'].data
-    erro = hdul['ERR'].data
-    pxdq = hdul['DQ'].data
+    try:
+        erro = hdul['ERR'].data
+    except:
+        erro = np.sqrt(data)
+    try:
+        pxdq = hdul['DQ'].data
+    except:
+        pxdq = np.zeros_like(data).astype('int')
     head_pri = hdul[0].header
     head_sci = hdul['SCI'].header
     is2d = False
