@@ -420,7 +420,8 @@ class AnalysisTools():
                            multi_injection_spacing=None,
                            use_saved=False,
                            thrput_fit_method='median',
-                           plot_xlim=(0,10)
+                           plot_xlim=(0,10),
+                           **kwargs
                            ):
         """ 
         Compute a calibrated contrast curve relative to the host star flux. 
@@ -552,7 +553,8 @@ class AnalysisTools():
                 mstar, fzero = get_stellar_magnitudes(starfile,
                                                       spectral_type,
                                                       self.database.red[key]['INSTRUME'][j],
-                                                      output_dir=output_dir)  # vegamag, Jy
+                                                      output_dir=output_dir,
+                                                      **kwargs)  # vegamag, Jy
                 filt = self.database.red[key]['FILTER'][j]
                 fstar = fzero[filt] / 10.**(mstar[filt] / 2.5) / 1e6 * np.max(offsetpsf)  # MJy
                 fstar *= ((180./np.pi)*3600.)**2/pxsc_arcsec**2 # MJy/sr
