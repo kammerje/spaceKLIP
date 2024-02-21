@@ -85,6 +85,17 @@ def run_obs(database,
         kwargs['mode'] = [kwargs['mode']]
     if 'annuli' not in kwargs.keys():
         kwargs['annuli'] = [1]
+    """ TODO: Pass specific annuli radius bounds to pyKLIP (requires changes to pyKLIP)
+    if 'annuli' not in kwargs.keys() and 'rad_bounds' not in kwargs.keys():
+        kwargs['annuli'] = [1]
+        kwargs['rad_bounds'] = None
+    elif 'rad_bounds' not in kwargs.keys():
+        kwargs['rad_bounds'] = None
+    elif 'annuli' not in kwargs.keys():
+        kwargs['annuli'] = [len(kwargs['rad_bounds'])]
+    else: 
+        assert kwargs['annuli'] == [len(kwargs['rad_bounds'])] or kwargs['annuli'] == len(kwargs['rad_bounds']) 
+        """
     if not isinstance(kwargs['annuli'], list):
         kwargs['annuli'] = [kwargs['annuli']]
     if 'subsections' not in kwargs.keys():
@@ -129,6 +140,9 @@ def run_obs(database,
         
         # Initialize pyKLIP dataset.
         dataset = JWSTData(filepaths, psflib_filepaths)
+        # Override OWA
+        dataset.OWA = dataset._input.shape[-1] / 2
+
         kwargs_temp['dataset'] = dataset
         kwargs_temp['aligned_center'] = dataset._centers[0]
         kwargs_temp['psf_library'] = dataset.psflib

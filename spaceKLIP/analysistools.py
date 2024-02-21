@@ -529,6 +529,9 @@ class AnalysisTools():
                 # Read Stage 2 files and make pyKLIP dataset
                 filepaths, psflib_filepaths = get_pyklip_filepaths(self.database, key)
                 pyklip_dataset = JWSTData(filepaths, psflib_filepaths)
+                
+                # Overwrite OWA
+                pyklip_dataset.OWA = pyklip_dataset._input.shape[-1] / 2
 
                 # Compute the resolution element. Account for possible blurring.
                 pxsc_arcsec = self.database.red[key]['PIXSCALE'][j] # arcsec
@@ -955,6 +958,10 @@ class AnalysisTools():
                 
                 # Initialize pyKLIP dataset.
                 dataset = JWSTData(filepaths, psflib_filepaths)
+
+                # Overwrite OWA
+                dataset.OWA = dataset._input.shape[-1] / 2
+
                 kwargs_temp['dataset'] = dataset
                 kwargs_temp['aligned_center'] = dataset._centers[0]
                 kwargs_temp['psf_library'] = dataset.psflib
