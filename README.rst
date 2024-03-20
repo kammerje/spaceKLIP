@@ -29,7 +29,7 @@ From here, it is **highly** recommended that you create a unique Anaconda enviro
 
 ::
 
-	conda create -n spaceklip python=3
+	conda create -n spaceklip python=3.11
 	conda activate spaceklip
 
 With the Anaconda environment created, move to the cloned directory and install the dependencies and spaceKLIP itself:
