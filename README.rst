@@ -8,6 +8,8 @@ SpaceKLIP is a data reduction pipeline for JWST high-contrast imaging. The curre
 
 Compatible test data: `here <https://stsci.box.com/s/0oteh8smujl3pup07hyut6hr4ag1i2el>`_ 
 
+Documentation: `here <https://spaceklip.readthedocs.io/en/latest/>`_
+
 Installation
 ************
 
