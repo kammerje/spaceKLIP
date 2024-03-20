@@ -4,6 +4,9 @@ Stage 1
 
 The following steps are part of the ``Coron1Pipeline`` custom version of the JWST pipeline's ``Detector1Pipeline``.
 
+Note, the ``coron1pipeline.run_obs()`` function provides a succinct interface to create and invoke Coron1Pipeline on all
+observations in a spaceKLIP Database; that's the recommended way to invoke Coron1Pipeline.
+
 
 group_scale
 -----------
