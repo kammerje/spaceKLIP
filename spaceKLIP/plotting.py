@@ -174,7 +174,7 @@ def annotate_secondary_axes_arcsec(ax, image, wcs):
     secay.tick_params(labelsize='small')
 
 @plt.style.context('spaceKLIP.sk_style')
-def display_coron_image(filename):
+def display_coron_image(filename, vmin=None, vmax=None):
     """
     Display and annotate a coronagraphic image.
     
@@ -263,13 +263,18 @@ def display_coron_image(filename):
         bpmask[np.isnan(image)] = 1
     else:
         bpmask[(model.dq[0] & 1) == True] = 1
-        
-    
+
+
     # Set up image stretch
     #  including reasonable min/max for asinh stretch
-    stats = astropy.stats.sigma_clipped_stats(image)
+    stats = astropy.stats.sigma_clipped_stats(image[bpmask !=1 ])
     low = stats[0] - stats[2]  # 1 sigma below image mean.
     high = np.nanmax(image)
+    print("STRETCH", low, high)
+    if vmin is not None:
+        low = vmin
+    if vmax is not None:
+        high = vmax
     
     interval = v.ManualInterval(low, high)
     stretch = v.AsinhStretch(a=.0001)
