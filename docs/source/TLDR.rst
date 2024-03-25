@@ -4,3 +4,5 @@ TL;DR Setup Guide
 
     $ git clone https://github.com/kammerje/spaceKLIP.git
     $ pip install -r requirements.txt
+    $ pip install -e .
+    $ python make_psfmasks.py
