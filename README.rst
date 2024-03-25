@@ -1,12 +1,14 @@
-###############
-SpaceKLIP 2 🚀🪐
-###############
+##############
+SpaceKLIP 🚀🪐
+##############
 
 .. image:: logo.png
 
 SpaceKLIP is a data reduction pipeline for JWST high-contrast imaging. The current release has been tested with NIRCam and MIRI coronagraphy data.
 
 Compatible test data: `here <https://stsci.box.com/s/0oteh8smujl3pup07hyut6hr4ag1i2el>`_ 
+
+Documentation: `here <https://spaceklip.readthedocs.io/en/latest/>`_
 
 Installation
 ************
@@ -27,7 +29,7 @@ From here, it is **highly** recommended that you create a unique Anaconda enviro
 
 ::
 
-	conda create -n spaceklip python=3
+	conda create -n spaceklip python=3.11
 	conda activate spaceklip
 
 With the Anaconda environment created, move to the cloned directory and install the dependencies and spaceKLIP itself:
@@ -37,18 +39,6 @@ With the Anaconda environment created, move to the cloned directory and install 
 	cd where/you/saved/the/git/repo
 	pip install -r requirements.txt
 	pip install -e .
-
-Install the develop branch of WebbPSF_ext:
-
-::
-
-	pip install git+https://github.com/JarronL/webbpsf_ext.git@develop
-
-NEW AS OF 1 MAY 2023: you also need to switch to the jwst branch of pyKLIP:
-
-::
-
-	pip install git+https://bitbucket.org/pyKLIP/pyklip.git@jwst
 
 NEW AS OF 1 JUNE 2023: you also need to make the custom PSF mask files before running spaceKLIP for the first time:
 
@@ -158,7 +148,7 @@ The current capabilities of the code are summarized below.
 - ``raw_contrast``: working with ``pyklippipeline`` products, not working with ``coron3pipeline`` products since PSF center not being tracked
 - ``extract_companions``: working with ``pyklippipeline`` products, not working with ``coron3pipeline`` products since PSF center not being tracked
 - combined coronagraphic throughput map: working
-- need to add calibrated contrast
+- `` calibrated_contrast`` working with ``pyklippipeline`` products
 
 ::
 

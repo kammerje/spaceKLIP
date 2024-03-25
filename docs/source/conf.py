@@ -65,6 +65,14 @@ templates_path = []#['./_templates']
 # mock imports for autodoc
 autodoc_mock_imports = ["webbpsf"]
 
+# nbsphinx settings
+nbsphinx_allow_errors = True
+nbsphinx_execute = 'never'
+nbsphinx_prolog = """
+{% set docname = env.doc2path(env.docname, base=None) %}
+.. note::  `Download the full notebook for this tutorial here <https://github.com/kammerje/spaceKLIP/tree/develop/docs/source/{{ docname }}>`_
+"""
+
 # The suffix(es) of source filenames.
 # You can specify multiple suffix as a list of string:
 #
@@ -225,6 +233,8 @@ html_logo = '_static/logo.png'
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
+def setup(app):
+    app.add_css_file('wider_docs.css')
 html_static_path = ['./_static']
 
 # Add any extra paths that contain custom files (such as robots.txt or
