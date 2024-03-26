@@ -84,7 +84,8 @@ class AnalysisTools():
                      overwrite_crpix=None,
                      subdir='rawcon',
                      output_filetype='npy',
-                     plot_xlim=(0,10)):
+                     plot_xlim=(0,10),
+                     **kwargs):
         """
         Compute the raw contrast relative to the provided host star flux.
         
@@ -153,7 +154,7 @@ class AnalysisTools():
                 log.info('Analyzing file ' + self.database.red[key]['FITSFILE'][j])
 
                 # Get stellar magnitudes and filter zero points.
-                mstar, fzero = get_stellar_magnitudes(starfile, spectral_type, self.database.red[key]['INSTRUME'][j], output_dir=output_dir)  # vegamag, Jy
+                mstar, fzero = get_stellar_magnitudes(starfile, spectral_type, self.database.red[key]['INSTRUME'][j], output_dir=output_dir, **kwargs)  # vegamag, Jy
                 
                 tp_comsubst = ut.get_tp_comsubst(self.database.red[key]['INSTRUME'][j],
                                                  self.database.red[key]['SUBARRAY'][j],
@@ -419,7 +420,8 @@ class AnalysisTools():
                            multi_injection_spacing=None,
                            use_saved=False,
                            thrput_fit_method='median',
-                           plot_xlim=(0,10)
+                           plot_xlim=(0,10),
+                           **kwargs
                            ):
         """ 
         Compute a calibrated contrast curve relative to the host star flux. 
@@ -551,7 +553,8 @@ class AnalysisTools():
                 mstar, fzero = get_stellar_magnitudes(starfile,
                                                       spectral_type,
                                                       self.database.red[key]['INSTRUME'][j],
-                                                      output_dir=output_dir)  # vegamag, Jy
+                                                      output_dir=output_dir,
+                                                      **kwargs)  # vegamag, Jy
                 filt = self.database.red[key]['FILTER'][j]
                 fstar = fzero[filt] / 10.**(mstar[filt] / 2.5) / 1e6 * np.max(offsetpsf)  # MJy
                 fstar *= ((180./np.pi)*3600.)**2/pxsc_arcsec**2 # MJy/sr
@@ -839,7 +842,8 @@ class AnalysisTools():
                            subtract=True,
                            inject=False,
                            overwrite=True,
-                           subdir='companions'):
+                           subdir='companions',
+                           **kwargs):
         """
         Extract the best fit parameters of a number of companions from each
         reduction in the spaceKLIP reductions database.
@@ -919,7 +923,7 @@ class AnalysisTools():
             for j in range(nfitsfiles):
                 
                 # Get stellar magnitudes and filter zero points.
-                mstar, fzero, fzero_si = get_stellar_magnitudes(starfile, spectral_type, self.database.red[key]['INSTRUME'][j], return_si=True, output_dir=output_dir)  # vegamag, Jy, erg/cm^2/s/A
+                mstar, fzero, fzero_si = get_stellar_magnitudes(starfile, spectral_type, self.database.red[key]['INSTRUME'][j], return_si=True, output_dir=output_dir,**kwargs)  # vegamag, Jy, erg/cm^2/s/A
                 
                 # Get COM substrate throughput.
                 tp_comsubst = ut.get_tp_comsubst(self.database.red[key]['INSTRUME'][j],

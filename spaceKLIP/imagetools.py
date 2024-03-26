@@ -1091,7 +1091,8 @@ class ImageTools():
         # Find bad pixels using median of neighbors.
         pxdq_orig = pxdq.copy()
         pxdq_custom = custom_kwargs[key] != 0
-        pxdq_custom = np.array([pxdq_custom] * pxdq.shape[0])
+        if pxdq_custom.ndim == pxdq.ndim - 1: # Enable 3D bad pixel map to flag individual frames
+            pxdq_custom = np.array([pxdq_custom] * pxdq.shape[0]) 
         pxdq[pxdq_custom] = 1
         log.info('  --> Method custom: flagged %.0f additional bad pixel(s) -- %.2f%%' % (np.sum(pxdq) - np.sum(pxdq_orig), 100. * (np.sum(pxdq) - np.sum(pxdq_orig)) / np.prod(pxdq.shape)))
         
@@ -2129,7 +2130,7 @@ class ImageTools():
             for index, j in enumerate(ww_sci):
                 ax.scatter(shifts_all[index][:, 0] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
                            shifts_all[index][:, 1] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
-                           s=5, color=colors[index], marker='o', 
+                           s=5, color=colors[index%len(colors)], marker='o', 
                            label='PA = %.0f deg' % self.database.obs[key]['ROLL_REF'][j])
             ax.axhline(0., color='gray', lw=1, zorder=-1)  # set zorder to ensure lines are drawn behind all the scatter points
             ax.axvline(0., color='gray', lw=1, zorder=-1)
