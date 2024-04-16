@@ -1,8 +1,6 @@
 from __future__ import division
 
 import matplotlib
-matplotlib.rcParams.update({'font.size': 14})
-
 
 # =============================================================================
 # IMPORTS
@@ -13,7 +11,6 @@ import pdb
 import sys
 
 import astropy.io.fits as pyfits
-import matplotlib.pyplot as plt
 import numpy as np
 
 import importlib
@@ -23,6 +20,9 @@ from scipy.integrate import simps
 from scipy.ndimage import fourier_shift, gaussian_filter
 from scipy.ndimage import shift as spline_shift
 
+from webbpsf_ext.imreg_tools import get_coron_apname as nircam_apname
+from webbpsf_ext.image_manip import expand_mask
+
 import logging
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -31,6 +31,55 @@ log.setLevel(logging.INFO)
 # =============================================================================
 # MAIN
 # =============================================================================
+
+def get_nrcmask_from_apname(apname):
+    """Get mask name from aperture name
+    
+    The aperture name is of the form:
+    NRC[A/B][1-5]_[FULL]_[MASK]_[FILTER]
+    where MASK is the name of the coronagraphic mask used.
+
+    For target acquisition apertures the mask name can be
+    prependend with "TA" (eg., TAMASK335R).
+
+    Return 'NONE' if MASK not in input aperture name.
+
+    Parameters
+    ----------
+    apname : str
+        String aperture name as described above
+
+    Returns
+    -------
+    image_mask : str
+        String for image mask
+
+    """
+
+    if 'MASK' not in apname:
+        return 'NONE'
+
+    ap_str_arr = apname.split('_')
+    for s in ap_str_arr:
+        if 'MASK' in s:
+            image_mask = s
+            break
+
+    # Special case for TA apertures
+    if 'TA' in image_mask:
+        # return 'NONE'
+        # Remove TA from mask name
+        image_mask = image_mask.replace('TA', '')
+
+        # Remove FS from mask name
+        if 'FS' in image_mask:
+            image_mask = image_mask.replace('FS', '')
+
+        # Remove trailing S or L from LWB and SWB TA apertures
+        if ('WB' in image_mask) and (image_mask[-1]=='S' or image_mask[-1]=='L'):
+            image_mask = image_mask[:-1]
+
+    return image_mask
 
 def read_obs(fitsfile,
              return_var=False):
@@ -551,12 +600,14 @@ def subtractlsq(shift,
     else:
         return res[mask]
 
-def get_tp_comsubst(instrume,
+def _get_tp_comsubst(instrume,
                     subarray,
                     filt):
     """
     Get the COM substrate transmission averaged over the respective filter
     profile.
+
+    *** Deprecated - use `get_tp_comsubst` instead. ***
     
     Parameters
     ----------
@@ -574,6 +625,8 @@ def get_tp_comsubst(instrume,
     
     """
     
+    log.warning('This function is deprecated. Use `get_tp_comsubst` instead.')
+
     # Default return.
     tp_comsubst = 1.
     
@@ -607,3 +660,418 @@ def get_tp_comsubst(instrume,
     
     # Return.
     return tp_comsubst
+
+def write_starfile(starfile,  
+                   new_starfile_path,
+                   new_header=None):
+    """
+    Save stellar spectrum file to a different location, and insert
+    a header to the start if needed. 
+    
+    Parameters
+    ----------
+    starfile : str
+        Path to original stellar spectrum file.
+    new_starfile_path : str
+        Path to new stellar spectrum file.
+    new_header : str
+        Header to be inserted. 
+    
+    Returns
+    -------
+    None
+    
+    """ 
+    if not os.path.exists(starfile):
+        raise FileNotFoundError("The specified starfile does not exist.")
+    
+    with open(starfile, 'r') as orig_starfile:
+        text=orig_starfile.read()
+        with open(new_starfile_path, 'w') as new_starfile:
+            if new_header is None:
+                new_starfile.write(text)
+            else:
+                new_starfile.write(new_header+text)
+
+def set_surrounded_pixels(array, user_value=np.nan):
+    """
+    Identifies pixels in a 2D array surrounded by NaN values 
+    on all eight sides and sets them to a user-defined value.
+
+    Parameters
+    ----------
+    array : numpy.ndarray
+        2D array containing numeric values and NaNs.
+    user_value : float or any valid value type, optional
+        Value to set for pixels surrounded by NaNs on all eight sides. Defaults to NaN.
+
+    Returns
+    -------
+    numpy.ndarray
+        The input array with pixels surrounded by NaNs on all eight sides set to the user-defined value.
+    """
+    nan_mask = np.isnan(array)
+    surrounded_pixels = (
+        ~nan_mask[1:-1, 1:-1] &
+        nan_mask[:-2, :-2] & nan_mask[:-2, 1:-1] & nan_mask[:-2, 2:] &
+        nan_mask[1:-1, :-2] & nan_mask[1:-1, 2:] &
+        nan_mask[2:, :-2] & nan_mask[2:, 1:-1] & nan_mask[2:, 2:]
+    )
+    
+    array[1:-1, 1:-1][surrounded_pixels] = user_value
+    return array
+
+def get_tp_comsubst(instrume,
+                    subarray,
+                    filt):
+    """
+    Get the COM substrate transmission averaged over the respective filter
+    profile.
+
+    TODO: Spot check the COM throughput using photometric calibration data,
+    assuming there are stellar offsets on and off the COM substrate.
+    
+    Parameters
+    ----------
+    instrume : 'NIRCAM', 'NIRISS', or 'MIRI'
+        JWST instrument in use.
+    subarray : str
+        JWST subarray in use.
+    filt : str
+        JWST filter in use.
+    
+    Returns
+    -------
+    tp_comsubst : float
+        COM substrate transmission averaged over the respective filter profile
+    
+    """
+    
+    from webbpsf_ext.bandpasses import nircam_filter, nircam_com_th
+
+    # Default return.
+    tp_comsubst = 1.
+    
+    # If NIRCam.
+    instrume = instrume.upper()
+    if instrume == 'NIRCAM':
+        
+        # If coronagraphy subarray.
+        if '210R' in subarray or '335R' in subarray or '430R' in subarray or 'SWB' in subarray or 'LWB' in subarray:
+            
+            # Read bandpass.
+            try:
+                bp = nircam_filter(filt)
+                bandpass_wave = bp.wave / 1e4  # micron
+                bandpass_throughput = bp.throughput
+            except FileNotFoundError:
+                log.error('--> Filter ' + filt + ' not found for instrument ' + instrume)
+            
+            # Read COM substrate transmission interpolated at bandpass wavelengths.
+            comsubst_throughput = nircam_com_th(bandpass_wave)
+
+            # Compute weighted average of COM substrate transmission.
+            tp_comsubst = np.average(comsubst_throughput, weights=bandpass_throughput)
+    
+    # Return.
+    return tp_comsubst
+
+def get_filter_info(instrument, timeout=1, do_svo=True, return_more=False):
+    """ Load filter information from the SVO Filter Profile Service or webbpsf
+
+    Load NIRCam, NIRISS, and MIRI filters from the SVO Filter Profile Service.
+    http://svo2.cab.inta-csic.es/theory/fps/
+
+    If timeout to server, then use local copy of filter list and load through webbpsf.
+
+    Parameters
+    ----------
+    instrument : str
+        Name of instrument to load filter list for. 
+        Must be one of 'NIRCam', 'NIRISS', or 'MIRI'.
+    timeout : float
+        Timeout in seconds for connection to SVO Filter Profile Service.
+    do_svo : bool
+        If True, try to load filter list from SVO Filter Profile Service. 
+        If False, use webbpsf without first check web server.
+    return_more : bool
+        If True, also return `do_svo` variable, whether SVO was used or not.
+    """
+
+    from astroquery.svo_fps import SvoFps
+    import webbpsf
+
+    iname_upper = instrument.upper()
+
+    # Try to get filter list from SVO
+    if do_svo:
+        try:
+            filter_list = SvoFps.get_filter_list(facility='JWST', instrument=iname_upper, timeout=timeout)
+        except:
+            log.warning('Using SVO Filter Profile Service timed out. Using WebbPSF instead.')
+            do_svo = False
+
+    # If unsuccessful, use webbpsf to get filter list
+    if not do_svo:
+        inst_func = {
+            'NIRCAM': webbpsf.NIRCam,
+            'NIRISS': webbpsf.NIRISS,
+            'MIRI'  : webbpsf.MIRI,
+        }
+        inst = inst_func[iname_upper]()
+        filter_list = inst.filter_list
+
+    wave, weff = ({}, {})
+    if do_svo:
+        for i in range(len(filter_list)):
+            name = filter_list['filterID'][i]
+            name = name[name.rfind('.') + 1:]
+            wave[name] = filter_list['WavelengthMean'][i] / 1e4  # micron
+            weff[name] = filter_list['WidthEff'][i] / 1e4  # micron
+    else:
+        for filt in filter_list:
+            bp = inst._get_synphot_bandpass(filt)
+            wave[filt] = bp.avgwave().to_value('micron')
+            weff[filt] = bp.equivwidth().to_value('micron')
+
+    if return_more:
+        return wave, weff, do_svo
+    else:
+        return wave, weff
+
+def cube_fit(tarr, data, sat_vals, sat_frac=0.95, bias=None, 
+             deg=1, bpmask_arr=None, fit_zero=False, verbose=False,
+             use_legendre=False, lxmap=None, return_lxmap=False,
+             return_chired=False):
+    """Fit unsaturated data and return coefficients"""
+        
+    from webbpsf_ext.maths import jl_poly_fit, jl_poly
+
+    nz, ny, nx = data.shape
+    
+    # Subtract bias?
+    imarr = data if bias is None else data - bias
+        
+    # Array of masked pixels (saturated)
+    mask_good = imarr < sat_frac*sat_vals
+    if bpmask_arr is not None:
+        mask_good = mask_good & ~bpmask_arr
+    
+    # Reshape for all pixels in single dimension
+    imarr = imarr.reshape([nz, -1])
+    mask_good = mask_good.reshape([nz, -1])
+
+    # Initial 
+    cf = np.zeros([deg+1, nx*ny])
+    if return_lxmap:
+        lx_min = np.zeros([nx*ny])
+        lx_max = np.zeros([nx*ny])
+    if return_chired:
+        chired = np.zeros([nx*ny])
+
+    # For each 
+    npix_sum = 0
+    i0 = 0 if fit_zero else 1
+    for i in np.arange(i0,nz)[::-1]:
+        ind = (cf[1] == 0) & (mask_good[i])
+        npix = np.sum(ind)
+        npix_sum += npix
+        
+        if verbose:
+            print(i+1,npix,npix_sum, 'Remaining: {}'.format(nx*ny-npix_sum))
+            
+        if npix>0:
+            if fit_zero:
+                x = np.concatenate(([0], tarr[0:i+1]))
+                y = np.concatenate((np.zeros([1, np.sum(ind)]), imarr[0:i+1,ind]), axis=0)
+            else:
+                x, y = (tarr[0:i+1], imarr[0:i+1,ind])
+
+            if return_lxmap:
+                lx_min[ind] = np.min(x) if lxmap is None else lxmap[0]
+                lx_max[ind] = np.max(x) if lxmap is None else lxmap[1]
+                
+            # Fit line if too few points relative to polynomial degree
+            if len(x) <= deg+1:
+                cf[0:2,ind] = jl_poly_fit(x,y, deg=1, use_legendre=use_legendre, lxmap=lxmap)
+            else:
+                cf[:,ind] = jl_poly_fit(x,y, deg=deg, use_legendre=use_legendre, lxmap=lxmap)
+
+            # Get reduced chi-sqr metric for poorly fit data
+            if return_chired:
+                yfit = jl_poly(x, cf[:,ind])
+                deg_chi = 1 if len(x)<=deg+1 else deg
+                dof = y.shape[0] - deg_chi
+                chired[ind] = chisqr_red(y, yfit=yfit, dof=dof)
+
+    imarr = imarr.reshape([nz,ny,nx])
+    mask_good = mask_good.reshape([nz,ny,nx])
+    
+    cf = cf.reshape([deg+1,ny,nx])
+    if return_lxmap:
+        lxmap_arr = np.array([lx_min, lx_max]).reshape([2,ny,nx])
+        if return_chired:
+            chired = chired.reshape([ny,nx])
+            return cf, lxmap_arr, chired
+        else:
+            return cf, lxmap_arr
+    else:
+        if return_chired:
+            chired = chired.reshape([ny,nx])
+            return cf, chired
+        else:
+            return cf
+        
+def chisqr_red(yvals, yfit=None, err=None, dof=None,
+               err_func=np.std):
+    """ Calculate reduced chi square metric
+    
+    If yfit is None, then yvals assumed to be residuals.
+    In this case, `err` should be specified.
+    
+    Parameters
+    ==========
+    yvals : ndarray
+        Sampled values.
+    yfit : ndarray
+        Model fit corresponding to `yvals`.
+    dof : int
+        Number of degrees of freedom (nvals - nparams - 1).
+    err : ndarray or float
+        Uncertainties associated with `yvals`. If not specified,
+        then use yvals point-to-point differences to estimate
+        a single value for the uncertainty.
+    err_func : func
+        Error function uses to estimate `err`.
+    """
+    
+    if (yfit is None) and (err is None):
+        print("Both yfit and err cannot be set to None.")
+        return
+    
+    diff = yvals if yfit is None else yvals - yfit
+    
+    sh_orig = diff.shape
+    ndim = len(sh_orig)
+    if ndim==1:
+        if err is None:
+            err = err_func(yvals[1:] - yvals[0:-1]) / np.sqrt(2)
+        dev = diff / err
+        chi_tot = np.sum(dev**2)
+        dof = len(chi_tot) if dof is None else dof
+        chi_red = chi_tot / dof
+        return chi_red
+    
+    # Convert to 2D array
+    if ndim==3:
+        sh_new = [sh_orig[0], -1]
+        diff = diff.reshape(sh_new)
+        yvals = yvals.reshape(sh_new)
+        
+    # Calculate errors for each element
+    if err is None:
+        err_arr = np.array([yvals[i+1] - yvals[i] for i in range(sh_orig[0]-1)])
+        err = err_func(err_arr, axis=0) / np.sqrt(2)
+        del err_arr
+    else:
+        err = err.reshape(diff.shape)
+    # Get reduced chi sqr for each element
+    dof = sh_orig[0] if dof is None else dof
+    chi_red = np.sum((diff / err)**2, axis=0) / dof
+    
+    if ndim==3:
+        chi_red = chi_red.reshape(sh_orig[-2:])
+        
+    return chi_red
+
+def cube_outlier_detection(data, sigma_cut=10, nint_min=10):
+    """Get outlier pixels in a cube model (e.g., rateints or calints)
+    
+    Parameters
+    ----------
+    data : ndarray
+        Data array to use for outlier detection.
+        Must be a cube with shape (nint, ny, nx).
+
+    Keyword Args
+    ------------
+    sigma_cut : float
+        Sigma cut for outlier detection.
+        Default is 5.
+    nint_min : int
+        Minimum number of integrations required for outlier detection.
+        Default is 5.
+
+    Returns
+    -------
+    Mask of bad pixels with same shape as input cube.
+    """
+
+    from webbpsf_ext import robust
+
+    # Get bad pixels
+    ndim = len(data.shape)
+    if ndim < 3:
+        log.warning(f'Skipping rateints outlier flagging. Only {ndim} dimensions.')
+        return np.zeros_like(data, dtype=bool)
+    
+    nint = data.shape[0]
+    if nint < nint_min:
+        log.warning(f'Skipping rateints outlier flagging. Only {nint} INTS.')
+        return np.zeros_like(data, dtype=bool)
+
+    # Get outliers
+    indgood = robust.mean(data, Cut=sigma_cut, axis=0, return_mask=True)
+    indbad = ~indgood
+
+    return indbad
+
+def interpret_dq_value(dq_value):
+    """Interpret DQ value using DQ definition
+
+    Parameters
+    ----------
+    dq_value : int
+        DQ value to interpret.
+
+    Returns
+    -------
+    str
+        Interpretation of DQ value.
+    """
+
+    from stdatamodels.jwst.datamodels.dqflags import pixel, dqflags_to_mnemonics
+
+    if dq_value == 0:
+        return {'GOOD'}
+    return dqflags_to_mnemonics(dq_value, pixel)
+
+def get_dqmask(dqarr, bitvalues):
+    """Get DQ mask from DQ array
+    
+    Given some DQ array and a list of bit values, return a mask
+    for the pixels that have any of the specified bit values.
+
+    Parameters
+    ----------
+    dqarr : ndarray
+        DQ array. Either 2D or 3D.
+    bitvalues : list
+        List of bit values to use for DQ mask. 
+        These values must be powers of 2 (e.g., 1, 2, 4, 8, 16, ...),
+        representing the specific DQ bit flags.
+    """
+
+    from astropy.nddata.bitmask import _is_bit_flag
+
+    for v in bitvalues:
+        if not _is_bit_flag(v):
+            raise ValueError(
+                f"Input list contains invalid (not powers of two) bit flag: {v}"
+            )
+
+    dqmask = np.zeros_like(dqarr, dtype=bool)
+    for bitval in bitvalues:
+        dqmask = dqmask | (dqarr & bitval)
+
+    return dqmask

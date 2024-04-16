@@ -1,8 +1,6 @@
 from __future__ import division
 
 import matplotlib
-matplotlib.rcParams.update({'font.size': 14})
-
 
 # =============================================================================
 # IMPORTS
@@ -66,7 +64,8 @@ def get_stellar_magnitudes(starfile,
                            spectral_type,
                            instrume,
                            return_si=False,
-                           output_dir=None):
+                           output_dir=None,
+                           **kwargs):
     """
     Get the source brightness and zero point fluxes in each filter of the JWST
     instrument in use.
@@ -88,6 +87,28 @@ def get_stellar_magnitudes(starfile,
         Path of the directory where the SED plot shall be saved. The default is
         None.
     
+    Keyword Args
+    ------------
+    Teff : float
+        Effective temperature ranging from 3500K to 30000K.
+    metallicity : float
+        Metallicity [Fe/H] value ranging from -2.5 to 0.5.
+    log_g : float
+        Surface gravity (log g) from 0 to 5.
+    Av : float
+        Add extinction to the stellar spectrum
+    catname : str
+        Catalog name, including 'bosz', 'ck04models', and 'phoenix'.
+        Default is 'bosz', which comes from :func:`BOSZ_spectrum`.
+    res : str
+        Spectral resolution to use (200 or 2000 or 20000).
+    interpolate : bool
+        Interpolate spectrum using a weighted average of grid points
+        surrounding the desired input parameters. Default: True
+    radius : float
+        Search radius in arcseconds for Vizier query.
+        Default: 1 arcsec.
+
     Returns
     -------
     mstar : dict
@@ -109,9 +130,13 @@ def get_stellar_magnitudes(starfile,
         bp_k = webbpsf_ext.bp_2mass('k')
         bp_mag = 5.
         try:
-            spec = webbpsf_ext.spectra.source_spectrum(name='Input Data & SED', sptype=spectral_type, mag_val=bp_mag, bp=bp_k, votable_file=starfile)
+            spec = webbpsf_ext.spectra.source_spectrum(name='Input Data & SED', sptype=spectral_type, 
+                                                       mag_val=bp_mag, bp=bp_k, votable_file=starfile,
+                                                       **kwargs)
         except:
-            spec = webbpsf_ext.spectra.source_spectrum(name='Input Data & SED', sptype=spectral_type, mag_val=bp_mag, bp=bp_k, votable_input=starfile)
+            spec = webbpsf_ext.spectra.source_spectrum(name='Input Data & SED', sptype=spectral_type, 
+                                                       mag_val=bp_mag, bp=bp_k, votable_input=starfile,
+                                                       **kwargs)
         
         # Split between NIR and MIR exposures.
         if instrume == 'MIRI':
@@ -122,9 +147,10 @@ def get_stellar_magnitudes(starfile,
         # Fit SED to input photometry and plot SED.
         spec.fit_SED(x0=[1.], wlim=wlim, use_err=False, verbose=False)
         if output_dir is not None:
-            spec.plot_SED()
-            plt.savefig(os.path.join(output_dir, 'sed.pdf'))
-            plt.close()
+            with plt.style.context('spaceKLIP.sk_style'):
+                spec.plot_SED()
+                plt.savefig(os.path.join(output_dir, 'sed.pdf'))
+                plt.close()
         
         # Convert units to photlam.
         input_flux = u.Quantity(spec.sp_model.flux, str(spec.sp_model.fluxunits))

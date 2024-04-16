@@ -1,8 +1,6 @@
 from __future__ import division
 
 import matplotlib
-matplotlib.rcParams.update({'font.size': 14})
-
 
 # =============================================================================
 # IMPORTS
@@ -13,7 +11,6 @@ import pdb
 import sys
 
 import astropy.io.fits as pyfits
-import matplotlib.pyplot as plt
 import numpy as np
 
 import json
@@ -109,7 +106,9 @@ for apername in crpix_jarron.keys():
         
         # Write PSF mask.
         hdul['SCI'].data = psfmask
-        hdul.writeto('resources/transmissions/' + apername + '_' + filt + '.fits', output_verify='fix', overwrite=True)
+        outfile = 'resources/transmissions/' + apername + '_' + filt + '.fits'
+        print(f"Wrote to {outfile}")
+        hdul.writeto(outfile, output_verify='fix', overwrite=True)
 
 fitsfiles = ['JWST_MIRI_F1065C_transmission_webbpsf-ext_v2.fits',
              'JWST_MIRI_F1140C_transmission_webbpsf-ext_v2.fits',
@@ -122,6 +121,7 @@ for fitsfile in fitsfiles:
     hdu.header['EXTNAME'] = 'SCI'
     hdul.append(hdu)
     hdul.writeto('resources/transmissions/' + fitsfile, output_verify='fix', overwrite=True)
+    print(f"Wrote to resources/transmissions/{fitsfile}")
 
 
 def get_bar_offset_from_siaf(siaf, filt, channel='LW'):
@@ -198,7 +198,9 @@ for filt in offset_swb:
     
     # Write PSF mask.
     hdul['SCI'].data = psfmask
-    hdul.writeto('resources/transmissions/' + apername + '_' + filt.upper() + '.fits', output_verify='fix', overwrite=True)
+    outfile = 'resources/transmissions/' + apername + '_' + filt.upper() + '.fits'
+    hdul.writeto(outfile, output_verify='fix', overwrite=True)
+    print(f"Wrote to {outfile}")
 
 # Loop through apertures and filters.
 fitsfile = 'jwst_nircam_psfmask_0003.fits'
