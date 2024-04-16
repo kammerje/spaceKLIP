@@ -109,8 +109,8 @@ class OneOverfStep(Step):
 
         # If we are in a multiprocess thread, then set self.nproc to 1
         # to avoid nested multiprocessing.
-        # Spawned processes have a name like 'Process-1', 'Process-2', etc.
-        if 'Process-' in mp.current_process().name:
+        # Spawned processes have a name like 'Process-1', 'Process-2', etc. or 'PoolWorker-'
+        if ('Process-' in mp.current_process().name) or ('PoolWorker-' in mp.current_process().name):
             self.nproc = 1
             return
 

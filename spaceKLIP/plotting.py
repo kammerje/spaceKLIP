@@ -9,6 +9,7 @@ import glob
 from itertools import chain
 
 import numpy as np
+import math
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -23,7 +24,7 @@ import astropy.io.fits as fits
 import astropy.units as u
 import astropy.visualization as v
 
-import jdaviz
+from . import wcs_utils
 import jwst.datamodels
 
 import logging
@@ -75,9 +76,8 @@ def annotate_compass(ax, image, wcs, xf=0.9, yf=0.1, length_fraction=0.07, color
     
     """
     
-    # Use jdaviz to compute arrow positions
-    x, y, xn, yn, xe, ye, degn, dege, xflip = jdaviz.configs.imviz.wcs_utils.get_compass_info(wcs, image.shape,
-                                                                                              r_fac=length_fraction)
+    # Use wcs_utils from jdaviz to compute arrow positions
+    x, y, xn, yn, xe, ye, degn, dege, xflip = wcs_utils.get_compass_info(wcs, image.shape, r_fac=length_fraction)
     
     # but then apply offsets to recenter the
     xo = image.shape[1] * xf - x
