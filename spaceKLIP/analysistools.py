@@ -30,11 +30,11 @@ import pyklip.fmlib.fmpsf as fmpsf
 import shutil
 
 from pyklip import klip, parallelized
+from pyklip.instruments.JWST import JWSTData
 from scipy.ndimage import fourier_shift, gaussian_filter, rotate
 from scipy.ndimage import shift as spline_shift
 from spaceKLIP import utils as ut
 from spaceKLIP.psf import get_offsetpsf, JWST_PSF
-from spaceKLIP.pyklippipeline import SpaceTelescope
 from spaceKLIP.starphot import get_stellar_magnitudes, read_spec_file
 
 import logging
@@ -547,7 +547,7 @@ class AnalysisTools():
                     kwargs_temp['maxnumbasis'] = maxnumbasis
                 
                 # Initialize pyKLIP dataset.
-                dataset = SpaceTelescope(self.database.obs[key], filepaths, psflib_filepaths, highpass=highpass)
+                dataset = JWSTData(filepaths, psflib_filepaths, highpass=highpass)
                 kwargs_temp['dataset'] = dataset
                 kwargs_temp['aligned_center'] = dataset._centers[0]
                 kwargs_temp['psf_library'] = dataset.psflib
