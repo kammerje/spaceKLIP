@@ -1923,8 +1923,7 @@ class ImageTools():
             shift, error, phasediff = phase_cross_correlation(datasub * masksub,
                                                               model_psf * masksub,
                                                               upsample_factor=1000,
-                                                              normalization=None,
-                                                              return_error=True)
+                                                              normalization=None)
             yshift, xshift = shift
             
             # Update star position.
