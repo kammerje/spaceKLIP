@@ -1,4 +1,4 @@
-spaceKLIP detailed API
+Detailed spaceKLIP API
 ======================
 
 spaceKLIP.analysistools module
@@ -53,14 +53,6 @@ spaceKLIP.imagetools module
 ---------------------------
 
 .. automodule:: spaceKLIP.imagetools
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-spaceKLIP.make\_psfmasks module
--------------------------------
-
-.. automodule:: spaceKLIP.make_psfmasks
    :members:
    :undoc-members:
    :show-inheritance:

@@ -1,8 +1,6 @@
 from __future__ import division
 
 import matplotlib
-matplotlib.rcParams.update({'font.size': 14})
-
 
 # =============================================================================
 # IMPORTS
@@ -13,10 +11,10 @@ import pdb
 import sys
 
 import astropy.io.fits as fits
+import matplotlib.pyplot as plt
 from astropy.table import Table
 import astropy.units as u
 
-import matplotlib.pyplot as plt
 from cycler import cycler
 import numpy as np
 
@@ -86,7 +84,8 @@ class AnalysisTools():
                      overwrite_crpix=None,
                      subdir='rawcon',
                      output_filetype='npy',
-                     plot_xlim=(0,10)):
+                     plot_xlim=(0,10),
+                     **kwargs):
         """
         Compute the raw contrast relative to the provided host star flux.
         
@@ -136,9 +135,13 @@ class AnalysisTools():
 
         # Copy the starfile that will be used into this directory
         starfile_ext = os.path.splitext(starfile)[1]
-        new_starfile_path = output_dir+'/user_starfile'+starfile_ext
+        new_starfile_path = output_dir+'/'+starfile.split('/')[-1]
         new_header = '#'+starfile.split('/')[-1] + ' /// {}'.format(spectral_type)+'\n'
-        write_starfile(starfile, new_starfile_path, new_header)
+        contrast_curve_info_path = output_dir+'/contrast_curve_info.txt'
+        with open(contrast_curve_info_path, 'w') as ccinfo:
+            ccinfo.write(new_header)
+        log.info('Copying starfile {} to {}'.format(starfile, new_starfile_path))
+        write_starfile(starfile, new_starfile_path)
 
         # Loop through concatenations.
         for i, key in enumerate(self.database.red.keys()):
@@ -151,7 +154,7 @@ class AnalysisTools():
                 log.info('Analyzing file ' + self.database.red[key]['FITSFILE'][j])
 
                 # Get stellar magnitudes and filter zero points.
-                mstar, fzero = get_stellar_magnitudes(starfile, spectral_type, self.database.red[key]['INSTRUME'][j], output_dir=output_dir)  # vegamag, Jy
+                mstar, fzero = get_stellar_magnitudes(starfile, spectral_type, self.database.red[key]['INSTRUME'][j], output_dir=output_dir, **kwargs)  # vegamag, Jy
                 
                 tp_comsubst = ut.get_tp_comsubst(self.database.red[key]['INSTRUME'][j],
                                                  self.database.red[key]['SUBARRAY'][j],
@@ -324,53 +327,57 @@ class AnalysisTools():
                 # Plot masked data.
                 klmodes = self.database.red[key]['KLMODES'][j].split(',')
                 fitsfile = os.path.join(output_dir, os.path.split(fitsfile)[1])
-                f = plt.figure(figsize=(6.4, 4.8))
-                ax = plt.gca()
-                xx = np.arange(data.shape[2]) - center[0]  # pix
-                yy = np.arange(data.shape[1]) - center[1]  # pix
-                extent = (-(xx[0] - 0.5) * pxsc_arcsec, -(xx[-1] + 0.5) * pxsc_arcsec, (yy[0] - 0.5) * pxsc_arcsec, (yy[-1] + 0.5) * pxsc_arcsec)
-                vmax = np.nanmax(data[-1])
-                ax.imshow(data[-1], origin='lower', cmap='inferno',
-                          norm=matplotlib.colors.SymLogNorm(vmin=-vmax, vmax=vmax, linthresh=vmax/100 ),
-                          extent=extent)
-                ax.set_xlabel(r'$\Delta$RA [arcsec]')
-                ax.set_ylabel(r'$\Delta$Dec [arcsec]')
-                ax.set_title(f'Masked data in {filt}, {psfsub_strategy} ({klmodes[-1]} KL)')
-                for r in [5,10]:
-                    ax.add_patch(matplotlib.patches.Circle((0,0), r, ls='--', facecolor='none', edgecolor='cyan', clip_on=True))
-                    ax.text(r, 0, f" {r}''", color='cyan')
-                import textwrap
-                ax.text(0.01, 0.99, textwrap.fill(os.path.basename(fitsfile), width=40),
-                                    transform=ax.transAxes, color='black', verticalalignment='top', fontsize=9)
-                plt.colorbar(mappable=ax.images[0], label=self.database.red[key]['BUNIT'][j])
-                plt.tight_layout()
-                plt.savefig(fitsfile[:-5] + '_masked.pdf')
+                with plt.style.context('spaceKLIP.sk_style'):
+                    fig = plt.figure(figsize=(6.4, 4.8))
+                    ax = plt.gca()
+                    xx = np.arange(data.shape[2]) - center[0]  # pix
+                    yy = np.arange(data.shape[1]) - center[1]  # pix
+                    extent = (-(xx[0] - 0.5) * pxsc_arcsec, -(xx[-1] + 0.5) * pxsc_arcsec, (yy[0] - 0.5) * pxsc_arcsec, (yy[-1] + 0.5) * pxsc_arcsec)
+                    vmax = np.nanmax(data[-1])
+                    ax.imshow(data[-1], origin='lower', cmap='inferno',
+                            norm=matplotlib.colors.SymLogNorm(vmin=-vmax, vmax=vmax, linthresh=vmax/100 ),
+                            extent=extent)
+                    ax.set_xlabel(r'$\Delta$RA [arcsec]')
+                    ax.set_ylabel(r'$\Delta$Dec [arcsec]')
+                    ax.set_title(f'Masked data in {filt}, {psfsub_strategy} ({klmodes[-1]} KL)')
+                    for r in [5,10]:
+                        ax.add_patch(matplotlib.patches.Circle((0,0), r, ls='--', facecolor='none', edgecolor='cyan', clip_on=True))
+                        ax.text(r, 0, f" {r}''", color='cyan')
+                    import textwrap
+                    ax.text(0.01, 0.99, textwrap.fill(os.path.basename(fitsfile), width=40),
+                                        transform=ax.transAxes, color='black', verticalalignment='top', fontsize=9)
+                    plt.colorbar(mappable=ax.images[0], label=self.database.red[key]['BUNIT'][j])
+                    plt.tight_layout()
+                    plt.savefig(fitsfile[:-5] + '_masked.pdf')
+                    plt.close(fig)
 
                 # Plot raw contrast.
                 klmodes = self.database.red[key]['KLMODES'][j].split(',')
                 fitsfile = os.path.join(output_dir, os.path.split(fitsfile)[1])
                 colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
                 mod = len(colors)
-                f = plt.figure(figsize=(6.4, 4.8))
-                ax = plt.gca()
-                for k in range(data.shape[0]):
-                    if mask is None:
-                        ax.plot(seps[k], cons[k], color=colors[k % mod], label=klmodes[k] + ' KL')
-                    else:
-                        ax.plot(seps[k], cons[k], color=colors[k % mod], alpha=0.3, ls='--')
-                        ax.plot(seps[k], cons_mask[k], color=colors[k % mod], label=klmodes[k] + ' KL')
-                ax.set_yscale('log')
-                ax.set_ylim([None,1])
-                if plot_xlim is not None:
-                    ax.set_xlim(plot_xlim)
-                ax.set_xlabel('Separation [arcsec]')
-                ax.set_ylabel(r'5-$\sigma$ contrast')
-                ax.legend(loc='upper right', ncols=3,
-                          title=None if mask is None else 'Dashed lines exclude coronagraph mask throughput',
-                          title_fontsize=10)
-                ax.set_title(f'Raw contrast in {filt}, {psfsub_strategy}')
-                plt.tight_layout()
-                plt.savefig(fitsfile[:-5] + '_rawcon.pdf')
+                with plt.style.context('spaceKLIP.sk_style'):
+                    fig = plt.figure(figsize=(6.4, 4.8))
+                    ax = plt.gca()
+                    for k in range(data.shape[0]):
+                        if mask is None:
+                            ax.plot(seps[k], cons[k], color=colors[k % mod], label=klmodes[k] + ' KL')
+                        else:
+                            ax.plot(seps[k], cons[k], color=colors[k % mod], alpha=0.3, ls='--')
+                            ax.plot(seps[k], cons_mask[k], color=colors[k % mod], label=klmodes[k] + ' KL')
+                    ax.set_yscale('log')
+                    ax.set_ylim([None,1])
+                    if plot_xlim is not None:
+                        ax.set_xlim(plot_xlim)
+                    ax.set_xlabel('Separation [arcsec]')
+                    ax.set_ylabel(r'5-$\sigma$ contrast')
+                    ax.legend(loc='upper right', ncols=3,
+                            title=None if mask is None else 'Dashed lines exclude coronagraph mask throughput',
+                            title_fontsize=10)
+                    ax.set_title(f'Raw contrast in {filt}, {psfsub_strategy}')
+                    plt.tight_layout()
+                    plt.savefig(fitsfile[:-5] + '_rawcon.pdf')
+                    plt.close(fig)
 
                 if output_filetype.lower()=='ecsv':
                     # Save outputs as astropy ECSV text tables
@@ -413,7 +420,8 @@ class AnalysisTools():
                            multi_injection_spacing=None,
                            use_saved=False,
                            thrput_fit_method='median',
-                           plot_xlim=(0,10)
+                           plot_xlim=(0,10),
+                           **kwargs
                            ):
         """ 
         Compute a calibrated contrast curve relative to the host star flux. 
@@ -538,13 +546,15 @@ class AnalysisTools():
                 resolution_fwhm = 1.025*resolution
 
                 # Get stellar magnitudes and filter zero points, but use the same file as rawcon
-                starfile = os.path.join(rawcon_dir, 'user_starfile.txt')
-                with open(starfile) as sf:
-                    spectral_type = sf.readline().strip('\n').split(' /// ')[-1]
-                mstar, fzero = get_stellar_magnitudes(starfile, 
-                                                      spectral_type, 
-                                                      self.database.red[key]['INSTRUME'][j], 
-                                                      output_dir=output_dir)  # vegamag, Jy
+                ccinfo = os.path.join(rawcon_dir, 'contrast_curve_info.txt')
+                with open(ccinfo) as cci:
+                    starfile, spectral_type = cci.readline().strip('\n').split(' /// ')
+                    starfile = os.path.join(rawcon_dir, starfile.replace('#',''))
+                mstar, fzero = get_stellar_magnitudes(starfile,
+                                                      spectral_type,
+                                                      self.database.red[key]['INSTRUME'][j],
+                                                      output_dir=output_dir,
+                                                      **kwargs)  # vegamag, Jy
                 filt = self.database.red[key]['FILTER'][j]
                 fstar = fzero[filt] / 10.**(mstar[filt] / 2.5) / 1e6 * np.max(offsetpsf)  # MJy
                 fstar *= ((180./np.pi)*3600.)**2/pxsc_arcsec**2 # MJy/sr
@@ -717,6 +727,7 @@ class AnalysisTools():
 
                 # Define some local utilty functions for plot setup.
                 # This makes the plotting code below less repetitive and more consistent
+                @plt.style.context('spaceKLIP.sk_style')
                 def standardize_plots_setup():
                     fig = plt.figure(figsize=(6.4, 4.8))
                     ax = plt.gca()
@@ -725,6 +736,7 @@ class AnalysisTools():
                     ax.set_prop_cycle(cc)
                     return fig, ax
 
+                @plt.style.context('spaceKLIP.sk_style')
                 def standardize_plots_annotate_save(ax, title="",
                                                     ylabel='Throughput',
                                                     xlim=plot_xlim,
@@ -758,6 +770,8 @@ class AnalysisTools():
                 standardize_plots_annotate_save(ax, title=f'Injected companions in {filt}, {psfsub_strategy}, all KL modes',
                                                 ylabel='Throughput',
                                                 filename=save_string + '_allKL_throughput.pdf')
+                plt.close(fig)
+
 
                 # Plot individual measurements for median KL mode
                 fig, ax = standardize_plots_setup()
@@ -777,6 +791,8 @@ class AnalysisTools():
                                                 title=f"Injected companions in {filt}, {psfsub_strategy}, for KL={klip_args['numbasis'][median_KL_index]}",
                                                 ylabel='Throughput',
                                                 filename=save_string + '_medKL_throughput.pdf')
+                plt.close(fig)
+
 
                 # Plot calibrated contrast curves
                 fig, ax = standardize_plots_setup()
@@ -793,6 +809,7 @@ class AnalysisTools():
                                                 title=f'Calibrated contrast in {filt}, {psfsub_strategy}',
                                                 ylabel='Contrast',
                                                 filename=save_string + '_calcon.pdf')
+                plt.close(fig)
 
                 # Plot calibrated contrast curves compared to raw
                 fig, ax = standardize_plots_setup()
@@ -809,6 +826,7 @@ class AnalysisTools():
                                                 title=f'Calibrated contrast vs Raw contrast in {filt}, {psfsub_strategy}',
                                                 ylabel='Contrast',
                                                 filename=save_string + '_calcon_vs_rawcon.pdf')
+                plt.close(fig)
 
     def extract_companions(self,
                            companions,
@@ -824,7 +842,8 @@ class AnalysisTools():
                            subtract=True,
                            inject=False,
                            overwrite=True,
-                           subdir='companions'):
+                           subdir='companions',
+                           **kwargs):
         """
         Extract the best fit parameters of a number of companions from each
         reduction in the spaceKLIP reductions database.
@@ -904,7 +923,7 @@ class AnalysisTools():
             for j in range(nfitsfiles):
                 
                 # Get stellar magnitudes and filter zero points.
-                mstar, fzero, fzero_si = get_stellar_magnitudes(starfile, spectral_type, self.database.red[key]['INSTRUME'][j], return_si=True, output_dir=output_dir)  # vegamag, Jy, erg/cm^2/s/A
+                mstar, fzero, fzero_si = get_stellar_magnitudes(starfile, spectral_type, self.database.red[key]['INSTRUME'][j], return_si=True, output_dir=output_dir,**kwargs)  # vegamag, Jy, erg/cm^2/s/A
                 
                 # Get COM substrate throughput.
                 tp_comsubst = ut.get_tp_comsubst(self.database.red[key]['INSTRUME'][j],
@@ -1316,13 +1335,13 @@ class AnalysisTools():
                             
                             # Plot the MCMC fit results.
                             path = os.path.join(output_dir_kl, key + '-corner_c%.0f' % (k + 1) + '.pdf')
-                            fma.make_corner_plot()
-                            plt.savefig(path)
-                            plt.close()
+                            fig = fma.make_corner_plot()
+                            fig.savefig(path)
+                            plt.close(fig)
                             path = os.path.join(output_dir_kl, key + '-model_c%.0f' % (k + 1) + '.pdf')
-                            fma.best_fit_and_residuals()
-                            plt.savefig(path)
-                            plt.close()
+                            fig = fma.best_fit_and_residuals()
+                            fig.savefig(path)
+                            plt.close(fig)
                             
                             # Write the MCMC fit results into a table.
                             flux_jy = fma.fit_flux.bestfit * guess_flux

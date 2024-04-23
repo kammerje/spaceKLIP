@@ -1,8 +1,6 @@
 from __future__ import division
 
 import matplotlib
-matplotlib.rcParams.update({'font.size': 14})
-
 
 # =============================================================================
 # IMPORTS
@@ -13,7 +11,6 @@ import pdb
 import sys
 
 import astropy.io.fits as pyfits
-import matplotlib.pyplot as plt
 import numpy as np
 
 import importlib
@@ -39,13 +36,24 @@ def get_nrcmask_from_apname(apname):
     """Get mask name from aperture name
     
     The aperture name is of the form:
-        NRC[A/B][1-5]_[FULL]_[MASK]_[FILTER]
+    NRC[A/B][1-5]_[FULL]_[MASK]_[FILTER]
     where MASK is the name of the coronagraphic mask used.
 
     For target acquisition apertures the mask name can be
     prependend with "TA" (eg., TAMASK335R).
 
     Return 'NONE' if MASK not in input aperture name.
+
+    Parameters
+    ----------
+    apname : str
+        String aperture name as described above
+
+    Returns
+    -------
+    image_mask : str
+        String for image mask
+
     """
 
     if 'MASK' not in apname:
@@ -1075,3 +1083,54 @@ def bg_minimize(par,X,Y,bgmaskfile):
     #return np.nansum(np.sqrt(Z6**2)) + np.nansum(np.sqrt(Z7**2)) 
     return np.nansum(np.sqrt(Z0**2))
     # return 2*np.nansum(np.sqrt( Z4**2)) + 2*np.nansum(np.sqrt( Z5**2 ) ) + np.nansum(np.sqrt( Z4**2)) + np.nansum(np.sqrt( Z5**2 ) )
+
+def interpret_dq_value(dq_value):
+    """Interpret DQ value using DQ definition
+
+    Parameters
+    ----------
+    dq_value : int
+        DQ value to interpret.
+
+    Returns
+    -------
+    str
+        Interpretation of DQ value.
+    """
+
+    from stdatamodels.jwst.datamodels.dqflags import pixel, dqflags_to_mnemonics
+
+    if dq_value == 0:
+        return {'GOOD'}
+    return dqflags_to_mnemonics(dq_value, pixel)
+
+def get_dqmask(dqarr, bitvalues):
+    """Get DQ mask from DQ array
+    
+    Given some DQ array and a list of bit values, return a mask
+    for the pixels that have any of the specified bit values.
+
+    Parameters
+    ----------
+    dqarr : ndarray
+        DQ array. Either 2D or 3D.
+    bitvalues : list
+        List of bit values to use for DQ mask. 
+        These values must be powers of 2 (e.g., 1, 2, 4, 8, 16, ...),
+        representing the specific DQ bit flags.
+    """
+
+    from astropy.nddata.bitmask import _is_bit_flag
+
+    for v in bitvalues:
+        if not _is_bit_flag(v):
+            raise ValueError(
+                f"Input list contains invalid (not powers of two) bit flag: {v}"
+            )
+
+    dqmask = np.zeros_like(dqarr, dtype=bool)
+    for bitval in bitvalues:
+        dqmask = dqmask | (dqarr & bitval)
+
+    return dqmask
+

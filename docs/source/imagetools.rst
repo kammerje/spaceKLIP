@@ -1,6 +1,6 @@
 .. _imagetools:
 
-spaceklip.imagetools 
---------------------
+Image Tools
+-----------
 
-Documentation of the ``spaceklip.imagetools`` module will go here.
+TBD: Detailed documentation of the ``spaceklip.imagetools`` module will go here.

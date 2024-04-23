@@ -4,3 +4,4 @@ pandoc
 nbsphinx
 sphinx-rtd-theme
 webbpsf_ext
+sphinx_automodapi
