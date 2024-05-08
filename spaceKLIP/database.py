@@ -355,11 +355,11 @@ class Database():
                 ww_ref = []
                 for j in range(len(allpaths[ww])):
                     if allpaths[ww][j] in psflibpaths:
-                        ww_ref += [j]
+                        ww_ref.append(j)
                     else:
-                        ww_sci += [j]
-                ww_sci = np.array(ww_sci)
-                ww_ref = np.array(ww_ref)
+                        ww_sci.append(j)
+                ww_sci = np.array(ww_sci, dtype='int')
+                ww_ref = np.array(ww_ref, dtype='int')
             else:
                 is_psf = IS_PSF[ww]
                 exp_type = EXP_TYPE[ww]
