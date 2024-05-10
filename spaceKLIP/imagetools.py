@@ -666,7 +666,7 @@ class ImageTools():
                     for k in range(data.shape[0]):
                         # Subtract median of corresponding background frame from the frame
                         bg_submed = bg_data[k,:,:] - np.nanmedian(bg_data[k,:,:])
-                        # Do the same for the data
+                        # Do the same for the data (that's already background subtracted)
                         data_submed = data[k,:,:] - np.nanmedian(data[k,:,:])
 
                         # Specify sections for initial guess
@@ -686,23 +686,30 @@ class ImageTools():
                         # Use filter to determine mask for estimating BG scaling
                         # at the moment only have it working for F1140C. 
                         filt = self.database.obs[key]['FILTER'][j]
-                        if filt != 'F1140C':
-                            raise NotImplementedError('Godoy subtraction is only supported for F1140C at this time!')
+                        if filt not in ['F1065C', 'F1140C', 'F1550C']:
+                            raise NotImplementedError('Godoy subtraction is only supported for MIRI FQPMs at this time!')
                         else:
                             bgmaskbase = os.path.split(os.path.abspath(__file__))[0]
-                            bgmaskfile = os.path.join(bgmaskbase, 'resources/miri_bg_masks/godoy_mask_f1140c.fits')
+                            bgmaskfile = os.path.join(bgmaskbase, 'resources/miri_bg_masks/godoy_mask_{}.fits'.format(filt.lower()))
 
-                        # Run minimisation function 
-                        res = minimize(ut.bg_minimize, x0=cte*100,args=(data_submed, bg_submed, bgmaskfile), method='L-BFGS-B', tol=1e-7)
+                        # Run minimisation function, 'res' will tell us if there is any residual 
+                        # background that wasn't removed in the initial attempt. I.e. do we
+                        # need to subtract a little bit more or less? 
+                        res = minimize(ut.bg_minimize, 
+                                       x0=cte*100,
+                                       args=(data_submed, bg_submed, bgmaskfile), 
+                                       method='L-BFGS-B', 
+                                       tol=1e-7)
 
-                        # Get scaling value for median subtracted background frame
+                        # Extract scale factor for the background from res
                         scale = res.x/100
 
-                        # Get residuals between scaled background and science frame
-                        resid = data_submed - bg_submed*scale
+                        # Scale the background, and now subtract this correction from the original
+                        # background subtracted data
+                        data_improved_bgsub = data_submed - bg_submed*scale
 
-                        # Magic part, new data is the residuals - median of residuals
-                        data_bg_sub[k] = resid - np.nanmedian(resid)
+                        # Subtract median of residual frame to remove any residual median offset
+                        data_bg_sub[k] = data_improved_bgsub - np.nanmedian(data_improved_bgsub)
 
                     # Write FITS file and PSF mask.
                     fitsfile = ut.write_obs(fitsfile, output_dir, data_bg_sub, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs)

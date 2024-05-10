@@ -10,7 +10,7 @@ import os
 import pdb
 import sys
 
-import astropy.io.fits as pyfits
+import astropy.io.fits as fits
 import numpy as np
 
 from tqdm import trange
@@ -21,8 +21,10 @@ from jwst import datamodels
 from jwst.datamodels import dqflags, RampModel, SaturationModel
 from jwst.pipeline import Detector1Pipeline, Image2Pipeline, Coron3Pipeline
 from .fnoise_clean import kTCSubtractStep, OneOverfStep
-
+from .expjumpramp import ExperimentalJumpRampStep
 from webbpsf_ext import robust
+
+from skimage.metrics import structural_similarity
 
 import logging
 log = logging.getLogger(__name__)
@@ -75,6 +77,7 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         self.step_defs['mask_groups'] = MaskGroupsStep
         self.step_defs['subtract_ktc'] = kTCSubtractStep
         self.step_defs['subtract_1overf'] = OneOverfStep
+        self.step_defs['experimental_jumpramp'] = ExperimentalJumpRampStep
         
         # Initialize Detector1Pipeline class.
         super(Coron1Pipeline_spaceKLIP, self).__init__(**kwargs)
@@ -133,11 +136,10 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
             input = self.run_step(self.linearity, input)
             input = self.run_step(self.rscd, input)
             input = self.run_step(self.dark_current, input)
-            input = self.do_refpix(input)
+            input = self.run_step(self.refpix, input)
             #input = self.run_step(self.charge_migration, input) Not run for MIRI
             input = self.run_step(self.jump, input)
             input = self.run_step(self.mask_groups, input)
-            # TODO: Include same / similar subtract_1overf step???
         else:
             input = self.run_step(self.group_scale, input)
             input = self.run_step(self.dq_init, input)
@@ -151,6 +153,7 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
             input = self.run_step(self.charge_migration, input)
             input = self.run_step(self.jump, input)
             input = self.run_step(self.subtract_ktc, input)
+            #1overf Only present in NIR data
             if 'groups' in self.stage_1overf:
                 input = self.run_step(self.subtract_1overf, input)
         
@@ -159,19 +162,26 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
             self.save_model(input, suffix='ramp')
         
         # Run ramp fitting & gain scale correction.
-        res = self.run_step(self.ramp_fit, input, save_results=False)
-        rate, rateints = (res, None) if self.ramp_fit.skip else res
+        if not self.experimental_jumpramp.use:
+            # Use the default ramp fitting procedure
+            res = self.run_step(self.ramp_fit, input, save_results=False)
+            rate, rateints = (res, None) if self.ramp_fit.skip else res
+        else:
+            # Use the experimental fitting procedure
+            res = self.run_step(self.experimental_jumpramp, input)
+            rate, rateints = res
+        
         if self.rate_int_outliers and rateints is not None:
             # Flag additional outliers by comparing rateints and refit ramp
             input = self.apply_rateint_outliers(rateints, input)
             if input is None:
-                input, ints_model = (rate, rateints)
+                input, ints_model = rate, rateints
             else:
                 res = self.run_step(self.ramp_fit, input, save_results=False)
                 input, ints_model = (res, None) if self.ramp_fit.skip else res
         else:
             # input is the rate product, ints_model is the rateints product
-            input, ints_model = (rate, rateints)
+            input, ints_model = rate, rateints
 
         if input is None:
             self.ramp_fit.log.info('NoneType returned from ramp fitting. Gain scale correction skipped')
@@ -662,21 +672,17 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     skip_vert = kwargs.get('skip_fnoise_vert', False)
     pipeline.subtract_1overf.vertical_corr = not skip_vert
 
-    pipeline.mask_groups.groups_to_mask = kwargs.get('groups_to_mask', [])
-    if not pipeline.mask_groups.groups_to_mask:
-        pipeline.mask_groups.skip = True
-
     # Skip dark current for subarray by default, but not full frame
     skip_dark     = kwargs.get('skip_dark', None)
     if skip_dark is None:
-        hdr0 = pyfits.getheader(fitspath, ext=0)
+        hdr0 = fits.getheader(fitspath, ext=0)
         is_full_frame = 'FULL' in hdr0['SUBARRAY']
         skip_dark = False if is_full_frame else True
     pipeline.dark_current.skip = skip_dark
 
     # Determine reference pixel correction parameters based on
     # instrument aperture name for NIRCam
-    hdr0 = pyfits.getheader(fitspath, 0)
+    hdr0 = fits.getheader(fitspath, 0)
     if hdr0['INSTRUME'] == 'NIRCAM':
         # Array of reference pixel borders [lower, upper, left, right]
         nb, nt, nl, nr = nrc_ref_info(hdr0['APERNAME'], orientation='sci')
@@ -710,6 +716,12 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     for key1 in steps.keys():
         for key2 in steps[key1].keys():
             setattr(getattr(pipeline, key1), key2, steps[key1][key2])
+
+    #Override jump & ramp if necessary
+    if pipeline.experimental_jumpramp.use:
+        log.info("Experimental jump/ramp fitting selected, regular jump and ramp will be skipped...")
+        pipeline.jump.skip = True
+        pipeline.ramp_fit.skip = True
     
     # Run Coron1Pipeline. Raise exception on error.
     # Ensure that pipeline is closed out.
@@ -862,11 +874,12 @@ def run_obs(database,
     else:
         itervals = range(nkeys)
 
+    groupmaskflag = 0 # Set flag for group masking
     # Loop through concatenations.
     for i in itervals:
         key = keys[i]
         if not quiet: log.info('--> Concatenation ' + key)
-        
+
         # Loop through FITS files.
         nfitsfiles = len(database.obs[key])
         jtervals = trange(nfitsfiles, desc='FITS files', leave=False) if quiet else range(nfitsfiles)
@@ -879,8 +892,13 @@ def run_obs(database,
                 if not quiet: log.info('  --> Coron1Pipeline: skipping non-stage 0 file ' + tail)
                 continue
 
-            # Want to adjust certain pipeline steps depending on the type of file
+            # Need to do some preparation steps for group masking before running pipeline
             if 'mask_groups' in steps:
+                if ('groups_to_mask' not in steps['mask_groups']) and (groupmaskflag == 0):
+                    groupmaskflag = 1
+                steps = prepare_group_masking(steps, database.obs[key], quiet)
+        
+                # Also ensure certain files are skipped if necessary
                 if 'types' in steps['mask_groups']:
                     if database.obs[key]['TYPE'][j] not in steps['mask_groups']['types']:
                         steps['mask_groups']['skip'] = True
@@ -893,14 +911,119 @@ def run_obs(database,
 
             # Skip if file already exists and overwrite is False.
             if os.path.isfile(fitsout_path) and not overwrite:
-                if not quiet: log.info('  --> Coron1Pipeline: skipping already processed file ' + tail)
+                if not quiet: log.info('  --> Coron1Pipeline: skipping already processed file ' 
+                                        + tail)
             else:
                 if not quiet: log.info('  --> Coron1Pipeline: processing ' + tail)
                 _ = run_single_file(fitspath, output_dir, steps=steps, 
                                     verbose=verbose, **kwargs)
+                
+            if (j == jtervals[-1]) and (groupmaskflag == 1):
+                '''This is the last file for this concatenation, and the groupmaskflag has been
+                set. This means we need to reset the groups_to_mask back to original state, 
+                which was that it didn't exist. '''
+                groupmaskflag = 0
+                del steps['mask_groups']['groups_to_mask']
+
             
             # Update spaceKLIP database.
             database.update_obs(key, j, fitsout_path)
+
+def prepare_group_masking(steps, observations, quiet=False):
+
+    if 'groups_to_mask' not in steps['mask_groups']:
+        '''First time in the file loop, or groups_to_mask has been preset, 
+        run the optimisation and set groups to mask. '''
+        if not quiet: 
+            log.info('  --> Coron1Pipeline: Optimizing number of groups to mask in ramp,'
+                     ' this make take a few minutes.')
+
+        if 'cropwidth' not in steps['mask_groups']:
+            steps['mask_groups']['cropwidth'] = 20
+        if 'edgewidth' not in steps['mask_groups']:
+            steps['mask_groups']['edgewidth'] = 10
+
+        # Get crop width, part of image we care about
+        crop = steps['mask_groups']['cropwidth']
+        edge = steps['mask_groups']['edgewidth']
+
+        # Get our cropped science frames and reference cubes
+        sci_frames = []
+        ref_cubes = []
+        nfitsfiles = len(observations)
+        for j in range(nfitsfiles):
+            if observations['TYPE'][j] == 'SCI':
+                with fits.open(os.path.abspath(observations['FITSFILE'][j])) as hdul:
+                    sci_frame = hdul['SCI'].data[:, -1, :, :].astype(float)
+
+                    # Subtract a median so we focus on brightest pixels
+                    sci_frame -= np.nanmedian(sci_frame, axis=(1,2), keepdims=True)
+
+                    # Crop around CRPIX
+                    crpix_x, crpix_y = hdul["SCI"].header["CRPIX1"], hdul["SCI"].header["CRPIX2"]
+                    xlo = int(crpix_x) - crop
+                    xhi = int(crpix_x) + crop
+                    ylo = int(crpix_y) - crop
+                    yhi = int(crpix_y) + crop
+                    sci_frame = sci_frame[:, ylo:yhi, xlo:xhi]
+
+                    # Now going to set the core to 0, so we focus less on the highly variable
+                    # PSF core
+                    sci_frame[:, edge:-edge, edge:-edge] = np.nan
+
+                    sci_frames.append(sci_frame)
+            elif observations['TYPE'][j] == 'REF':
+                with fits.open(os.path.abspath(observations['FITSFILE'][j])) as hdul:
+                    ref_cube = hdul['SCI'].data.astype(float)
+
+                    # Subtract a median so we focus on brightest pixels
+                    ref_cube -= np.nanmedian(ref_cube, axis=(2,3), keepdims=True)
+
+                    # Crop around CRPIX
+                    crpix_x, crpix_y = hdul["SCI"].header["CRPIX1"], hdul["SCI"].header["CRPIX2"]
+                    xlo = int(crpix_x) - crop
+                    xhi = int(crpix_x) + crop
+                    ylo = int(crpix_y) - crop
+                    yhi = int(crpix_y) + crop
+                    ref_cube = ref_cube[:, :, ylo:yhi, xlo:xhi]
+
+                    # Now going to set the core to 0, so we focus less on the highly variable
+                    # PSF core
+                    ref_cube[:, :, edge:-edge, edge:-edge] = np.nan
+
+                    ref_cubes.append(ref_cube)
+
+        # Want to check against every integration of every science dataset to find whichever
+        # matches the best, then use that for the scaling. 
+        max_grp_to_use = []
+        for sci_i, sci_frame in enumerate(sci_frames):
+            for int_i, sci_last_group in enumerate(sci_frame):
+                # Compare every reference group to this integration
+                best_diff = np.inf
+                for ref_cube in ref_cubes:
+                    this_cube_diffs = []
+                    for ref_int in ref_cube:
+                        this_int_diffs = []
+                        for ref_group in ref_int:
+                            diff = np.abs(np.nansum(ref_group)-np.nansum(sci_last_group))
+                            this_int_diffs.append(diff)
+                        this_cube_diffs.append(this_int_diffs)
+                        
+                    # Is the median of these diffs better that other reference cubes?
+                    if np.nanmin(this_cube_diffs) < best_diff:
+                        # If yes, this reference cube is a better match to the science
+                        best_diff = np.nanmin(this_cube_diffs)
+                        best_maxgrp = np.median(np.argmin(this_cube_diffs, axis=1))
+                max_grp_to_use.append(best_maxgrp)
+
+        # Assemble array of groups to mask, starting one above the max group
+        final_max_grp_to_use = int(np.nanmedian(max_grp_to_use)) 
+        groups_to_mask = np.arange(final_max_grp_to_use+1, ref_cubes[0].shape[1])
+            
+        # Assign to steps so this stage doesn't get repeated. 
+        steps['mask_groups']['groups_to_mask'] = groups_to_mask
+
+    return steps
 
 
 class MaskGroupsStep(Step):
@@ -908,6 +1031,9 @@ class MaskGroupsStep(Step):
     Mask particular groups prior to ramp fitting
     """
     class_alias = "maskgroups"
+
+    spec = """
+    """
 
     def process(self, input):
         """Mask particular groups prior to ramp fitting"""
@@ -918,3 +1044,6 @@ class MaskGroupsStep(Step):
             datamodel.groupdq[:,self.groups_to_mask,:,:] = 1
 
         return datamodel
+
+
+
