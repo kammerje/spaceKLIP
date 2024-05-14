@@ -1,9 +1,10 @@
 astropy
 astroquery
 jwst
-matplotlib
+matplotlib>=3.7.1
 numpy
 synphot
+stsynphot
 scipy
 stsci.stimage>=0.2.6
 webbpsf
