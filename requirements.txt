@@ -4,9 +4,8 @@ jwst
 matplotlib
 numpy
 synphot
-stsynphot
 scipy
-stsci.stimage==0.2.6
+stsci.stimage>=0.2.6
 webbpsf
-webbpsf_ext @ git+https://github.com/JarronL/webbpsf_ext.git@synphot_update
-pyklip @ git+https://bitbucket.org/pyKLIP/pyklip.git@jwst_new
+webbpsf_ext>=1.2.0
+pyklip @ git+https://bitbucket.org/pyKLIP/pyklip.git@jwst
