@@ -819,7 +819,7 @@ def get_filter_info(instrument, timeout=1, do_svo=True, return_more=False):
             'MIRI'  : webbpsf.MIRI,
         }
         inst = inst_func[iname_upper]()
-        filter_list = inst.filter_list
+        filter_list = inst.filter_list 
 
     wave, weff = ({}, {})
     if do_svo:
@@ -1026,6 +1026,64 @@ def cube_outlier_detection(data, sigma_cut=10, nint_min=10):
 
     return indbad
 
+def bg_minimize(par,X,Y,bgmaskfile):
+    """Simple minimisation function for Godoy background subtraction
+    
+    Parameters
+    ----------
+    par : int
+        Variable to scale background array
+    X : ndarray
+        Science / reference image
+    Y : ndarray
+        Background image
+    bgmaskfile : str
+        File which provides a mask to select which pixels
+        to compare during minimisation
+
+    Returns
+    -------
+    Sum of the squares of the residuals between images X and Y. 
+    """
+    mask = pyfits.getdata(bgmaskfile)
+
+    indices = np.where(mask == 1)
+
+    X0 = X[indices]
+    Y0 = Y[indices]
+
+    # X1 = X[112:118,4:10]
+    # Y1 = Y[112:118,4:10]
+    # X2 = X[95:101,207:212]
+    # Y2 = Y[95:101,207:212]
+
+    # X3 = X[93:123,2:207]
+    # Y3 = Y[93:123,2:207]
+
+    # X4 = X[103:105,122:147]
+    # Y4 = Y[103:105,122:147]
+    # X5 = X[110:112,57:87]
+    # Y5 = Y[110:112,57:87]
+
+    # X6 = X[110:120,5:35]
+    # Y6 = Y[110:120,5:35]
+    # X7 = X[93:103,-35:-5]
+    # Y7 = Y[93:103,-35:-5]
+
+    # Z1 = X1 - Y1*par/100 
+    # Z2 = X2 - Y2*par/100
+    # Z3 = X3 - Y3*par/100
+    # Z4 = X4 - Y4*par/100
+    # Z5 = X5 - Y5*par/100
+    # Z6 = X6 - Y6*par/100
+    # Z7 = X7 - Y7*par/100
+
+    Z0 = X0 - Y0*par/100
+    #Z = X - Y*par/100
+    #return np.nansum(np.sqrt(Z6**2)) + np.nansum(np.sqrt(Z7**2)) 
+    return np.nansum(np.sqrt(Z0**2))
+    # return 2*np.nansum(np.sqrt( Z4**2)) + 2*np.nansum(np.sqrt( Z5**2 ) ) + np.nansum(np.sqrt( Z4**2)) + np.nansum(np.sqrt( Z5**2 ) )
+
 def interpret_dq_value(dq_value):
     """Interpret DQ value using DQ definition
 
@@ -1075,3 +1133,4 @@ def get_dqmask(dqarr, bitvalues):
         dqmask = dqmask | (dqarr & bitval)
 
     return dqmask
+
