@@ -1007,6 +1007,8 @@ class ImageTools():
                                 self.find_bad_pixels_custom(data, erro, pxdq_temp, key, custom_kwargs)
                             else:
                                 log.info('  --> Method ' + method_split[k] + ': skipped because TA file')
+                        elif method_split[k] == 'timeints':
+                            self.find_bad_pixels_timeints(data, erro, pxdq_temp, key, custom_kwargs)
                         else:
                             log.info('  --> Unknown method ' + method_split[k] + ': skipped')
 
@@ -1276,12 +1278,8 @@ class ImageTools():
                 data_arr_trim = data_arr[:, pad_bottom:top, pad_left:right]
                 data_med = np.nanmedian(data_arr_trim, axis=0)
                 diff = data[i] - data_med
-                data_std = np.nanstd(data_arr_trim, axis=0)
 
-                # fig, ax = plt.subplots(1, 2)
-                # ax[0].imshow(diff)
-                # ax[1].imshow(data_std)
-                # plt.show()
+                data_std = np.nanstd(data_arr_trim, axis=0)
 
                 # # Do the same for the diff array we just made
                 # pad_diff = np.pad(diff, pad_vals, mode='edge')
@@ -1300,7 +1298,12 @@ class ImageTools():
                 threshold = sigclip_kwargs['sigma'] * data_std
                 mask_new = diff > threshold
 
-                # data_temp[i][mask_new] = np.nan
+                data_temp[i][mask_new] = np.nan
+
+                # fig, ax = plt.subplots(1, 2)
+                # ax[0].imshow(data_temp[i])
+                # ax[1].imshow(data_std)
+                # plt.show()
 
                 nmask_new = np.sum(mask_new & np.logical_not(ww[i]))
                 # print('Iteration %.0f: %.0f bad pixels identified, %.0f are new' % (it + 1, np.sum(mask_new), nmask_new))
@@ -1315,7 +1318,80 @@ class ImageTools():
         log.info('  --> Method sigclip: identified %.0f additional bad pixel(s) -- %.2f%%' % (np.sum(pxdq) - np.sum(pxdq_orig), 100. * (np.sum(pxdq) - np.sum(pxdq_orig)) / np.prod(pxdq.shape)))
         
         pass
-    
+
+    def find_bad_pixels_timeints(self,
+                            data,
+                            erro,
+                            pxdq,
+                            NON_SCIENCE,
+                            timeints_kwargs={}):
+        """
+        Identify bad pixels from temporal variations across integrations.
+        
+        Parameters
+        ----------
+        data : 3D-array
+            Input images.
+        erro : 3D-array
+            Input image uncertainties.
+        pxdq : 3D-array
+            Input binary bad pixel maps (1 = bad, 0 = good). Will be updated by
+            the routine to include the newly identified bad pixels.
+        NON_SCIENCE : 3D-array
+            Input binary non-science pixel maps (1 = bad, 0 = good). Will not
+            be modified by the routine.
+        timeints_kwargs : dict, optional
+            Keyword arguments for the 'timeints' method. Available keywords are:
+            
+            - sigma : float, optional
+                Sigma clipping threshold. The default is 5.
+            The default is {}.
+        
+        Returns
+        -------
+        None.
+
+        """
+
+        # Check input.
+        if 'sigma' not in timeints_kwargs.keys():
+            timeints_kwargs['sigma'] = 10.
+
+        pxdq_orig = pxdq.copy()
+        ww = pxdq != 0
+        data_temp = data.copy()
+        data_temp[ww] = np.nan
+        
+        # Find bad pixels across the cube
+
+        med_ints = np.nanmedian(data_temp, axis=0)
+        std_ints = np.nanstd(data_temp, axis=0)
+
+        std2_ints = robust.medabsdev(data_temp, axis=0)
+
+        diff = np.abs((data_temp - med_ints)) / std2_ints
+
+        mask_new = diff > timeints_kwargs['sigma']
+
+
+        data_temp[mask_new] = 9999
+        plt.imshow(data_temp[1])
+        plt.show()
+        # plt.hist(diff.flatten(), 
+        #         bins=int(np.sqrt(len(diff.flatten()))),
+        #         histtype='step',
+        #         label='Pre Cleaning')
+        # plt.yscale('log')
+        # plt.show()
+
+        
+        ww = ww | mask_new
+        pxdq[ww] = 1
+        print('')
+        log.info('  --> Method timeints: identified %.0f additional bad pixel(s) -- %.2f%%' % (np.sum(pxdq) - np.sum(pxdq_orig), 100. * (np.sum(pxdq) - np.sum(pxdq_orig)) / np.prod(pxdq.shape)))
+
+        pass
+
     def find_bad_pixels_custom(self,
                                data,
                                erro,
@@ -1627,7 +1703,7 @@ class ImageTools():
                                                     box_values, 
                                                     (ci, ri), 
                                                     method='linear',
-                                                    fill_value=np.nanmedian(box_values))
+                                                    fill_value=np.nan)
 
                             # Replace data pixel with interpolated value
                             data[i][ri, ci] = data_interp
@@ -1637,7 +1713,7 @@ class ImageTools():
                                                    ebox_values, 
                                                    (ci, ri), 
                                                    method='linear',
-                                                   fill_value=np.nanmedian(ebox_values))
+                                                   fill_value=np.nan)
 
                             # Replace error pixel
                             erro[i][ri, ci] = err_interp
