@@ -904,6 +904,8 @@ class ImageTools():
                         dqarr_kwargs={},
                         sigclip_kwargs={},
                         custom_kwargs={},
+                        timeints_kwargs={},
+                        gradient_kwargs={},
                         types=['SCI', 'SCI_TA', 'SCI_BG', 'REF', 'REF_TA', 'REF_BG'],
                         subdir='bpfound',
                         restrict_to=None):
@@ -1008,7 +1010,9 @@ class ImageTools():
                             else:
                                 log.info('  --> Method ' + method_split[k] + ': skipped because TA file')
                         elif method_split[k] == 'timeints':
-                            self.find_bad_pixels_timeints(data, erro, pxdq_temp, key, custom_kwargs)
+                            self.find_bad_pixels_timeints(data, erro, pxdq_temp, key, timeints_kwargs)
+                        elif method_split[k] == 'gradient':
+                            self.find_bad_pixels_gradient(data, erro, pxdq_temp, key, gradient_kwargs)
                         else:
                             log.info('  --> Unknown method ' + method_split[k] + ': skipped')
 
@@ -1374,9 +1378,9 @@ class ImageTools():
         mask_new = diff > timeints_kwargs['sigma']
 
 
-        data_temp[mask_new] = 9999
-        plt.imshow(data_temp[1])
-        plt.show()
+        # data_temp[mask_new] = 9999
+        # plt.imshow(data_temp[1])
+        # plt.show()
         # plt.hist(diff.flatten(), 
         #         bins=int(np.sqrt(len(diff.flatten()))),
         #         histtype='step',
@@ -1390,6 +1394,90 @@ class ImageTools():
         print('')
         log.info('  --> Method timeints: identified %.0f additional bad pixel(s) -- %.2f%%' % (np.sum(pxdq) - np.sum(pxdq_orig), 100. * (np.sum(pxdq) - np.sum(pxdq_orig)) / np.prod(pxdq.shape)))
 
+        pass
+
+    def find_bad_pixels_gradient(self,
+                                 data,
+                                 erro,
+                                 pxdq,
+                                 key,
+                                 gradient_kwargs={}):
+
+        # Check input.
+        if 'sigma' not in gradient_kwargs.keys():
+            gradient_kwargs['sigma'] = 0.5
+        if 'threshold' not in gradient_kwargs.keys():
+            gradient_kwargs['threshold'] = 0.05
+        if 'negative' not in gradient_kwargs.keys():
+            gradient_kwargs['negative'] = True
+
+        sig = gradient_kwargs['sigma']
+        threshold = gradient_kwargs['threshold']
+        negative = gradient_kwargs['negative'] 
+
+        pxdq_orig = pxdq.copy()
+        ww = pxdq != 0
+        data_temp = data.copy()
+        data_temp[ww] = np.nan
+
+        # Loop over the images
+        for i in range(ww.shape[0]):
+            image = data_temp[i]
+
+            ### remove nans
+            x=np.arange(0, image.shape[1])
+            y=np.arange(0, image.shape[0])
+
+            xx, yy = np.meshgrid(x, y)
+
+            # mask nans
+            image = np.ma.masked_invalid(image)
+
+            xvalid=xx[~image.mask]
+            yvalid=yy[~image.mask]
+
+            newimage=image[~image.mask]
+
+            image_no_nans = griddata((xvalid, yvalid), 
+                                    newimage.ravel(),
+                                    (xx, yy),
+                                    method='linear')
+            
+            ### get smooth image
+            smimage=gaussian_filter(image_no_nans, sigma=sig)
+
+            ### get sharp image
+            shimage=image_no_nans-smimage
+            
+            ### get gradients
+            image_to_gradient=shimage/smimage
+
+            gr=np.gradient((image_to_gradient))
+            gr_dx=gr[1]
+            gr_dy=gr[0]
+
+            ### pad gradient adding 1 extra pixel at beginning and end
+            gr_dxp=np.pad(gr_dx,(1,1))
+            gr_dyp=np.pad(gr_dy,(1,1))
+
+            ### identify bad pixels
+            # positive
+            bad_pixels = (gr_dxp[1:-1,2:]<-threshold) & (gr_dxp[1:-1,:-2]>threshold) & (gr_dyp[2:,1:-1]<-threshold) & (gr_dyp[:-2,1:-1]>threshold)
+            # negative
+            if negative:
+                bad_pixels_n = (gr_dxp[1:-1,2:]>threshold) & (gr_dxp[1:-1,:-2]<-threshold) & (gr_dyp[2:,1:-1]>threshold) & (gr_dyp[:-2,1:-1]<threshold)
+                bad_pixels=bad_pixels | bad_pixels_n
+
+            image[bad_pixels] = np.nan
+
+            # plt.imshow(image_to_gradient)
+            # plt.show()
+
+            # Flag DQ array
+            ww[i] = ww[i] | bad_pixels
+            pxdq[i][ww[i]] = 1
+        print('')
+        log.info('  --> Method gradient: identified %.0f additional bad pixel(s) -- %.2f%%' % (np.sum(pxdq) - np.sum(pxdq_orig), 100. * (np.sum(pxdq) - np.sum(pxdq_orig)) / np.prod(pxdq.shape)))
         pass
 
     def find_bad_pixels_custom(self,
