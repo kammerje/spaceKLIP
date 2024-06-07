@@ -1287,6 +1287,7 @@ def create_database(output_dir,
                     assoc_using_targname=True,
                     verbose=True,
                     readlevel='012',
+                    cr_from_saif=False,
                     **kwargs):
 
     """ Create a spaceKLIP database from JWST data
@@ -1370,7 +1371,8 @@ def create_database(output_dir,
         db.read_jwst_s012_data(datapaths=datapaths,
                                psflibpaths=psflibpaths,
                                bgpaths=bgpaths,
-                               assoc_using_targname=assoc_using_targname)
+                               assoc_using_targname=assoc_using_targname,
+                               cr_from_saif=cr_from_saif)
     elif str(readlevel) == '3':
         # the above get_files usage won't match KLIP outputsa, so find them here
         datapaths_klip = sorted(glob.glob(os.path.join(input_dir, "*KLmodes-all.fits")))

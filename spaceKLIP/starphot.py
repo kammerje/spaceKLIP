@@ -147,13 +147,13 @@ def get_stellar_magnitudes(starfile,
         # Fit SED to input photometry and plot SED.
         spec.fit_SED(x0=[1.], wlim=wlim, use_err=False, verbose=False)
         if output_dir is not None:
-            with plt.style.context('spaceKLIP.sk_style'):
-                spec.plot_SED()
-                plt.savefig(os.path.join(output_dir, 'sed.pdf'))
-                plt.close()
+            # with plt.style.context('spaceKLIP.sk_style'):
+            spec.plot_SED()
+            plt.savefig(os.path.join(output_dir, 'sed.pdf'))
+            # plt.close()
         
         # Convert units to photlam.
-        input_flux = u.Quantity(spec.sp_model.flux, str(spec.sp_model.fluxunits))
+        input_flux = u.Quantity(spec.sp_model.flux, str(spec.sp_model.fluxunits).lower())
         photlam_flux = convert_flux(spec.sp_model.wave, input_flux, out_flux_unit='photlam')
         sed = SourceSpectrum(Empirical1D, points=spec.sp_model.wave << u.Unit(str(spec.sp_model.waveunits)), lookup_table=photlam_flux << u.Unit('photlam'))
     

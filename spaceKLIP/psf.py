@@ -605,7 +605,7 @@ def _sp_to_spext(sp, **kwargs):
     except AttributeError:
         # Assume it's a synphot spectrum
         wave = sp.waveset
-        flux = sp(sp.wave)
+        flux = sp(sp.waveset)
         wunit = wave.unit.to_string()
         funit = flux.unit.to_string()
         sp = S.ArraySpectrum(wave.value, flux.value, waveunits=wunit, fluxunits=funit, 

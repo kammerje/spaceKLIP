@@ -1822,7 +1822,7 @@ class ImageTools():
         
         pass
     
-    @plt.style.context('spaceKLIP.sk_style')
+    # @plt.style.context('spaceKLIP.sk_style')
     def find_nircam_centers(self,
                             data0,
                             key,
@@ -1993,12 +1993,13 @@ class ImageTools():
         # Return star position.
         return xc, yc, xshift, yshift
     
-    @plt.style.context('spaceKLIP.sk_style')
+    # @plt.style.context('spaceKLIP.sk_style')
     def align_frames(self,
                      method='fourier',
                      align_algo='leastsq',
                      mask_override=None,
                      take_sqrt=False,
+                     make_plots=True,
                      kwargs={},
                      subdir='aligned'):
         """
@@ -2196,70 +2197,19 @@ class ImageTools():
                 # Update spaceKLIP database.
                 self.database.update_obs(key, j, fitsfile, maskfile, xoffset=xoffset, yoffset=yoffset, crpix1=crpix1, crpix2=crpix2)
             
-            # Plot science frame alignment.
-            colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
-            fig = plt.figure(figsize=(6.4, 4.8))
-            ax = plt.gca()
-            for index, j in enumerate(ww_sci):
-                ax.scatter(shifts_all[index][:, 0] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
-                           shifts_all[index][:, 1] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
-                           s=5, color=colors[index%len(colors)], marker='o', 
-                           label='PA = %.0f deg' % self.database.obs[key]['ROLL_REF'][j])
-            ax.axhline(0., color='gray', lw=1, zorder=-1)  # set zorder to ensure lines are drawn behind all the scatter points
-            ax.axvline(0., color='gray', lw=1, zorder=-1)
-
-            ax.set_aspect('equal')
-            xlim = ax.get_xlim()
-            ylim = ax.get_ylim()
-            xrng = xlim[1]-xlim[0]
-            yrng = ylim[1]-ylim[0]
-            if xrng > yrng:
-                ax.set_xlim(np.mean(xlim) - xrng, np.mean(xlim) + xrng)
-                ax.set_ylim(np.mean(ylim) - xrng, np.mean(ylim) + xrng)
-            else:
-                ax.set_xlim(np.mean(xlim) - yrng, np.mean(xlim) + yrng)
-                ax.set_ylim(np.mean(ylim) - yrng, np.mean(ylim) + yrng)
-            ax.set_xlabel('x-shift [mas]')
-            ax.set_ylabel('y-shift [mas]')
-            ax.legend(loc='upper right')
-            ax.set_title(f'Science frame alignment\nfor {self.database.obs[key]["TARGPROP"][ww_sci[0]]}, {self.database.obs[key]["FILTER"][ww_sci[0]]}')
-            output_file = os.path.join(output_dir, key + '_align_sci.pdf')
-            plt.savefig(output_file)
-            log.info(f" Plot saved in {output_file}")
-            plt.close(fig)
-            
-            # Plot reference frame alignment.
-            if len(ww_ref) > 0:
+            if make_plots:
+                # Plot science frame alignment.
                 colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
                 fig = plt.figure(figsize=(6.4, 4.8))
                 ax = plt.gca()
-                seen = []
-                reps = []
-                syms = ['o', 'v', '^', '<', '>'] * (1 + len(ww_ref) // 5)
-                add = len(ww_sci)
-                for index, j in enumerate(ww_ref):
-                    this = '%.3f_%.3f' % (database_temp[key]['XOFFSET'][j], database_temp[key]['YOFFSET'][j])
-                    if this not in seen:
-                        ax.scatter(shifts_all[index + add][:, 0] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
-                                   shifts_all[index + add][:, 1] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
-                                   s=5, color=colors[len(seen)], marker=syms[0], 
-                                   label='dither %.0f' % (len(seen) + 1))
-                        ax.hlines((-database_temp[key]['YOFFSET'][j] + yoffset) * 1000, 
-                                  (-database_temp[key]['XOFFSET'][j] + xoffset) * 1000 - 4., 
-                                  (-database_temp[key]['XOFFSET'][j] + xoffset) * 1000 + 4.,
-                                  color=colors[len(seen)], lw=1)
-                        ax.vlines((-database_temp[key]['XOFFSET'][j] + xoffset) * 1000, 
-                                  (-database_temp[key]['YOFFSET'][j] + yoffset) * 1000 - 4., 
-                                  (-database_temp[key]['YOFFSET'][j] + yoffset) * 1000 + 4., 
-                                  color=colors[len(seen)], lw=1)
-                        seen += [this]
-                        reps += [1]
-                    else:
-                        ww = np.where(np.array(seen) == this)[0][0]
-                        ax.scatter(shifts_all[index + add][:, 0] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
-                                   shifts_all[index + add][:, 1] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
-                                   s=5, color=colors[ww], marker=syms[reps[ww]])
-                        reps[ww] += 1
+                for index, j in enumerate(ww_sci):
+                    ax.scatter(shifts_all[index][:, 0] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
+                            shifts_all[index][:, 1] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
+                            s=5, color=colors[index%len(colors)], marker='o', 
+                            label='PA = %.0f deg' % self.database.obs[key]['ROLL_REF'][j])
+                ax.axhline(0., color='gray', lw=1, zorder=-1)  # set zorder to ensure lines are drawn behind all the scatter points
+                ax.axvline(0., color='gray', lw=1, zorder=-1)
+
                 ax.set_aspect('equal')
                 xlim = ax.get_xlim()
                 ylim = ax.get_ylim()
@@ -2273,10 +2223,62 @@ class ImageTools():
                     ax.set_ylim(np.mean(ylim) - yrng, np.mean(ylim) + yrng)
                 ax.set_xlabel('x-shift [mas]')
                 ax.set_ylabel('y-shift [mas]')
-                ax.legend(loc='upper right', fontsize='small')
-                ax.set_title(f'Reference frame alignment\n showing {len(ww_ref)} PSF refs for {self.database.obs[key]["FILTER"][ww_ref[0]]}')
-                output_file = os.path.join(output_dir, key + '_align_ref.pdf')
+                ax.legend(loc='upper right')
+                ax.set_title(f'Science frame alignment\nfor {self.database.obs[key]["TARGPROP"][ww_sci[0]]}, {self.database.obs[key]["FILTER"][ww_sci[0]]}')
+                output_file = os.path.join(output_dir, key + '_align_sci.pdf')
                 plt.savefig(output_file)
                 log.info(f" Plot saved in {output_file}")
                 plt.close(fig)
+                
+                # Plot reference frame alignment.
+                if len(ww_ref) > 0:
+                    colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+                    fig = plt.figure(figsize=(6.4, 4.8))
+                    ax = plt.gca()
+                    seen = []
+                    reps = []
+                    syms = ['o', 'v', '^', '<', '>'] * (1 + len(ww_ref) // 5)
+                    add = len(ww_sci)
+                    for index, j in enumerate(ww_ref):
+                        this = '%.3f_%.3f' % (database_temp[key]['XOFFSET'][j], database_temp[key]['YOFFSET'][j])
+                        if this not in seen:
+                            ax.scatter(shifts_all[index + add][:, 0] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
+                                    shifts_all[index + add][:, 1] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
+                                    s=5, color=colors[len(seen)], marker=syms[0], 
+                                    label='dither %.0f' % (len(seen) + 1))
+                            ax.hlines((-database_temp[key]['YOFFSET'][j] + yoffset) * 1000, 
+                                    (-database_temp[key]['XOFFSET'][j] + xoffset) * 1000 - 4., 
+                                    (-database_temp[key]['XOFFSET'][j] + xoffset) * 1000 + 4.,
+                                    color=colors[len(seen)], lw=1)
+                            ax.vlines((-database_temp[key]['XOFFSET'][j] + xoffset) * 1000, 
+                                    (-database_temp[key]['YOFFSET'][j] + yoffset) * 1000 - 4., 
+                                    (-database_temp[key]['YOFFSET'][j] + yoffset) * 1000 + 4., 
+                                    color=colors[len(seen)], lw=1)
+                            seen += [this]
+                            reps += [1]
+                        else:
+                            ww = np.where(np.array(seen) == this)[0][0]
+                            ax.scatter(shifts_all[index + add][:, 0] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
+                                    shifts_all[index + add][:, 1] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
+                                    s=5, color=colors[ww], marker=syms[reps[ww]])
+                            reps[ww] += 1
+                    ax.set_aspect('equal')
+                    xlim = ax.get_xlim()
+                    ylim = ax.get_ylim()
+                    xrng = xlim[1]-xlim[0]
+                    yrng = ylim[1]-ylim[0]
+                    if xrng > yrng:
+                        ax.set_xlim(np.mean(xlim) - xrng, np.mean(xlim) + xrng)
+                        ax.set_ylim(np.mean(ylim) - xrng, np.mean(ylim) + xrng)
+                    else:
+                        ax.set_xlim(np.mean(xlim) - yrng, np.mean(xlim) + yrng)
+                        ax.set_ylim(np.mean(ylim) - yrng, np.mean(ylim) + yrng)
+                    ax.set_xlabel('x-shift [mas]')
+                    ax.set_ylabel('y-shift [mas]')
+                    ax.legend(loc='upper right', fontsize='small')
+                    ax.set_title(f'Reference frame alignment\n showing {len(ww_ref)} PSF refs for {self.database.obs[key]["FILTER"][ww_ref[0]]}')
+                    output_file = os.path.join(output_dir, key + '_align_ref.pdf')
+                    plt.savefig(output_file)
+                    log.info(f" Plot saved in {output_file}")
+                    plt.close(fig)
 
