@@ -1824,7 +1824,7 @@ class ImageTools():
                             key,
                             j,
                             spectral_type='G2V',
-                            take_sqrt=take_sqrt,
+                            take_sqrt=False,
                             date=None,
                             output_dir=None,
                             fov_pix=65,
