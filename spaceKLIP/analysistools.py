@@ -1293,7 +1293,7 @@ class AnalysisTools():
                     else:
                         boxsize = kwargs['boxsize']
                     if 'dr' not in kwargs.keys() or kwargs['dr'] is None:
-                        dr = 5
+                        dr = 3
                     else:
                         dr = kwargs['dr']
                     if 'exclr' not in kwargs.keys() or kwargs['exclr'] is None:
