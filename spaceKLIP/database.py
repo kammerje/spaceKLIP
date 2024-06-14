@@ -109,7 +109,7 @@ class Database():
                             datapaths,
                             psflibpaths=None,
                             bgpaths=None,
-                            cr_from_saif=False,
+                            cr_from_siaf=False,
                             assoc_using_targname=True):
         """
         Read JWST stage 0 (*uncal), 1 (*rate or *rateints), or 2 (*cal or
@@ -275,7 +275,7 @@ class Database():
             BLURFWHM += [head.get('BLURFWHM', np.nan)]
             head = hdul['SCI'].header
             BUNIT += [head.get('BUNIT', 'NONE')]
-            if cr_from_saif:
+            if cr_from_siaf:
                 CRPIX1 += [ap.XSciRef]
                 CRPIX2 += [ap.YSciRef]
             else:
@@ -577,7 +577,7 @@ class Database():
     
     def read_jwst_s3_data(self,
                           datapaths,
-                          cr_from_saif=False):
+                          cr_from_siaf=False):
         """
         Read JWST stage 3 data (this can be *i2d data from the official JWST
         pipeline, or data products from the pyKLIP and classical PSF
@@ -724,7 +724,7 @@ class Database():
             if TYPE[-1] == 'CORON3':
                 head = hdul['SCI'].header
             BUNIT += [head.get('BUNIT', 'NONE')]
-            if cr_from_saif:
+            if cr_from_siaf:
                 CRPIX1 += [ap.XSciRef]
                 CRPIX2 += [ap.YSciRef]
             else:
@@ -1287,7 +1287,7 @@ def create_database(output_dir,
                     assoc_using_targname=True,
                     verbose=True,
                     readlevel='012',
-                    cr_from_saif=False,
+                    cr_from_siaf=False,
                     **kwargs):
 
     """ Create a spaceKLIP database from JWST data
@@ -1371,13 +1371,13 @@ def create_database(output_dir,
         db.read_jwst_s012_data(datapaths=datapaths,
                                psflibpaths=psflibpaths,
                                bgpaths=bgpaths,
-                               cr_from_saif=cr_from_saif,
+                               cr_from_siaf=cr_from_siaf,
                                assoc_using_targname=assoc_using_targname)
     elif str(readlevel) == '3':
         # the above get_files usage won't match KLIP outputsa, so find them here
         datapaths_klip = sorted(glob.glob(os.path.join(input_dir, "*KLmodes-all.fits")))
         db.read_jwst_s3_data(datapaths=datapaths+datapaths_klip,
-                             cr_from_saif=cr_from_saif,
+                             cr_from_siaf=cr_from_siaf,
                             )
     elif str(readlevel) == '4':
         db.read_jwst_s4_data(datapaths=datapaths,
