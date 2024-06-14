@@ -600,12 +600,12 @@ def _sp_to_spext(sp, **kwargs):
     """Check if input spectrum is a synphot spectrum and convert to webbpsf_ext spectrum"""
 
     try:
-        wave = sp.wave
+        wave = sp.waveset
         flux = sp.flux
     except AttributeError:
         # Assume it's a synphot spectrum
         wave = sp.waveset
-        flux = sp(sp.wave)
+        flux = sp(sp.waveset)
         wunit = wave.unit.to_string()
         funit = flux.unit.to_string()
         sp = S.ArraySpectrum(wave.value, flux.value, waveunits=wunit, fluxunits=funit, 
