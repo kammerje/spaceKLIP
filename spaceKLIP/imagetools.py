@@ -1599,7 +1599,7 @@ class ImageTools():
                         method='fourier',
                         subpix_first_sci_only=False,
                         spectral_type='G2V',
-                        take_sqrt=False,
+                        shft_exp=1,
                         kwargs={},
                         subdir='recentered'):
         """
@@ -1625,8 +1625,8 @@ class ImageTools():
         spectral_type : str, optional
             Host star spectral type for the WebbPSF model used to determine the
             star position behind the coronagraphic mask. The default is 'G2V'.
-        take_sqrt : bool, optional
-            Take sqrt before cross correlating for shifts. Helps align nircam bar data (or other data with weird speckles)
+        shft_exp : float, optional
+            Take image to the given power before cross correlating for shifts, default is 1. For instance, 1/2 helps align nircam bar/narrow data (or other data with weird speckles)
         kwargs : dict, optional
             Keyword arguments for the scipy.ndimage.shift routine. The default
             is {}.
@@ -1694,7 +1694,7 @@ class ImageTools():
                                 xc, yc, xshift, yshift = self.find_nircam_centers(data0=data[k].copy(),
                                                                                   key=key,
                                                                                   j=j,
-                                                                                  take_sqrt=take_sqrt,
+                                                                                  shft_exp=shft_exp,
                                                                                   spectral_type=spectral_type,
                                                                                   date=head_pri['DATE-BEG'],
                                                                                   output_dir=output_dir)
@@ -1824,7 +1824,7 @@ class ImageTools():
                             key,
                             j,
                             spectral_type='G2V',
-                            take_sqrt=False,
+                            shft_exp=1,
                             date=None,
                             output_dir=None,
                             fov_pix=65,
@@ -1845,8 +1845,8 @@ class ImageTools():
         spectral_type : str, optional
             Host star spectral type for the WebbPSF model used to determine the
             star position behind the coronagraphic mask. The default is 'G2V'.
-        take_sqrt : bool, optional
-            Take sqrt before cross correlating for shifts.
+        shft_exp : float, optional
+            Take image to the given power before cross correlating for shifts, default is 1.
         date : str, optional
             Observation date in the format 'YYYY-MM-DDTHH:MM:SS.MMM'. The
             default is None.
@@ -1926,12 +1926,12 @@ class ImageTools():
                                     xycen=(xc, yc),
                                     npix=fov_pix)
             
-            if take_sqrt:
-                img1 = np.sqrt(np.abs(datasub))* masksub
-                img2 = np.sqrt(np.abs(model_psf))* masksub
-            else:
+            if shft_exp != 1:
                 img1 = datasub* masksub
                 img2 = model_psf* masksub
+            else:
+                img1 = np.power(datasub, shft_exp)* masksub
+                img2 = np.power(model_psf, shft_exp) * masksub
             
             # Determine relative shift between data and model PSF.
             shift, error, phasediff = phase_cross_correlation(img1,
@@ -1989,7 +1989,7 @@ class ImageTools():
                      align_algo='leastsq',
                      mask_override=None,
                      msk_shp=8,
-                     take_sqrt=False,
+                     shft_exp=1,
                      kwargs={},
                      subdir='aligned'):
         """
@@ -2006,8 +2006,8 @@ class ImageTools():
             Mask some pixels when cross correlating for shifts
         msk_shp : int, optional
             Shape (height or radius) for custom mask invoked by "mask_override"
-        take_sqrt : bool, optional
-            Take sqrt before cross correlating for shifts.
+        shft_exp : float, optional
+            Take image to the given power before cross correlating for shifts, default is 1. For instance, 1/2 helps align nircam bar/narrow data (or other data with weird speckles)
         kwargs : dict, optional
             Keyword arguments for the scipy.ndimage.shift routine. The default
             is {}.
@@ -2126,8 +2126,8 @@ class ImageTools():
                         if (np.abs(xshift) < 1e-3) and (np.abs(yshift) < 1e-3):
                             p0 = np.array([0., 0., 1.])
                         if align_algo == 'leastsq':
-                            if take_sqrt:
-                                args = (np.sqrt(np.abs(data[k])), np.sqrt(np.abs(ref_image)), mask_temp, method, kwargs)
+                            if shft_exp != 1:
+                                args = (np.power(np.abs(data[k]), shft_exp), np.power(np.abs(ref_image), shft_exp), mask_temp, method, kwargs)
                             else:
                                 args = (data[k], ref_image, mask_temp, method, kwargs)
                             # Use header values to initiate least squares fit
