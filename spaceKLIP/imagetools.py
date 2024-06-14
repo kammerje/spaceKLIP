@@ -2844,8 +2844,8 @@ class ImageTools():
                 self.database.update_obs(key, j, fitsfile, maskfile, xoffset=xoffset, yoffset=yoffset, crpix1=crpix1, crpix2=crpix2)
 
         pass
-
-    @plt.style.context('spaceKLIP.sk_style')
+    
+    # @plt.style.context('spaceKLIP.sk_style')
     def find_nircam_centers(self,
                             data0,
                             key,
@@ -3029,9 +3029,9 @@ class ImageTools():
             plt.close(fig)
 
         # Return star position.
-        return xc, yc, median_xshift, median_yshift
-
-    @plt.style.context('spaceKLIP.sk_style')
+        return xc, yc, xshift, yshift
+    
+    # @plt.style.context('spaceKLIP.sk_style')
     def align_frames(self,
                      method='fourier',
                      shift_method='fourier',
