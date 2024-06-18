@@ -1926,12 +1926,12 @@ class ImageTools():
                                     xycen=(xc, yc),
                                     npix=fov_pix)
             
-            if shft_exp != 1:
+            if shft_exp == 1:
                 img1 = datasub* masksub
                 img2 = model_psf* masksub
             else:
-                img1 = np.power(datasub, shft_exp)* masksub
-                img2 = np.power(model_psf, shft_exp) * masksub
+                img1 = np.power(np.abs(datasub), shft_exp)* masksub
+                img2 = np.power(np.abs(model_psf), shft_exp) * masksub
             
             # Determine relative shift between data and model PSF.
             shift, error, phasediff = phase_cross_correlation(img1,
