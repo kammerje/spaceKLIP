@@ -2168,23 +2168,23 @@ class ImageTools():
                     if this not in seen:
                         ax.scatter(shifts_all[index + add][:, 0] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
                                    shifts_all[index + add][:, 1] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
-                                   s=5, color=colors[len(seen)], marker=syms[0], 
+                                   s=5, color=colors[len(seen)%len(colors)], marker=syms[0], 
                                    label='dither %.0f' % (len(seen) + 1))
                         ax.hlines((-database_temp[key]['YOFFSET'][j] + yoffset) * 1000, 
                                   (-database_temp[key]['XOFFSET'][j] + xoffset) * 1000 - 4., 
                                   (-database_temp[key]['XOFFSET'][j] + xoffset) * 1000 + 4.,
-                                  color=colors[len(seen)], lw=1)
+                                  color=colors[len(seen)%len(colors)], lw=1)
                         ax.vlines((-database_temp[key]['XOFFSET'][j] + xoffset) * 1000, 
                                   (-database_temp[key]['YOFFSET'][j] + yoffset) * 1000 - 4., 
                                   (-database_temp[key]['YOFFSET'][j] + yoffset) * 1000 + 4., 
-                                  color=colors[len(seen)], lw=1)
+                                  color=colors[len(seen)%len(colors)], lw=1)
                         seen += [this]
                         reps += [1]
                     else:
                         ww = np.where(np.array(seen) == this)[0][0]
                         ax.scatter(shifts_all[index + add][:, 0] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
                                    shifts_all[index + add][:, 1] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
-                                   s=5, color=colors[ww], marker=syms[reps[ww]])
+                                   s=5, color=colors[ww%len(colors)], marker=syms[reps[ww]])
                         reps[ww] += 1
                 ax.set_aspect('equal')
                 xlim = ax.get_xlim()
