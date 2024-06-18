@@ -2,7 +2,7 @@ astropy
 astroquery
 jwst
 matplotlib>=3.7.1
-numpy
+numpy<2
 synphot
 stsynphot
 scipy
