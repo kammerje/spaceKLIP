@@ -177,7 +177,10 @@ def run_obs(database,
                     hdul[0].header['APERNAME'] = database.obs[key]['APERNAME'][ww_sci[0]]
                     hdul[0].header['PPS_APER'] = database.obs[key]['PPS_APER'][ww_sci[0]]
                     hdul[0].header['PIXSCALE'] = database.obs[key]['PIXSCALE'][ww_sci[0]]
-                    hdul[0].header['PIXAR_SR'] = database.obs[key]['PIXAR_SR'][ww_sci[0]]
+                    try:
+                        hdul[0].header['PIXAR_SR'] = database.obs[key]['PIXAR_SR'][ww_sci[0]]
+                    except:
+                        pass
                     hdul[0].header['MODE'] = mode
                     hdul[0].header['ANNULI'] = annu
                     hdul[0].header['SUBSECTS'] = subs
