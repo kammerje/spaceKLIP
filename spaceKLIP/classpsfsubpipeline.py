@@ -1,8 +1,6 @@
 from __future__ import division
 
 import matplotlib
-matplotlib.rcParams.update({'font.size': 14})
-
 
 # =============================================================================
 # IMPORTS
@@ -47,6 +45,7 @@ def run_obs(database,
     kwargs : dict, optional
         Keyword arguments for the classical PSF subtraction method. Available
         keywords are:
+
         - combine_dithers : bool, optional
             Combine all dither positions into a single reference PSF or
             subtract each dither position individually? The default is True.
@@ -54,16 +53,18 @@ def run_obs(database,
             Save each processed roll separately? The default is False.
         - mask_bright : float, optional
             Mask all pixels brighter than this value before minimizing the
-            PSF subtraction residuals.
+            PSF subtraction residuals. 
+
         The default is {}.
+
     subdir : str, optional
         Name of the directory where the data products shall be saved. The
         default is 'psfsub'.
-    
+
     Returns
     -------
     None.
-    
+
     """
     
     # Check input.
@@ -164,14 +165,15 @@ def run_obs(database,
                     temp = np.ones_like(data)
                     temp[data > kwargs['mask_bright']] = 0
                     temp = (temp > 0.5) & (pxdq < 0.5)
-                    plt.figure()
-                    plt.imshow(data, origin='lower', vmin=0, vmax=50)
-                    plt.imshow(temp, origin='lower', cmap='Greys_r', alpha=0.5)
-                    plt.colorbar()
-                    plt.tight_layout()
-                    plt.savefig(os.path.join(output_dir, key + '_mask.pdf'))
-                    # plt.show()
-                    plt.close()
+                    with plt.style.context('spaceKLIP.sk_style'):
+                        plt.figure()
+                        plt.imshow(data, origin='lower', vmin=0, vmax=50)
+                        plt.imshow(temp, origin='lower', cmap='Greys_r', alpha=0.5)
+                        plt.colorbar()
+                        plt.tight_layout()
+                        plt.savefig(os.path.join(output_dir, key + '_mask.pdf'))
+                        # plt.show()
+                        plt.close()
                 else:
                     temp = None
                 

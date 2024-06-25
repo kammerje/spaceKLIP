@@ -9,6 +9,7 @@ import glob
 from itertools import chain
 
 import numpy as np
+import math
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -23,7 +24,7 @@ import astropy.io.fits as fits
 import astropy.units as u
 import astropy.visualization as v
 
-import jdaviz
+from . import wcs_utils
 import jwst.datamodels
 
 import logging
@@ -34,6 +35,15 @@ log.setLevel(logging.INFO)
 # =============================================================================
 # MAIN
 # =============================================================================
+
+def load_plt_style(style='spaceKLIP.sk_style'):
+    """
+    Load the matplotlib style for spaceKLIP plots.
+    
+    Load the style sheet in `sk_style.mplstyle`, which is a modified version of the
+    style sheet from the `webbpsf_ext` package.
+    """
+    plt.style.use(style)
 
 def annotate_compass(ax, image, wcs, xf=0.9, yf=0.1, length_fraction=0.07, color='white', fontsize=12, ):
     """
@@ -66,9 +76,8 @@ def annotate_compass(ax, image, wcs, xf=0.9, yf=0.1, length_fraction=0.07, color
     
     """
     
-    # Use jdaviz to compute arrow positions
-    x, y, xn, yn, xe, ye, degn, dege, xflip = jdaviz.configs.imviz.wcs_utils.get_compass_info(wcs, image.shape,
-                                                                                              r_fac=length_fraction)
+    # Use wcs_utils from jdaviz to compute arrow positions
+    x, y, xn, yn, xe, ye, degn, dege, xflip = wcs_utils.get_compass_info(wcs, image.shape, r_fac=length_fraction)
     
     # but then apply offsets to recenter the
     xo = image.shape[1] * xf - x
@@ -164,11 +173,15 @@ def annotate_secondary_axes_arcsec(ax, image, wcs):
     secax.tick_params(labelsize='small')
     secay.tick_params(labelsize='small')
 
+@plt.style.context('spaceKLIP.sk_style')
 def display_coron_image(filename):
     """
     Display and annotate a coronagraphic image.
     
     Shows image on asinh scale along with some basic metadata, scale bar, and compass.
+
+    This display function is designed to flexibly adapt to several different kinds of input data,
+    including rate, rateints, cal, calints files. And pyKLIP's KLmode cubes.
     
     Parameters
     ----------
@@ -208,14 +221,14 @@ def display_coron_image(filename):
         if cube_ints:
             image = np.nanmean(model.data, axis=0)
             dq = model.dq[0]
-            nints = model.meta.nints
+            nints = model.meta.exposure.nints
         else:
             image = model.data
             dq = model.dq
         bunit = model.meta.bunit_data
         is_psf = model.meta.exposure.psf_reference
 
-        annotation_text = f"{model.meta.target.proposer_name}\n{model.meta.instrument.filter}, {model.meta.exposure.readpatt}:{model.meta.exposure.ngroups}:{model.meta.exposure.nints}\n{model.meta.exposure.effective_exposure_time:.2f} s",
+        annotation_text = f"{model.meta.target.proposer_name}\n{model.meta.instrument.filter}, {model.meta.exposure.readpatt}:{model.meta.exposure.ngroups}:{model.meta.exposure.nints}\n{model.meta.exposure.effective_exposure_time:.2f} s"
 
         try:
             wcs = model.meta.wcs
@@ -241,13 +254,13 @@ def display_coron_image(filename):
         if len(image.shape)==3:
             image = image[-1] # select the last KL mode
             wcs = wcs.dropaxis(2)  # drop the nints axis
-        annotation_text = f"pyKLIP results for {header['TARGPROP']}\n{header['FILTER']}\n",
+        annotation_text = f"pyKLIP results for {header['TARGPROP']}\n{header['FILTER']}\n"
 
     
     bpmask = np.zeros_like(image) + np.nan
     # does this file have DQ extension or not? PyKLIP outputs do not
     if is_pyklip:
-        bpmask[np.isfinite(image)] = 0
+        bpmask[np.isnan(image)] = 1
     else:
         bpmask[(model.dq[0] & 1) == True] = 1
         
@@ -302,16 +315,24 @@ def display_coron_image(filename):
     annotate_compass(ax, image, wcs, yf=0.07)
     annotate_scale_bar(ax, image, wcs, yf=0.07)
     
+    # Clear the existing tick marks on the secondary axes before adding new ones
+    ax.xaxis.set_tick_params(which='both', bottom=True, top=False)
+    ax.yaxis.set_tick_params(which='both', left=True, right=False)
+    
     # Annotate secondary axes in arcsec relative to coron mask center (really, relative to V2/V3Ref)
     annotate_secondary_axes_arcsec(ax, image, wcs)
     
     # TODO:
     #   add second panel with zoom in on center
 
+@plt.style.context('spaceKLIP.sk_style')
 def display_coron_dataset(database, restrict_to=None, save_filename=None, stage3=None):
     """
     Display multiple files in a coronagraphic dataset.
-    
+
+    # TODO potentially provide other ways of filtering the data, e.g. to show
+    only the PSF stars or only references, etc.
+
     Parameters
     ----------
     database : spaceklip.Database
@@ -322,13 +343,11 @@ def display_coron_dataset(database, restrict_to=None, save_filename=None, stage3
         Most simply, set this to a filter name to only plot images with that filter.
     save_filename : str
         If provided, the plots will be saved to a PDF file with this name.
-    # TODO potentially provide other ways of filtering the data, e.g. to show
-    only the PSF stars or only references, etc.
     
     Returns
     -------
     None.
-    
+
     """
     
     if save_filename:
@@ -368,7 +387,7 @@ def display_coron_dataset(database, restrict_to=None, save_filename=None, stage3
     if save_filename:
         pdf.close()
 
-
+@plt.style.context('spaceKLIP.sk_style')
 def plot_contrast_images(meta, data, data_masked, pxsc=None, savefile='./maskimage.pdf'):
     """
     Plot subtracted images to be used for contrast estimation, one with
@@ -385,7 +404,7 @@ def plot_contrast_images(meta, data, data_masked, pxsc=None, savefile='./maskima
         extl = (data.shape[1]+1.)/2.*pxsc/1000. # arcsec
         extr = (data.shape[1]-1.)/2.*pxsc/1000. # arcsec
         extent = (extl, -extr, -extl, extr)
-        xlabel, ylabel = '$\Delta$RA [arcsec]', '$\Delta$Dec [arcsec]'
+        xlabel, ylabel = '$\\Delta$RA [arcsec]', '$\\Delta$Dec [arcsec]'
 
     # Initialize plots
     f, ax = plt.subplots(1, 2, figsize=(2*6.4, 1*4.8))
@@ -420,6 +439,7 @@ def plot_contrast_images(meta, data, data_masked, pxsc=None, savefile='./maskima
 
     return
 
+@plt.style.context('spaceKLIP.sk_style')
 def plot_contrast_raw(meta, seps, cons, labels='default', savefile='./rawcontrast.pdf'):
     """
     Plot raw contrast curves for different KL modes.
@@ -459,6 +479,7 @@ def plot_contrast_raw(meta, seps, cons, labels='default', savefile='./rawcontras
 
     return
 
+@plt.style.context('spaceKLIP.sk_style')
 def plot_injected_locs(meta, data, transmission, seps, pas, pxsc=None, savefile='./injected.pdf'):
     '''
     Plot subtracted image and 2D transmission alongside locations of injected planets. 
@@ -519,7 +540,8 @@ def plot_injected_locs(meta, data, transmission, seps, pas, pxsc=None, savefile=
     plt.close()
 
     return
-            
+
+@plt.style.context('spaceKLIP.sk_style')
 def plot_contrast_calibrated(thrput, med_thrput, fit_thrput, con_seps, cons, corr_cons, savefile='./calcontrast.pdf'):
     '''
     Plot calibrated throughput alongside calibrated contrast curves. 
@@ -551,6 +573,7 @@ def plot_contrast_calibrated(thrput, med_thrput, fit_thrput, con_seps, cons, cor
 
     return
 
+@plt.style.context('spaceKLIP.sk_style')
 def plot_fm_psf(meta, fm_frame, data_frame, guess_flux, pxsc=None, j=0, savefile='./fmpsf.pdf'):
     '''
     Plot forward model psf
@@ -594,6 +617,7 @@ def plot_fm_psf(meta, fm_frame, data_frame, guess_flux, pxsc=None, j=0, savefile
 
     return
 
+@plt.style.context('spaceKLIP.sk_style')
 def plot_chains(chain, savefile):
     '''
     Plot MCMC chains from companion fitting
@@ -616,6 +640,7 @@ def plot_chains(chain, savefile):
     plt.savefig(savefile)
     plt.close()
 
+@plt.style.context('spaceKLIP.sk_style')
 def plot_subimages(imgdirs, subdirs, filts, submodes, numKL, 
                    window_size=2.5, cmaps_list=['viridis'],
                    imgVmin=[-40], imgVmax=[40], subVmin=[-10], subVmax=[10],

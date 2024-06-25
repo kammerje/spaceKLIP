@@ -31,7 +31,7 @@ On a high level, spaceKLIP consists of three different reduction steps:
 SpaceKLIP also provides additional functions for post-pipeline scientific analyses of the PSF subtracted images. These functions can be found in the :ref:`analysistools` module. There are functions to:
 
  * retrieve the properties of detected companions 
- * to compute basic contrast curves
+ * to compute basic and calibrated contrast curves
  * to inject one or more companions into a given data set. 
 
 There are several tutorial Jupyter notebooks which show how to use these
@@ -47,22 +47,19 @@ adapted by the user if necessary.
 Compatible Simulated Data: `Here <https://stsci.box.com/s/cktghuyrwrallb401rw5y5da2g5ije6t>`_
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Getting started
+   :maxdepth: 1
+   :caption: Getting Started
    :hidden:
 
    TLDR
    Installation-and-dependencies
-   imagetools
-   analysistools
 
 .. toctree::
-   :maxdepth: 3
+   :maxdepth: 1
    :caption: Tutorials
    :hidden:
 
-   tutos
-   tutorials/Introduction.ipynb
+   tutorials
    tutorials/tutorial_NIRCam_reductions.ipynb
    tutorials/tutorial_MIRI_reductions.ipynb
    tutorials/tutorial_NIRCam_contrast_analyses.ipynb
@@ -70,7 +67,18 @@ Compatible Simulated Data: `Here <https://stsci.box.com/s/cktghuyrwrallb401rw5y5
    tutorials/MAST query tools for coronagraphic datasets.ipynb
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
+   :caption: spaceKLIP Functionality (Unfinished)
+   :hidden:
+
+   stage1
+   stage2
+   imagetools
+   subtraction
+   analysistools
+
+.. toctree::
+   :maxdepth: 1
    :caption: About
    :hidden:
 
@@ -78,10 +86,14 @@ Compatible Simulated Data: `Here <https://stsci.box.com/s/cktghuyrwrallb401rw5y5
    Attribution
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Package content
    :hidden:
 
    spaceKLIP
    gen_index
+
+
+
+
 

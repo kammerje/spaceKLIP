@@ -1,8 +1,6 @@
 from __future__ import division
 
 import matplotlib
-matplotlib.rcParams.update({'font.size': 14})
-
 
 # =============================================================================
 # IMPORTS
@@ -13,7 +11,6 @@ import pdb
 import sys
 
 import astropy.io.fits as pyfits
-import matplotlib.pyplot as plt
 import numpy as np
 
 import importlib
@@ -39,13 +36,24 @@ def get_nrcmask_from_apname(apname):
     """Get mask name from aperture name
     
     The aperture name is of the form:
-        NRC[A/B][1-5]_[FULL]_[MASK]_[FILTER]
+    NRC[A/B][1-5]_[FULL]_[MASK]_[FILTER]
     where MASK is the name of the coronagraphic mask used.
 
     For target acquisition apertures the mask name can be
     prependend with "TA" (eg., TAMASK335R).
 
     Return 'NONE' if MASK not in input aperture name.
+
+    Parameters
+    ----------
+    apname : str
+        String aperture name as described above
+
+    Returns
+    -------
+    image_mask : str
+        String for image mask
+
     """
 
     if 'MASK' not in apname:
@@ -659,6 +667,66 @@ def _get_tp_comsubst(instrume,
     # Return.
     return tp_comsubst
 
+def write_starfile(starfile,  
+                   new_starfile_path,
+                   new_header=None):
+    """
+    Save stellar spectrum file to a different location, and insert
+    a header to the start if needed. 
+    
+    Parameters
+    ----------
+    starfile : str
+        Path to original stellar spectrum file.
+    new_starfile_path : str
+        Path to new stellar spectrum file.
+    new_header : str
+        Header to be inserted. 
+    
+    Returns
+    -------
+    None
+    
+    """ 
+    if not os.path.exists(starfile):
+        raise FileNotFoundError("The specified starfile does not exist.")
+    
+    with open(starfile, 'r') as orig_starfile:
+        text=orig_starfile.read()
+        with open(new_starfile_path, 'w') as new_starfile:
+            if new_header is None:
+                new_starfile.write(text)
+            else:
+                new_starfile.write(new_header+text)
+
+def set_surrounded_pixels(array, user_value=np.nan):
+    """
+    Identifies pixels in a 2D array surrounded by NaN values 
+    on all eight sides and sets them to a user-defined value.
+
+    Parameters
+    ----------
+    array : numpy.ndarray
+        2D array containing numeric values and NaNs.
+    user_value : float or any valid value type, optional
+        Value to set for pixels surrounded by NaNs on all eight sides. Defaults to NaN.
+
+    Returns
+    -------
+    numpy.ndarray
+        The input array with pixels surrounded by NaNs on all eight sides set to the user-defined value.
+    """
+    nan_mask = np.isnan(array)
+    surrounded_pixels = (
+        ~nan_mask[1:-1, 1:-1] &
+        nan_mask[:-2, :-2] & nan_mask[:-2, 1:-1] & nan_mask[:-2, 2:] &
+        nan_mask[1:-1, :-2] & nan_mask[1:-1, 2:] &
+        nan_mask[2:, :-2] & nan_mask[2:, 1:-1] & nan_mask[2:, 2:]
+    )
+    
+    array[1:-1, 1:-1][surrounded_pixels] = user_value
+    return array
+
 def get_tp_comsubst(instrume,
                     subarray,
                     filt):
@@ -963,3 +1031,53 @@ def cube_outlier_detection(data, sigma_cut=10, nint_min=10):
     indbad = ~indgood
 
     return indbad
+
+def interpret_dq_value(dq_value):
+    """Interpret DQ value using DQ definition
+
+    Parameters
+    ----------
+    dq_value : int
+        DQ value to interpret.
+
+    Returns
+    -------
+    str
+        Interpretation of DQ value.
+    """
+
+    from stdatamodels.jwst.datamodels.dqflags import pixel, dqflags_to_mnemonics
+
+    if dq_value == 0:
+        return {'GOOD'}
+    return dqflags_to_mnemonics(dq_value, pixel)
+
+def get_dqmask(dqarr, bitvalues):
+    """Get DQ mask from DQ array
+    
+    Given some DQ array and a list of bit values, return a mask
+    for the pixels that have any of the specified bit values.
+
+    Parameters
+    ----------
+    dqarr : ndarray
+        DQ array. Either 2D or 3D.
+    bitvalues : list
+        List of bit values to use for DQ mask. 
+        These values must be powers of 2 (e.g., 1, 2, 4, 8, 16, ...),
+        representing the specific DQ bit flags.
+    """
+
+    from astropy.nddata.bitmask import _is_bit_flag
+
+    for v in bitvalues:
+        if not _is_bit_flag(v):
+            raise ValueError(
+                f"Input list contains invalid (not powers of two) bit flag: {v}"
+            )
+
+    dqmask = np.zeros_like(dqarr, dtype=bool)
+    for bitval in bitvalues:
+        dqmask = dqmask | (dqarr & bitval)
+
+    return dqmask
