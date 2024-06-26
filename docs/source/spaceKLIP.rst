@@ -49,6 +49,15 @@ spaceKLIP.database module
    :undoc-members:
    :show-inheritance:
 
+spaceKLIP.fnoise_clean module
+-----------------------------
+
+.. automodule:: spaceKLIP.fnoise_clean
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+
 spaceKLIP.imagetools module
 ---------------------------
 

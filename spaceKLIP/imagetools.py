@@ -1531,6 +1531,13 @@ class ImageTools():
         center from Jarron and update the current reference pixel position to
         reflect the true mask center. Account for filter-dependent distortion.
         Might not be required for simulated data.
+
+        This step uses lookup tables of information derived from NIRCam
+        commissioning activities CAR-30 and CAR-31, by J. Leisenring and J. Girard,
+        and subsequent reanalyses using additional data from PSF SGD observations.
+
+        This information will eventually be applied as updates into the SIAF,
+        after which point this step will become not necessary.
         
         Returns
         -------
