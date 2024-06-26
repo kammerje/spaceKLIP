@@ -1297,9 +1297,9 @@ class AnalysisTools():
                     else:
                         dr = kwargs['dr']
                     if 'exclr' not in kwargs.keys() or kwargs['exclr'] is None:
-                        exclr = 3
+                        exclr = 3*resolution
                     else:
-                        exclr = kwargs['exclr']
+                        exclr = kwargs['exclr']*resolution
                     if 'xrange' not in kwargs.keys() or kwargs['xrange'] is None:
                         xrange = 2.
                     else:

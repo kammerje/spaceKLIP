@@ -32,5 +32,4 @@ With the anaconda environment created, move to the cloned directory and install 
 	python make_psfmasks.py
 
 
-
 Finally, and very importantly, you will need to download reference files to support the functioning of the :code:`webbpsf` and :code:`webbpsf_ext`. Instructions to do this can be found at the respective package websites (`WebbPSF <https://webbpsf.readthedocs.io/en/latest/installation.html#installing-the-required-data-files>`_, `webbpsf_ext <https://github.com/JarronL/webbpsf_ext>`_). Ensure that if you edit your .bashrc file that you reopen and close your terminal to fully apply the changes (:code:`source ~/.bashrc` or :code:`source ~/.zshrc` may also work)
