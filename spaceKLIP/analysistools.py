@@ -990,10 +990,13 @@ class AnalysisTools():
                         raise UserWarning('Data originates from unknown JWST instrument')
                 else:
                     raise UserWarning('Data originates from unknown telescope')
-                if starfile is not None and starfile.endswith('.txt'):
-                    sed = read_spec_file(starfile)
+                if 'planetfile' not in kwargs.keys() or kwargs['planetfile'] is None:
+                    if starfile is not None and starfile.endswith('.txt'):
+                        sed = read_spec_file(starfile)
+                    else:
+                        sed = None
                 else:
-                    sed = None
+                    sed = read_spec_file(kwargs['planetfile'])
                 ww_sci = np.where(self.database.obs[key]['TYPE'] == 'SCI')[0]
                 if date is not None:
                     if date == 'auto':
@@ -1222,8 +1225,8 @@ class AnalysisTools():
                         
                         # Compute the FM dataset.
                         mode = self.database.red[key]['MODE'][j]
-                        annuli = 1
-                        subsections = 1
+                        annuli = int(self.database.red[key]['ANNULI'][j])
+                        subsections = int(self.database.red[key]['SUBSECTS'][j])
                         if not isinstance(highpass, bool):
                             if k == 0:
                                 highpass_temp = float(highpass)
@@ -1284,36 +1287,56 @@ class AnalysisTools():
                         fm_frame[:, :] = 0.
                         fm_frame[int(fm_centy) + int(guess_dy) - sy//2:int(fm_centy) + int(guess_dy) + sy//2 + 1, int(fm_centx) - int(guess_dx) - sx//2:int(fm_centx) - int(guess_dx) + sx//2 + 1] = stamp
                     
+                    # assign forward model kwargs
+                    if 'boxsize' not in kwargs.keys() or kwargs['boxsize'] is None:
+                        boxsize = 31
+                    else:
+                        boxsize = kwargs['boxsize']
+                    if 'dr' not in kwargs.keys() or kwargs['dr'] is None:
+                        dr = 3
+                    else:
+                        dr = kwargs['dr']
+                    if 'exclr' not in kwargs.keys() or kwargs['exclr'] is None:
+                        exclr = 3*resolution
+                    else:
+                        exclr = kwargs['exclr']*resolution
+                    if 'xrange' not in kwargs.keys() or kwargs['xrange'] is None:
+                        xrange = 2.
+                    else:
+                        xrange = kwargs['xrange']
+                    if 'yrange' not in kwargs.keys() or kwargs['yrange'] is None:
+                        yrange = 2.
+                    else:
+                        yrange = kwargs['yrange']
+                    if 'frange' not in kwargs.keys() or kwargs['frange'] is None:
+                        frange = [-1e-2, 1e2] # * guess_flux
+                    else:
+                        frange = kwargs['frange']
+                    if 'corr_len_range' not in kwargs.keys() or kwargs['corr_len_range'] is None:
+                        corr_len_range = 1.
+                    else:
+                        corr_len_range = kwargs['corr_len_range']
+                    if 'corr_len_guess' not in kwargs.keys() or kwargs['corr_len_guess'] is None:
+                        corr_len_guess = 2.
+                    else:
+                        corr_len_guess = kwargs['corr_len_guess']
+
                     # Fit the FM PSF to the KLIP-subtracted data.
                     if inject == False:
-                        fitboxsize = 30  # pix
-                        # fitboxsize = 21  # pix
-                        dr = 5  # pix
-                        exclusion_radius = 3 * resolution  # pix
-                        corr_len_guess = 3.  # pix
-                        xrange = 2.  # pix
-                        yrange = 2.  # pix
-                        # xrange = 0.001  # pix
-                        # yrange = 0.001  # pix
-                        frange = 10.  # mag
-                        corr_len_range = 1.  # mag
-                        
                         # MCMC.
                         if fitmethod == 'mcmc':
-                            # fm_frame *= -1
                             fma = fitpsf.FMAstrometry(guess_sep=guess_sep,
                                                       guess_pa=guess_pa,
-                                                      fitboxsize=fitboxsize)
+                                                      fitboxsize=boxsize)
                             fma.generate_fm_stamp(fm_image=fm_frame,
                                                   fm_center=[fm_centx, fm_centy],
                                                   padding=5)
                             fma.generate_data_stamp(data=data_frame,
                                                     data_center=[data_centx, data_centy],
                                                     dr=dr,
-                                                    exclusion_radius=exclusion_radius)
+                                                    exclusion_radius=exclr)
                             corr_len_label = r'$l$'
                             fma.set_kernel(fitkernel, [corr_len_guess], [corr_len_label])
-                            # fma.set_kernel('diag', [], [])
                             fma.set_bounds(xrange, yrange, frange, [corr_len_range])
                             
                             # Make sure that the noise map is invertible.
@@ -1322,15 +1345,30 @@ class AnalysisTools():
                             fma.noise_map[fma.noise_map == 0.] = noise_map_max
                             
                             # Run the MCMC fit.
-                            nwalkers = 50
-                            nburn = 100
-                            nsteps = 200
-                            numthreads = 4
+
+                            # set MCMC parameters from kwargs
+                            if 'nwalkers' not in kwargs.keys() or kwargs['nwalkers'] is None:
+                                nwalkers = 50
+                            else:
+                                nwalkers = kwargs['nwalkers']
+                            if 'nburn' not in kwargs.keys() or kwargs['nburn'] is None:
+                                nburn = 100
+                            else:
+                                nburn = kwargs['nburn']
+                            if 'nsteps' not in kwargs.keys() or kwargs['nsteps'] is None:
+                                nsteps = 200
+                            else:
+                                nsteps = kwargs['nsteps']
+                            if 'nthreads' not in kwargs.keys() or kwargs['nthreads'] is None:
+                                nthreads = 4
+                            else:
+                                nthreads = kwargs['nthreads']
+
                             chain_output = os.path.join(output_dir_kl, key + '-bka_chain_c%.0f' % (k + 1) + '.pkl')
                             fma.fit_astrometry(nwalkers=nwalkers,
                                                nburn=nburn,
                                                nsteps=nsteps,
-                                               numthreads=numthreads,
+                                               numthreads=nthreads,
                                                chain_output=chain_output)
                             
                             # Plot the MCMC fit results.
@@ -1399,18 +1437,17 @@ class AnalysisTools():
                             
                             # Initialize PlanetEvidence module.
                             try:
-                                fit = fitpsf.PlanetEvidence(guess_sep, guess_pa, fitboxsize, output_dir_ns)
+                                fit = fitpsf.PlanetEvidence(guess_sep, guess_pa, boxsize, output_dir_ns)
                             except ModuleNotFoundError:
                                 raise ModuleNotFoundError('Pymultinest is not installed, try\n\"conda install -c conda-forge pymultinest\"')
                             log.info('  --> Initialized PlanetEvidence module')
                             
                             # Generate FM and data stamps.
                             fit.generate_fm_stamp(fm_frame, [fm_centx, fm_centy], padding=5)
-                            fit.generate_data_stamp(data_frame, [data_centx, data_centy], dr=dr, exclusion_radius=exclusion_radius)
+                            fit.generate_data_stamp(data_frame, [data_centx, data_centy], dr=dr, exclusion_radius=exclr)
                             log.info('  --> Generated FM and data stamps')
                             
                             # Set fit kernel.
-                            corr_len_guess = 3.  # pix
                             corr_len_label = 'l'
                             fit.set_kernel(fitkernel, [corr_len_guess], [corr_len_label])
                             log.info('  --> Set fit kernel to ' + fitkernel)
