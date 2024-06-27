@@ -340,7 +340,7 @@ def run_obs(database,
                                           verbose=verbose, **kwargs)
 
                 # Update spaceKLIP database.
-                database.update_obs(key, j, fitsout_path)
+                database.update_obs(key, j, fitsout_path, update_pxar=True)
 
             # Also process rate files?
             if do_rates:

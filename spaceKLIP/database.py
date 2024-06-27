@@ -20,7 +20,6 @@ import pysiaf
 import webbpsf, webbpsf_ext
 
 from astropy.table import Table
-from astroquery.svo_fps import SvoFps
 from jwst.pipeline import Detector1Pipeline, Image2Pipeline, Coron3Pipeline
 
 from .utils import nircam_apname, get_nrcmask_from_apname, get_filter_info
@@ -1116,7 +1115,8 @@ class Database():
                    yoffset=None,
                    crpix1=None,
                    crpix2=None,
-                   blurfwhm=None):
+                   blurfwhm=None,
+                   update_pxar=False):
         """
         Update the content of the observations database.
         
@@ -1152,6 +1152,9 @@ class Database():
         blurfwhm : float, optional
             New FWHM for the Gaussian filter blurring (pix) for the observation
             to be updated. The default is None.
+        update_pxar : bool, optional
+            Update the pixel area column of the database based on the FITS file
+            header information? The default is False.
         
         Returns
         -------
@@ -1188,6 +1191,12 @@ class Database():
         self.obs[key]['FITSFILE'][index] = fitsfile
         if maskfile is not None:
             self.obs[key]['MASKFILE'][index] = maskfile
+        if update_pxar:
+            try:
+                pxar = pyfits.getheader(self.obs[key]['FITSFILE'][index], 'SCI')['PIXAR_SR']
+                self.obs[key]['PIXAR_SR'][index] = pxar
+            except:
+                pass
         hdul.close()
         
         pass
