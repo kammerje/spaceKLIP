@@ -37,9 +37,8 @@ With the Anaconda environment created, move to the cloned directory and install 
 ::
 
 	cd where/you/saved/the/git/repo
+	conda install conda-forge::git-lfs	
 	pip install -r requirements.txt
-        conda install conda-forge::git-lfs
-        pip install git+https://bitbucket.org/pyKLIP/pyklip.git@jwst
 	pip install -e .
 
 Note that installing git-lfs from pip does not work as of 25 June 2024. NEW AS OF 1 JUNE 2023: you also need to make the custom PSF mask files before running spaceKLIP for the first time:
