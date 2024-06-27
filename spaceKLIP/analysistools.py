@@ -176,6 +176,9 @@ class AnalysisTools():
                 pxsc_rad = pxsc_arcsec / 3600. / 180. * np.pi  # rad
                 # pxar = pxsc_rad**2  # sr
                 pxar = self.database.red[key]['PIXAR_SR'][j]  # sr
+                if np.isnan(pxar):
+                    log.warning("PIXAR_SR not found in database, falling back to use PIXSCALE")
+                    pxar = pxsc_rad**2  # sr
                 
                 # Convert the host star brightness from vegamag to MJy. Use an
                 # unocculted model PSF whose integrated flux is normalized to
@@ -950,6 +953,9 @@ class AnalysisTools():
                 pxsc_rad = pxsc_arcsec / 3600. / 180. * np.pi  # rad
                 # pxar = pxsc_rad**2  # sr
                 pxar = self.database.red[key]['PIXAR_SR'][j]  # sr
+                if np.isnan(pxar):
+                    log.warning("PIXAR_SR not found in database, falling back to use PIXSCALE")
+                    pxar = pxsc_rad**2  # sr
                 
                 # Compute the resolution element. Account for possible
                 # blurring.
