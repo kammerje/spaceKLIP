@@ -23,6 +23,7 @@ except ImportError:
 from scipy.ndimage import fourier_shift, gaussian_filter
 from scipy.ndimage import shift as spline_shift
 
+import pysiaf
 from webbpsf_ext.imreg_tools import get_coron_apname as nircam_apname
 from webbpsf_ext.image_manip import expand_mask
 
@@ -1084,3 +1085,38 @@ def get_dqmask(dqarr, bitvalues):
         dqmask = dqmask | (dqarr & bitval)
 
     return dqmask
+
+def pop_pxar_kw(filepaths):
+    """
+    
+    Populate the PIXAR_A2 SCI header keyword which is required by pyKLIP in
+    case it is not already available.
+
+    Parameters
+    ----------
+    filepaths : list or array
+        File paths of the FITS files whose headers shall be checked.
+    """
+    
+    for filepath in filepaths:
+        try:
+            pxar = pyfits.getheader(filepath, 'SCI')['PIXAR_A2']
+        except:
+            hdul = pyfits.open(filepath)
+            siaf_nrc = pysiaf.Siaf('NIRCam')
+            siaf_nis = pysiaf.Siaf('NIRISS')
+            siaf_mir = pysiaf.Siaf('MIRI')
+            if hdul[0].header['INSTRUME'] == 'NIRCAM':
+                ap = siaf_nrc[hdul[0].header['APERNAME']]
+            elif hdul[0].header['INSTRUME'] == 'NIRISS':
+                ap = siaf_nis[hdul[0].header['APERNAME']]
+            elif hdul[0].header['INSTRUME'] == 'MIRI':
+                ap = siaf_mir[hdul[0].header['APERNAME']]
+            else:
+                raise UserWarning('Data originates from unknown JWST instrument')
+            pix_scale = (ap.XSciScale + ap.YSciScale) / 2.
+            hdul['SCI'].header['PIXAR_A2'] = pix_scale**2
+            hdul.writeto(filepath, output_verify='fix', overwrite=True)
+            hdul.close()
+    
+    pass

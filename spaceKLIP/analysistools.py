@@ -37,7 +37,7 @@ from spaceKLIP import utils as ut
 from spaceKLIP.psf import get_offsetpsf, JWST_PSF
 from spaceKLIP.starphot import get_stellar_magnitudes, read_spec_file
 from spaceKLIP.pyklippipeline import get_pyklip_filepaths
-from spaceKLIP.utils import write_starfile, set_surrounded_pixels
+from spaceKLIP.utils import write_starfile, set_surrounded_pixels, pop_pxar_kw
 
 from webbpsf.constants import JWST_CIRCUMSCRIBED_DIAMETER
 
@@ -538,6 +538,7 @@ class AnalysisTools():
 
                 # Read Stage 2 files and make pyKLIP dataset
                 filepaths, psflib_filepaths = get_pyklip_filepaths(self.database, key)
+                pop_pxar_kw(np.append(filepaths, psflib_filepaths))
                 pyklip_dataset = JWSTData(filepaths, psflib_filepaths)
 
                 # Compute the resolution element. Account for possible blurring.
@@ -976,6 +977,7 @@ class AnalysisTools():
                     kwargs_temp['maxnumbasis'] = maxnumbasis
                 
                 # Initialize pyKLIP dataset.
+                pop_pxar_kw(np.append(filepaths, psflib_filepaths))
                 dataset = JWSTData(filepaths, psflib_filepaths, highpass=highpass)
                 kwargs_temp['dataset'] = dataset
                 kwargs_temp['aligned_center'] = dataset._centers[0]

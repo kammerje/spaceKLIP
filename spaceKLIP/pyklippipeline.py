@@ -22,6 +22,7 @@ from pyklip import parallelized, rdi
 from pyklip.instruments.JWST import JWSTData
 from pyklip.klip import _rotate_wcs_hdr
 from spaceKLIP.psf import get_transmission
+from spaceKLIP.utils import pop_pxar_kw
 
 import logging
 log = logging.getLogger(__name__)
@@ -137,6 +138,7 @@ def run_obs(database,
                     fileprefix = mode + '_NANNU' + str(annu) + '_NSUBS' + str(subs) + '_' + key
                     
                     # Initialize pyKLIP dataset.
+                    pop_pxar_kw(np.append(filepaths, psflib_filepaths))
                     dataset = JWSTData(filepaths, psflib_filepaths, highpass=kwargs_temp['highpass'])
                     kwargs_temp['dataset'] = dataset
                     kwargs_temp['aligned_center'] = dataset._centers[0]
