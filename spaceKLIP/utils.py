@@ -654,8 +654,8 @@ def _get_tp_comsubst(instrume,
             # Compute COM substrate transmission averaged over the respective
             # filter profile.
             bandpass_throughput = np.interp(comsubst_wave, bandpass_wave, bandpass_throughput)
-            int_tp_bandpass = simps(bandpass_throughput, comsubst_wave)
-            int_tp_bandpass_comsubst = simps(bandpass_throughput * comsubst_throughput, comsubst_wave)
+            int_tp_bandpass = simpson(bandpass_throughput, comsubst_wave)
+            int_tp_bandpass_comsubst = simpson(bandpass_throughput * comsubst_throughput, comsubst_wave)
             tp_comsubst = int_tp_bandpass_comsubst / int_tp_bandpass
     
     # Return.
