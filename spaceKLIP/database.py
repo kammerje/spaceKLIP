@@ -21,6 +21,7 @@ import webbpsf, webbpsf_ext
 
 from astropy.table import Table
 from jwst.pipeline import Detector1Pipeline, Image2Pipeline, Coron3Pipeline
+from stdatamodels.jwst import datamodels
 
 from .utils import nircam_apname, get_nrcmask_from_apname, get_filter_info
 
@@ -485,10 +486,13 @@ class Database():
                 maskfile = allpaths[ww][j].replace('.fits', '_psfmask.fits')
                 if not os.path.exists(maskfile):    
                     if EXP_TYPE[ww][j] == 'NRC_CORON':
-                        maskpath = APERNAME[ww][j] + '_' + FILTER[ww][j] + '.fits'
-                        maskfile = os.path.join(maskbase, maskpath)
-                        if not os.path.exists(maskfile):
-                            maskfile = 'NONE'
+                        # maskpath = APERNAME[ww][j] + '_' + FILTER[ww][j] + '.fits'
+                        # maskfile = os.path.join(maskbase, maskpath)
+                        # if not os.path.exists(maskfile):
+                        #     maskfile = 'NONE'
+                        pipeline = Detector1Pipeline()
+                        input = datamodels.open(allpaths[ww][j])
+                        maskfile = pipeline.superbias.get_reference_file(input, 'psfmask')
                     elif EXP_TYPE[ww][j] == 'MIR_4QPM' or EXP_TYPE[ww][j] == 'MIR_LYOT':
                         if APERNAME[ww][j] == 'MIRIM_MASK1065':
                             maskpath = 'JWST_MIRI_F1065C_transmission_webbpsf-ext_v2.fits'
