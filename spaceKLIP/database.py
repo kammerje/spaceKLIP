@@ -109,6 +109,7 @@ class Database():
                             datapaths,
                             psflibpaths=None,
                             bgpaths=None,
+                            cr_from_siaf=False,
                             assoc_using_targname=True):
         """
         Read JWST stage 0 (*uncal), 1 (*rate or *rateints), or 2 (*cal or
@@ -274,8 +275,12 @@ class Database():
             BLURFWHM += [head.get('BLURFWHM', np.nan)]
             head = hdul['SCI'].header
             BUNIT += [head.get('BUNIT', 'NONE')]
-            CRPIX1 += [head.get('CRPIX1', np.nan)]
-            CRPIX2 += [head.get('CRPIX2', np.nan)]
+            if cr_from_siaf:
+                CRPIX1 += [ap.XSciRef]
+                CRPIX2 += [ap.YSciRef]
+            else:
+                CRPIX1 += [head.get('CRPIX1', np.nan)]
+                CRPIX2 += [head.get('CRPIX2', np.nan)]
             VPARITY += [head.get('VPARITY', -1)]
             V3I_YANG += [head.get('V3I_YANG', 0.)]
             RA_REF += [head.get('RA_REF', np.nan)]
@@ -355,11 +360,11 @@ class Database():
                 ww_ref = []
                 for j in range(len(allpaths[ww])):
                     if allpaths[ww][j] in psflibpaths:
-                        ww_ref += [j]
+                        ww_ref.append(j)
                     else:
-                        ww_sci += [j]
-                ww_sci = np.array(ww_sci)
-                ww_ref = np.array(ww_ref)
+                        ww_sci.append(j)
+                ww_sci = np.array(ww_sci, dtype='int')
+                ww_ref = np.array(ww_ref, dtype='int')
             else:
                 is_psf = IS_PSF[ww]
                 exp_type = EXP_TYPE[ww]
@@ -571,7 +576,8 @@ class Database():
         pass
     
     def read_jwst_s3_data(self,
-                          datapaths):
+                          datapaths,
+                          cr_from_siaf=False):
         """
         Read JWST stage 3 data (this can be *i2d data from the official JWST
         pipeline, or data products from the pyKLIP and classical PSF
@@ -718,8 +724,12 @@ class Database():
             if TYPE[-1] == 'CORON3':
                 head = hdul['SCI'].header
             BUNIT += [head.get('BUNIT', 'NONE')]
-            CRPIX1 += [head.get('CRPIX1', np.nan)]
-            CRPIX2 += [head.get('CRPIX2', np.nan)]
+            if cr_from_siaf:
+                CRPIX1 += [ap.XSciRef]
+                CRPIX2 += [ap.YSciRef]
+            else:
+                CRPIX1 += [head.get('CRPIX1', np.nan)]
+                CRPIX2 += [head.get('CRPIX2', np.nan)]
             HASH += [TELESCOP[-1] + '_' + INSTRUME[-1] + '_' + DETECTOR[-1] + '_' + FILTER[-1] + '_' + PUPIL[-1] + '_' + CORONMSK[-1] + '_' + SUBARRAY[-1]]
             hdul.close()
         TYPE = np.array(TYPE)
@@ -1277,6 +1287,7 @@ def create_database(output_dir,
                     assoc_using_targname=True,
                     verbose=True,
                     readlevel='012',
+                    cr_from_siaf=False,
                     **kwargs):
 
     """ Create a spaceKLIP database from JWST data
@@ -1360,11 +1371,13 @@ def create_database(output_dir,
         db.read_jwst_s012_data(datapaths=datapaths,
                                psflibpaths=psflibpaths,
                                bgpaths=bgpaths,
+                               cr_from_siaf=cr_from_siaf,
                                assoc_using_targname=assoc_using_targname)
     elif str(readlevel) == '3':
         # the above get_files usage won't match KLIP outputsa, so find them here
         datapaths_klip = sorted(glob.glob(os.path.join(input_dir, "*KLmodes-all.fits")))
         db.read_jwst_s3_data(datapaths=datapaths+datapaths_klip,
+                             cr_from_siaf=cr_from_siaf,
                             )
     elif str(readlevel) == '4':
         db.read_jwst_s4_data(datapaths=datapaths,

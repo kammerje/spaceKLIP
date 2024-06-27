@@ -315,6 +315,10 @@ def display_coron_image(filename):
     annotate_compass(ax, image, wcs, yf=0.07)
     annotate_scale_bar(ax, image, wcs, yf=0.07)
     
+    # Clear the existing tick marks on the secondary axes before adding new ones
+    ax.xaxis.set_tick_params(which='both', bottom=True, top=False)
+    ax.yaxis.set_tick_params(which='both', left=True, right=False)
+    
     # Annotate secondary axes in arcsec relative to coron mask center (really, relative to V2/V3Ref)
     annotate_secondary_axes_arcsec(ax, image, wcs)
     

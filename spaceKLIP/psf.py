@@ -13,8 +13,8 @@ import sys
 import astropy.io.fits as pyfits
 import numpy as np
 
-import pysynphot as S
 import webbpsf, webbpsf_ext
+from webbpsf_ext import synphot_ext as S
 
 from pyklip.klip import rotate as nanrotate
 from scipy.ndimage import rotate
@@ -63,7 +63,7 @@ class JWST_PSF():
     intensity of these PSFs include throughput attenuation at intermediate optics 
     such as the NIRCam Lyot stops and occulting masks. During PSF generation, set
     `normalize='exit_pupil'` for PSFs that have are normalized to 1.0 when summed
-    out to infinity.  
+    out to infinity. Only works for `quick=False`.
     """
     
     def __init__(self, apername, filt, date=None, fov_pix=65, oversample=2, 
@@ -83,7 +83,7 @@ class JWST_PSF():
             rather than pixel corner / boundaries.
         oversample : int
             Size of oversampling.
-        sp : pysynphot spectrum
+        sp : :class:`webbpsf_ext.synphot_ext.Spectrum`
             Spectrum to use for PSF wavelength weighting. If None, then default is G2V.
         use_coeff : bool
             Generate PSFs from webbpsf_ext coefficient library. If set to False, then
@@ -200,14 +200,8 @@ class JWST_PSF():
         
         # Renormalize spectrum to have 1 e-/sec within bandpass to obtain normalized PSFs
         if sp is not None:
-            try:
-                sp = sp.renorm(1, 'counts', inst_on.bandpass)
-            except:
-                # Our spectrum was probably made in synphot not pysynphot, 
-                wunit = sp.waveset.unit.to_string()
-                funit = sp(sp.waveset).unit.to_string()
-                sp = S.ArraySpectrum(sp.waveset.value, sp(sp.waveset).value, wunit, funit, name=sp.meta['name'])
-                sp = sp.renorm(1, 'counts', inst_on.bandpass)
+            sp = _sp_to_spext(sp, **kwargs)
+            sp = sp.renorm(1, 'counts', inst_on.bandpass)
         
         # On axis PSF
         log.info('Generating on-axis and off-axis PSFs...')
@@ -425,7 +419,7 @@ class JWST_PSF():
             10s of msec, compared to standard calculations using coefficients 
             (~1 sec) or on-the-fly calcs w/ webbpsf (10s of sec).
             Only applicable for NIRCam.
-        sp : pysynphot spectrum
+        sp : :class:`webbpsf_ext.synphot_ext.Spectrum`
             Manually specify spectrum to get a desired wavelength weighting. 
             Only applicable if ``quick=False``. If not set, defaults to ``self.sp``.
         return_oversample : bool
@@ -437,6 +431,7 @@ class JWST_PSF():
             How to normalize the PSF. Options are:
                 * 'first': Normalize to 1.0 at entrance pupil
                 * 'exit_pupil': Normalize to 1.0 at exit pupil
+            Only works for `quick=False`.
         
         Returns
         -------
@@ -453,6 +448,7 @@ class JWST_PSF():
         
         # Renormalize spectrum to have 1 e-/sec within bandpass to obtain normalized PSFs
         if sp is not None:
+            sp = _sp_to_spext(sp)
             sp = sp.renorm(1, 'counts', self.bandpass)
         
         if self.name.upper()=='NIRCAM' and quick:
@@ -547,6 +543,7 @@ class JWST_PSF():
             How to normalize the PSF. Options are:
                 * 'first': Normalize to 1.0 at entrance pupil
                 * 'exit_pupil': Normalize to 1.0 at exit pupil
+            Only works for `quick=False`.
                         
         Keyword Args
         ------------
@@ -556,7 +553,7 @@ class JWST_PSF():
             10s of msec, compared to standard calculations using coefficients 
             (~1 sec) or on-the-fly calcs w/ webbpsf (10s of sec).
             Only applicable for NIRCam.
-        sp : pysynphot spectrum
+        sp : :class:`webbpsf_ext.synphot_ext.Spectrum`
             Manually specify spectrum to get a desired wavelength weighting. 
             Only applicable if ``quick=False``. If not set, defaults to ``self.sp``.
         
@@ -597,6 +594,25 @@ class JWST_PSF():
         psf = psf.squeeze()
         
         return psf
+
+
+def _sp_to_spext(sp, **kwargs):
+    """Check if input spectrum is a synphot spectrum and convert to webbpsf_ext spectrum"""
+
+    try:
+        wave = sp.waveset
+        flux = sp.flux
+    except AttributeError:
+        # Assume it's a synphot spectrum
+        wave = sp.waveset
+        flux = sp(sp.waveset)
+        wunit = wave.unit.to_string()
+        funit = flux.unit.to_string()
+        sp = S.ArraySpectrum(wave.value, flux.value, waveunits=wunit, fluxunits=funit, 
+                             name=sp.meta['name'], **kwargs)
+
+    return sp
+
 
 def recenter_jens(image):
     """
