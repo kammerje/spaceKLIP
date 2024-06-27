@@ -1270,7 +1270,8 @@ class ImageTools():
                                  pxdq,
                                  key,
                                  gradient_kwargs={}):
-
+        print('')
+        log.info('  --> Warning!: This routine has not been thoroughly tested and requires further development')
         # Check input.
         if 'sigma' not in gradient_kwargs.keys():
             gradient_kwargs['sigma'] = 0.5
@@ -1337,9 +1338,6 @@ class ImageTools():
                 bad_pixels=bad_pixels | bad_pixels_n
 
             image[bad_pixels] = np.nan
-
-            # plt.imshow(image_to_gradient)
-            # plt.show()
 
             # Flag DQ array
             ww[i] = ww[i] | bad_pixels
