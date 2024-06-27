@@ -16,7 +16,10 @@ import numpy as np
 import importlib
 import scipy.ndimage.interpolation as sinterp
 
-from scipy.integrate import simps
+try:
+    from scipy.integrate import simps
+except ImportError:
+    from scipy.integrate import simpson as simps
 from scipy.ndimage import fourier_shift, gaussian_filter
 from scipy.ndimage import shift as spline_shift
 
