@@ -1620,6 +1620,7 @@ class ImageTools():
     def recenter_frames(self,
                         method='fourier',
                         subpix_first_sci_only=False,
+                        first_sci_only=True,
                         spectral_type='G2V',
                         shft_exp=1,
                         kwargs={},
@@ -1645,6 +1646,10 @@ class ImageTools():
             data to avoid another interpolation step if the 'align_frames'
             routine is run subsequently. Only applicable to non-coronagraphic
             data. The default is False.
+        first_sci_only : bool, optional
+            Recenter all files and not just the first SCI file in each concate-
+            nation. Only applicable to NIRCam coronagraphy. The default is
+            True.
         spectral_type : str, optional
             Host star spectral type for the WebbPSF model used to determine the
             star position behind the coronagraphic mask. The default is 'G2V'.
@@ -1713,7 +1718,7 @@ class ImageTools():
                             # For the first SCI frame, get the star position
                             # and the shift between the star and coronagraphic
                             # mask position.
-                            if j == ww_sci[0] and k == 0:
+                            if (not first_sci_only or j == ww_sci[0]) and k == 0:
                                 xc, yc, xshift, yshift = self.find_nircam_centers(data0=data[k].copy(),
                                                                                   key=key,
                                                                                   j=j,
@@ -2006,7 +2011,10 @@ class ImageTools():
             ax[2].legend(loc='upper right', fontsize=12)
             ax[2].set_title('Scene overview (1-indexed)')
             plt.tight_layout()
-            output_file = os.path.join(output_dir, key + '_recenter.pdf')
+            # output_file = os.path.join(output_dir, key + '_recenter.pdf')
+            output_file = os.path.split(self.database.obs[key]['FITSFILE'][j])[1]
+            output_file = output_file.replace('.fits', '.pdf')
+            output_file = os.path.join(output_dir, output_file)
             plt.savefig(output_file)
             log.info(f" Plot saved in {output_file}")
             # plt.show()
@@ -2022,6 +2030,8 @@ class ImageTools():
                      mask_override=None,
                      msk_shp=8,
                      shft_exp=1,
+                     align_to_file=None,
+                     scale_prior=False,
                      kwargs={},
                      subdir='aligned'):
         """
@@ -2040,6 +2050,14 @@ class ImageTools():
             Shape (height or radius) for custom mask invoked by "mask_override"
         shft_exp : float, optional
             Take image to the given power before cross correlating for shifts, default is 1. For instance, 1/2 helps align nircam bar/narrow data (or other data with weird speckles)
+        align_to_file : str, optional
+            Path to FITS file to which all images shall be aligned. Needs to be
+            a file with the same observational setup as all concatenations in
+            the spaceKLIP database. Hence, this can only be applied to one
+            observational setup at a time. The default is None.
+        scale_prior : bool, optional
+            If True, tries to find a better prior for the scale factor instead
+            of simply using 1. The default is False.
         kwargs : dict, optional
             Keyword arguments for the scipy.ndimage.shift routine. The default
             is {}.
@@ -2096,6 +2114,13 @@ class ImageTools():
             ww_all = np.append(ww_sci, ww_ref)
             
             # Loop through FITS files.
+            if align_to_file is not None:
+                try:
+                    ref_image = pyfits.getdata(align_to_file, 'SCI')
+                except:
+                    ref_image = pyfits.getdata(align_to_file, 0)
+                if ref_image.ndim == 3:
+                    ref_image = ref_image[0]
             shifts_all = []
             for j in ww_all:
                 
@@ -2117,7 +2142,7 @@ class ImageTools():
                 elif mask is None:
                     mask_temp = np.ones_like(data[0])
                 else:
-                    mask_temp = mask
+                    mask_temp = mask.copy()
                 
                 # Align frames.
                 head, tail = os.path.split(fitsfile)
@@ -2129,7 +2154,8 @@ class ImageTools():
                     
                     # Take the first science frame as reference frame.
                     if j == ww_sci[0] and k == 0:
-                        ref_image = data[k].copy()
+                        if align_to_file is None:
+                            ref_image = data[k].copy()
                         pp = np.array([0., 0., 1.])
                         xoffset = self.database.obs[key]['XOFFSET'][j] #arcsec
                         yoffset = self.database.obs[key]['YOFFSET'][j] #arcsec
@@ -2139,7 +2165,7 @@ class ImageTools():
                     
                     # Align all other SCI and REF frames to the first science
                     # frame.
-                    else:
+                    if align_to_file is not None or j != ww_sci[0] or k != 0:
                         # Calculate shifts relative to first frame, work in pixels
                         xfirst = crpix1 + (xoffset/pxsc)
                         xoff_curr_pix = self.database.obs[key]['XOFFSET'][j]/self.database.obs[key]['PIXSCALE'][j]
@@ -2151,12 +2177,27 @@ class ImageTools():
                         ycurrent = self.database.obs[key]['CRPIX2'][j] + yoff_curr_pix
                         yshift = yfirst - ycurrent
 
-                        p0 = np.array([xshift, yshift, 1.])
+                        if scale_prior:
+                            ww = mask < 0.5
+                            sh = mask.shape
+                            bw = 100
+                            ww[:bw, :] = 0.
+                            ww[:, :bw] = 0.
+                            ww[sh[0] - bw:, :] = 0.
+                            ww[:, sh[1] - bw:] = 0.
+                            # plt.imshow(ww, origin='lower')
+                            # plt.show()
+                            scale = np.nanmedian(np.true_divide(ref_image, data[k])[ww])
+                            if shft_exp != 1:
+                                scale = np.power(np.abs(scale), shft_exp)
+                            p0 = np.array([xshift, yshift, scale])
+                        else:
+                            p0 = np.array([xshift, yshift, 1.])
                         # p0 = np.array([((crpix1 + xoffset) - (self.database.obs[key]['CRPIX1'][j] + self.database.obs[key]['XOFFSET'][j])) / self.database.obs[key]['PIXSCALE'][j], ((crpix2 + yoffset) - (self.database.obs[key]['CRPIX2'][j] + self.database.obs[key]['YOFFSET'][j])) / self.database.obs[key]['PIXSCALE'][j], 1.])
                         # Fix for weird numerical behaviour if shifts are small
                         # but not exactly zero.
                         if (np.abs(xshift) < 1e-3) and (np.abs(yshift) < 1e-3):
-                            p0 = np.array([0., 0., 1.])
+                            p0 = np.array([0., 0., p0[-1]])
                         if align_algo == 'leastsq':
                             if shft_exp != 1:
                                 args = (np.power(np.abs(data[k]), shft_exp), np.power(np.abs(ref_image), shft_exp), mask_temp, method, kwargs)
@@ -2173,12 +2214,12 @@ class ImageTools():
                     # Append shifts to array and apply shift to image
                     # using defined method. 
                     shifts += [np.array([pp[0], pp[1], pp[2]])]
-                    if j != ww_sci[0] or k != 0:
+                    if align_to_file is not None or j != ww_sci[0] or k != 0:
                         data[k] = ut.imshift(data[k], [shifts[k][0], shifts[k][1]], method=method, kwargs=kwargs)
                         erro[k] = ut.imshift(erro[k], [shifts[k][0], shifts[k][1]], method=method, kwargs=kwargs)
                 shifts = np.array(shifts)
                 if mask is not None:
-                    if j != ww_sci[0]:
+                    if align_to_file is not None or j != ww_sci[0]:
                         temp = np.median(shifts, axis=0)
                         # mask = ut.imshift(mask, [temp[0], temp[1]], method=method, kwargs=kwargs)
                         mask = spline_shift(mask, [temp[1], temp[0]], order=0, mode='constant', cval=np.nanmedian(mask))
