@@ -16,10 +16,7 @@ import numpy as np
 import importlib
 import scipy.ndimage.interpolation as sinterp
 
-try:
-    from scipy.integrate import simps
-except ImportError:
-    from scipy.integrate import simpson as simps
+from scipy.integrate import simpson
 from scipy.ndimage import fourier_shift, gaussian_filter
 from scipy.ndimage import shift as spline_shift
 
@@ -664,8 +661,8 @@ def _get_tp_comsubst(instrume,
             # Compute COM substrate transmission averaged over the respective
             # filter profile.
             bandpass_throughput = np.interp(comsubst_wave, bandpass_wave, bandpass_throughput)
-            int_tp_bandpass = simps(bandpass_throughput, comsubst_wave)
-            int_tp_bandpass_comsubst = simps(bandpass_throughput * comsubst_throughput, comsubst_wave)
+            int_tp_bandpass = simpson(bandpass_throughput, comsubst_wave)
+            int_tp_bandpass_comsubst = simpson(bandpass_throughput * comsubst_throughput, comsubst_wave)
             tp_comsubst = int_tp_bandpass_comsubst / int_tp_bandpass
     
     # Return.

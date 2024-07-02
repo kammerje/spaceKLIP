@@ -224,7 +224,11 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
             '\nException: {}'.format(e)
         )
     finally:
-        pipeline.closeout()
+        try: 
+            pipeline.closeout()
+        except AttributeError:
+            # Method deprecated as of stpipe version 0.6.0
+            pass
 
     if isinstance(res, list):
         res = res[0]
