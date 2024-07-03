@@ -174,7 +174,6 @@ class AnalysisTools():
                 # Compute the pixel area in steradian.
                 pxsc_arcsec = self.database.red[key]['PIXSCALE'][j] # arcsec
                 pxsc_rad = pxsc_arcsec / 3600. / 180. * np.pi  # rad
-                # pxar = pxsc_rad**2  # sr
                 pxar = self.database.red[key]['PIXAR_SR'][j]  # sr
                 if np.isnan(pxar):
                     log.warning("PIXAR_SR not found in database, falling back to use PIXSCALE")
@@ -952,7 +951,6 @@ class AnalysisTools():
                 # Compute the pixel area in steradian.
                 pxsc_arcsec = self.database.red[key]['PIXSCALE'][j] # arcsec
                 pxsc_rad = pxsc_arcsec / 3600. / 180. * np.pi  # rad
-                # pxar = pxsc_rad**2  # sr
                 pxar = self.database.red[key]['PIXAR_SR'][j]  # sr
                 if np.isnan(pxar):
                     log.warning("PIXAR_SR not found in database, falling back to use PIXSCALE")
@@ -1298,10 +1296,7 @@ class AnalysisTools():
                         av_offsetpsf = np.average(rot_offsetpsfs, weights=sci_totinttime, axis=0)
                         sx = av_offsetpsf.shape[1]
                         sy = av_offsetpsf.shape[0]
-                        # for z in range(len(all_offsetpsfs)):
-                        #     all_offsetpsfs[z] = av_offsetpsf.copy()
-                        #     all_offsetpsfs_nohpf[z] = av_offsetpsf.copy()
-                        
+
                         # Make sure that the model offset PSF has odd shape and
                         # perform the required subpixel shift before inserting
                         # it into the fm_frame.
@@ -1355,7 +1350,7 @@ class AnalysisTools():
 
                     # Fit the FM PSF to the KLIP-subtracted data.
                     if inject == False:
-                        
+
                         # Remove a constant background level from the
                         # KLIP-subtracted data before fitting the FM PSF?
                         if remove_background:
@@ -1373,7 +1368,6 @@ class AnalysisTools():
                                                     exclusion_radius=exclr)
                             corr_len_label = r'$l$'
                             fma.set_kernel(fitkernel, [corr_len_guess], [corr_len_label])
-                            # fma.set_kernel('diag', [], [])
                             fma.set_bounds(xrange, yrange, frange, [corr_len_range])
                             
                             # Make sure that the noise map is invertible.
