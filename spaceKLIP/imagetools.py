@@ -2013,7 +2013,6 @@ class ImageTools():
             ax[2].legend(loc='upper right', fontsize=12)
             ax[2].set_title('Scene overview (1-indexed)')
             plt.tight_layout()
-            # output_file = os.path.join(output_dir, key + '_recenter.pdf')
             output_file = os.path.split(self.database.obs[key]['FITSFILE'][j])[1]
             output_file = output_file.replace('.fits', '.pdf')
             output_file = os.path.join(output_dir, output_file)
@@ -2195,7 +2194,7 @@ class ImageTools():
                             p0 = np.array([xshift, yshift, scale])
                         else:
                             p0 = np.array([xshift, yshift, 1.])
-                        # p0 = np.array([((crpix1 + xoffset) - (self.database.obs[key]['CRPIX1'][j] + self.database.obs[key]['XOFFSET'][j])) / self.database.obs[key]['PIXSCALE'][j], ((crpix2 + yoffset) - (self.database.obs[key]['CRPIX2'][j] + self.database.obs[key]['YOFFSET'][j])) / self.database.obs[key]['PIXSCALE'][j], 1.])
+
                         # Fix for weird numerical behaviour if shifts are small
                         # but not exactly zero.
                         if (np.abs(xshift) < 1e-3) and (np.abs(yshift) < 1e-3):
@@ -2223,7 +2222,6 @@ class ImageTools():
                 if mask is not None:
                     if align_to_file is not None or j != ww_sci[0]:
                         temp = np.median(shifts, axis=0)
-                        # mask = ut.imshift(mask, [temp[0], temp[1]], method=method, kwargs=kwargs)
                         mask = spline_shift(mask, [temp[1], temp[0]], order=0, mode='constant', cval=np.nanmedian(mask))
                 shifts_all += [shifts]
                 if imshifts is not None:
