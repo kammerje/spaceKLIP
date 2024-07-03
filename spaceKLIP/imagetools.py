@@ -1419,11 +1419,6 @@ class ImageTools():
                         raise UserWarning('Data originates from unknown telescope')
                     if fact_temp is not None:
                         if str(fact_temp) == 'auto':
-                            # wave_min = self.database.obs[key]['CWAVEL'][j] - self.database.obs[key]['DWAVEL'][j]
-                            # nyquist = wave_min * 1e-6 / diam * 180. / np.pi * 3600. / 2.3  # see, e.g., Pawley 2006
-                            # fact_temp = self.database.obs[key]['PIXSCALE'][j] / nyquist
-                            # fact_temp /= np.sqrt(8. * np.log(2.))  # fix from Marshall
-                            # fact_temp *= 2.
                             wave_min = self.database.obs[key]['CWAVEL'][j] - self.database.obs[key]['DWAVEL'][j]  # micron
                             fwhm_current = wave_min * 1e-6 / diam * 180. / np.pi * 3600. / self.database.obs[key]['PIXSCALE'][j]  # pix
                             fwhm_desired = 2.3  # pix; see, e.g., Pawley 2006

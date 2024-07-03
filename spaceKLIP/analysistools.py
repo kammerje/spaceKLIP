@@ -852,7 +852,7 @@ class AnalysisTools():
                            fitkernel='diag',
                            subtract=True,
                            inject=False,
-                           remove_background=True,
+                           remove_background=False,
                            save_preklip=False,
                            overwrite=True,
                            subdir='companions',
@@ -907,7 +907,7 @@ class AnalysisTools():
             contrast, inject one into the data.
         remove_background : bool, optional
             Remove a constant background level from the KLIP-subtracted data
-            before fitting the FM PSF. The default is True.
+            before fitting the FM PSF. The default is False.
         save_preklip : bool, optional
             Save the stage 2 files when injecting/killing a companion? The
             default is False.
@@ -1198,14 +1198,6 @@ class AnalysisTools():
                         # transmission.
                         # offsetpsf *= tp_comsubst
                         
-                        # peak = np.nanmax(offsetpsf)
-                        # ramp = np.arange(65)
-                        # xx, yy = np.meshgrid(ramp, ramp)
-                        # sx = 3
-                        # sy = 3
-                        # offsetpsf = 1. / (2. * np.pi * sx * sy) * np.exp(-((xx - 32)**2. / (2. * sx**2.) + (yy - 32)**2. / (2. * sy**2.)))
-                        # offsetpsf *= peak / np.nanmax(offsetpsf)
-                        
                         # Blur frames with a Gaussian filter.
                         if not np.isnan(self.database.obs[key]['BLURFWHM'][ww]):
                             gauss_sigma = self.database.obs[key]['BLURFWHM'][j] / np.sqrt(8. * np.log(2.))
@@ -1304,13 +1296,6 @@ class AnalysisTools():
                     # PSF.
                     if use_fm_psf == False:
                         av_offsetpsf = np.average(rot_offsetpsfs, weights=sci_totinttime, axis=0)
-                        # peak = np.nanmax(av_offsetpsf)
-                        # ramp = np.arange(65)
-                        # xx, yy = np.meshgrid(ramp, ramp)
-                        # sx = 3
-                        # sy = 3
-                        # av_offsetpsf = 1. / (2. * np.pi * sx * sy) * np.exp(-((xx - 32)**2. / (2. * sx**2.) + (yy - 32)**2. / (2. * sy**2.)))
-                        # av_offsetpsf *= peak / np.nanmax(av_offsetpsf)
                         sx = av_offsetpsf.shape[1]
                         sy = av_offsetpsf.shape[0]
                         # for z in range(len(all_offsetpsfs)):
@@ -1336,11 +1321,11 @@ class AnalysisTools():
                     
                     # assign forward model kwargs
                     if 'boxsize' not in kwargs.keys() or kwargs['boxsize'] is None:
-                        boxsize = 31
+                        boxsize = 35
                     else:
                         boxsize = kwargs['boxsize']
                     if 'dr' not in kwargs.keys() or kwargs['dr'] is None:
-                        dr = 3
+                        dr = 5
                     else:
                         dr = kwargs['dr']
                     if 'exclr' not in kwargs.keys() or kwargs['exclr'] is None:
@@ -1348,15 +1333,15 @@ class AnalysisTools():
                     else:
                         exclr = kwargs['exclr']*resolution
                     if 'xrange' not in kwargs.keys() or kwargs['xrange'] is None:
-                        xrange = 2.
+                        xrange = 3.
                     else:
                         xrange = kwargs['xrange']
                     if 'yrange' not in kwargs.keys() or kwargs['yrange'] is None:
-                        yrange = 2.
+                        yrange = 3.
                     else:
                         yrange = kwargs['yrange']
                     if 'frange' not in kwargs.keys() or kwargs['frange'] is None:
-                        frange = [-1e-2, 1e2] # * guess_flux
+                        frange = 10.  # mag
                     else:
                         frange = kwargs['frange']
                     if 'corr_len_range' not in kwargs.keys() or kwargs['corr_len_range'] is None:
@@ -1364,23 +1349,12 @@ class AnalysisTools():
                     else:
                         corr_len_range = kwargs['corr_len_range']
                     if 'corr_len_guess' not in kwargs.keys() or kwargs['corr_len_guess'] is None:
-                        corr_len_guess = 2.
+                        corr_len_guess = 3.
                     else:
                         corr_len_guess = kwargs['corr_len_guess']
 
                     # Fit the FM PSF to the KLIP-subtracted data.
                     if inject == False:
-                        fitboxsize = 35  # pix
-                        # fitboxsize = 21  # pix
-                        dr = 5  # pix
-                        exclusion_radius = 3 * resolution  # pix
-                        corr_len_guess = 3.  # pix
-                        xrange = 3.  # pix
-                        yrange = 3.  # pix
-                        # xrange = 0.001  # pix
-                        # yrange = 0.001  # pix
-                        frange = 10.  # mag
-                        corr_len_range = 1.  # mag
                         
                         # Remove a constant background level from the
                         # KLIP-subtracted data before fitting the FM PSF?
@@ -1389,14 +1363,14 @@ class AnalysisTools():
                             # Initialize pyKLIP FMAstrometry class.
                             fma = fitpsf.FMAstrometry(guess_sep=guess_sep,
                                                       guess_pa=guess_pa,
-                                                      fitboxsize=fitboxsize)
+                                                      fitboxsize=boxsize)
                             fma.generate_fm_stamp(fm_image=fm_frame,
                                                   fm_center=[fm_centx, fm_centy],
                                                   padding=5)
                             fma.generate_data_stamp(data=data_frame,
                                                     data_center=[data_centx, data_centy],
                                                     dr=dr,
-                                                    exclusion_radius=exclusion_radius)
+                                                    exclusion_radius=exclr)
                             corr_len_label = r'$l$'
                             fma.set_kernel(fitkernel, [corr_len_guess], [corr_len_label])
                             # fma.set_kernel('diag', [], [])
@@ -1407,22 +1381,39 @@ class AnalysisTools():
                             fma.noise_map[np.isnan(fma.noise_map)] = noise_map_max
                             fma.noise_map[fma.noise_map == 0.] = noise_map_max
                             
+                            # Set MCMC parameters from kwargs.
+                            if 'nwalkers' not in kwargs.keys() or kwargs['nwalkers'] is None:
+                                nwalkers = 50
+                            else:
+                                nwalkers = kwargs['nwalkers']
+                            if 'nburn' not in kwargs.keys() or kwargs['nburn'] is None:
+                                nburn = 100
+                            else:
+                                nburn = kwargs['nburn']
+                            if 'nsteps' not in kwargs.keys() or kwargs['nsteps'] is None:
+                                nsteps = 100
+                            else:
+                                nsteps = kwargs['nsteps']
+                            if 'nthreads' not in kwargs.keys() or kwargs['nthreads'] is None:
+                                nthreads = 4
+                            else:
+                                nthreads = kwargs['nthreads']
+                            
                             # Run the MCMC fit.
-                            nwalkers = 50
-                            nburn = 400
-                            nsteps = 100
-                            numthreads = 4
                             chain_output = os.path.join(output_dir_kl, key + '-bka_chain_c%.0f' % (k + 1) + '.pkl')
                             fma.fit_astrometry(nwalkers=nwalkers,
                                                nburn=nburn,
                                                nsteps=nsteps,
-                                               numthreads=numthreads,
+                                               numthreads=nthreads,
                                                chain_output=chain_output)
                             
                             # Estimate the background level from those pixels
                             # in the KLIP-subtracted data which have a small
                             # flux in the best fit FM PSF.
-                            hsz = 35
+                            if 'hsz' not in kwargs.keys() or kwargs['hsz'] is None:
+                                hsz = 35
+                            else:
+                                hsz = kwargs['hsz']
                             stamp = data_frame.copy()
                             xp = int(round(data_centx - guess_dx))
                             yp = int(round(data_centy + guess_dy))
@@ -1470,7 +1461,7 @@ class AnalysisTools():
                             else:
                                 nwalkers = kwargs['nwalkers']
                             if 'nburn' not in kwargs.keys() or kwargs['nburn'] is None:
-                                nburn = 400
+                                nburn = 100
                             else:
                                 nburn = kwargs['nburn']
                             if 'nsteps' not in kwargs.keys() or kwargs['nsteps'] is None:

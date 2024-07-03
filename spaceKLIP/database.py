@@ -486,10 +486,6 @@ class Database():
                 maskfile = allpaths[ww][j].replace('.fits', '_psfmask.fits')
                 if not os.path.exists(maskfile):    
                     if EXP_TYPE[ww][j] == 'NRC_CORON':
-                        # maskpath = APERNAME[ww][j] + '_' + FILTER[ww][j] + '.fits'
-                        # maskfile = os.path.join(maskbase, maskpath)
-                        # if not os.path.exists(maskfile):
-                        #     maskfile = 'NONE'
                         pipeline = Detector1Pipeline()
                         input = datamodels.open(allpaths[ww][j])
                         maskfile = pipeline.superbias.get_reference_file(input, 'psfmask')
