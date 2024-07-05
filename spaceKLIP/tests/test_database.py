@@ -5,9 +5,10 @@ import spaceKLIP
 
 import pytest
 
-
 testdatapath = os.getenv('SPACEKLIP_TEST_DATA_PATH')
 testpath = os.path.dirname(os.path.abspath(__file__))
+
+os.environ['CRDS_SERVER_URL'] = 'https://jwst-crds.stsci.edu'
 
 def test_has_test_data():
 

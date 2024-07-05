@@ -488,7 +488,7 @@ class Database():
                     if EXP_TYPE[ww][j] == 'NRC_CORON':
                         pipeline = Detector1Pipeline()
                         input = datamodels.open(allpaths[ww][j])
-                        maskfile = pipeline.superbias.get_reference_file(input, 'psfmask')
+                        maskfile = pipeline.get_reference_file(input, 'psfmask')
                     elif EXP_TYPE[ww][j] == 'MIR_4QPM' or EXP_TYPE[ww][j] == 'MIR_LYOT':
                         if APERNAME[ww][j] == 'MIRIM_MASK1065':
                             maskpath = 'JWST_MIRI_F1065C_transmission_webbpsf-ext_v2.fits'
