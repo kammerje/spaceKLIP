@@ -9,7 +9,6 @@ testdatapath = os.getenv('SPACEKLIP_TEST_DATA_PATH')
 testpath = os.path.dirname(os.path.abspath(__file__))
 
 os.environ['CRDS_SERVER_URL'] = 'https://jwst-crds.stsci.edu'
-os.makedirs('/grp/crds/cache/config/jwst/server_config')
 os.environ['CRDS_PATH'] = '/grp/crds/cache/'
 
 def test_has_test_data():
