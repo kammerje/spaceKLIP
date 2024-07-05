@@ -8,9 +8,6 @@ import pytest
 testdatapath = os.getenv('SPACEKLIP_TEST_DATA_PATH')
 testpath = os.path.dirname(os.path.abspath(__file__))
 
-os.environ['CRDS_SERVER_URL'] = 'https://jwst-crds.stsci.edu'
-os.environ['CRDS_PATH'] = '/grp/crds/cache/'
-
 def test_has_test_data():
 
     assert os.getenv('SPACEKLIP_TEST_DATA_PATH'), "The $SPACEKLIP_TEST_DATA_PATH environment variable must be set"
