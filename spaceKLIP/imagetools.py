@@ -1422,7 +1422,7 @@ class ImageTools():
                             wave_min = self.database.obs[key]['CWAVEL'][j] - self.database.obs[key]['DWAVEL'][j]  # micron
                             fwhm_current = wave_min * 1e-6 / diam * 180. / np.pi * 3600. / self.database.obs[key]['PIXSCALE'][j]  # pix
                             fwhm_desired = 2.3  # pix; see, e.g., Pawley 2006
-                            fwhm_desired *= 1.5
+                            fwhm_desired *= 1.5  # go to 1.5 times the theoretically required bluring to safely avoid numerical ringing effects
                             fact_temp = np.sqrt(fwhm_desired**2 - fwhm_current**2)
                             fact_temp /= np.sqrt(8. * np.log(2.))  # fix from Marshall
                         if str(fact_temp) == 'fix23':
@@ -2121,7 +2121,7 @@ class ImageTools():
                 except:
                     ref_image = pyfits.getdata(align_to_file, 0)
                 if ref_image.ndim == 3:
-                    ref_image = ref_image[0]
+                    ref_image = np.nanmedian(ref_image, axis=0)
             shifts_all = []
             for j in ww_all:
                 

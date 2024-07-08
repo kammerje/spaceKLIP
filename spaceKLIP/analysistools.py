@@ -1029,7 +1029,7 @@ class AnalysisTools():
                 offsetpsf_func = JWST_PSF(apername,
                                           filt,
                                           date=date,
-                                          fov_pix=157,
+                                          fov_pix=65,
                                           oversample=2,
                                           sp=None,
                                           use_coeff=False)
