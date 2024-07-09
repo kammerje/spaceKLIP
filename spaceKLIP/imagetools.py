@@ -897,6 +897,173 @@ class ImageTools():
         pass
 
     def fix_bad_pixels(self,
+                   method='timemed+localmed+medfilt',
+                   sigclip_kwargs={},
+                   custom_kwargs={},
+                   timemed_kwargs={},
+                   localmed_kwargs={},
+                   medfilt_kwargs={},
+                   types=['SCI', 'SCI_TA', 'SCI_BG', 'REF', 'REF_TA', 'REF_BG'],
+                   subdir='bpcleaned',
+                   restrict_to=None):
+        """
+        **** DEPRECATED BY FIND_BAD_PIXELS() AND CLEAN_BAD_PIXELS() ****
+        Identify and fix bad pixels.
+
+        Parameters
+        ----------
+        method : str, optional
+            Sequence of bad pixel identification and cleaning methods to be run
+            on the data. Different methods must be joined by a '+' sign without
+            whitespace. Available methods are:
+
+            - sigclip: use sigma clipping to identify additional bad pixels.
+            - custom: use a custom bad pixel map.
+            - timemed: replace pixels which are only bad in some frames with
+                       their median value from the good frames.
+            - localmed: replace bad pixels with the median value of their
+                     surrounding good pixels.
+            - medfilt: replace bad pixels with an image plane median filter.
+
+            The default is 'timemed+localmed+medfilt'.
+        sigclip_kwargs : dict, optional
+            Keyword arguments for the 'sigclip' method. Available keywords are:
+
+            - sigclip : float, optional
+                Sigma clipping threshold. The default is 5.
+            - shift_x : list of int, optional
+                Pixels in x-direction to which each pixel shall be compared to.
+                The default is [-1, 0, 1].
+            - shift_y : list of int, optional
+                Pixels in y-direction to which each pixel shall be compared to.
+                The default is [-1, 0, 1].
+
+            The default is {}.
+        custom_kwargs : dict, optional
+            Keyword arguments for the 'custom' method. The dictionary keys must
+            match the keys of the observations database and the dictionary
+            content must be binary bad pixel maps (1 = bad, 0 = good) with the
+            same shape as the corresponding data. The default is {}.
+        timemed_kwargs : dict, optional
+            Keyword arguments for the 'timemed' method. Available keywords are:
+
+            - n/a
+
+            The default is {}.
+        localmed_kwargs : dict, optional
+            Keyword arguments for the 'localmed' method. Available keywords are:
+
+            - shift_x : list of int, optional
+                Pixels in x-direction from which the median shall be computed.
+                The default is [-1, 0, 1].
+            - shift_y : list of int, optional
+                Pixels in y-direction from which the median shall be computed.
+                The default is [-1, 0, 1].
+
+            The default is {}.
+        medfilt_kwargs : dict, optional
+            Keyword arguments for the 'medfilt' method. Available keywords are:
+
+            - size : int, optional
+                Kernel size of the median filter to be used. The default is 4.
+
+            The default is {}.
+        types : list of str, optional
+            List of data types for which bad pixels shall be identified and
+            fixed. The default is ['SCI', 'SCI_TA', 'SCI_BG', 'REF', 'REF_TA',
+            'REF_BG'].
+        subdir : str, optional
+            Name of the directory where the data products shall be saved. The
+            default is 'bpcleaned'.
+        
+        Returns
+        -------
+        None.
+
+        """
+        log.info('--> WARNING! The fix_bad_pixels() routine is deprecated, the ..........')
+        log.info('--> WARNING! find_bad_pixels() and clean_bad_pixels() are preferred!!!!')
+        # Set output directory.
+        output_dir = os.path.join(self.database.output_dir, subdir)
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        
+        # Loop through concatenations.
+        for i, key in enumerate(self.database.obs.keys()):
+            # if we limit to only processing some concatenations, check whether this concatenation matches the pattern
+            if (restrict_to is not None) and (restrict_to not in key):
+                continue
+
+            log.info('--> Concatenation ' + key)
+            
+            # Loop through FITS files.
+            nfitsfiles = len(self.database.obs[key])
+            for j in range(nfitsfiles):
+                
+                # Read FITS file and PSF mask.
+                fitsfile = self.database.obs[key]['FITSFILE'][j]
+                data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs = ut.read_obs(fitsfile)
+                maskfile = self.database.obs[key]['MASKFILE'][j]
+                mask = ut.read_msk(maskfile)
+                
+                # Skip file types that are not in the list of types.
+                if self.database.obs[key]['TYPE'][j] in types:
+                    
+                    # Call bad pixel cleaning routines.
+                    pxdq_temp = pxdq.copy()
+                    # if self.database.obs[key]['TELESCOP'][j] == 'JWST' and self.database.obs[key]['INSTRUME'][j] == 'NIRCAM':
+                    #     pxdq_temp = (pxdq_temp != 0) & np.logical_not(pxdq_temp & 512 == 512)
+                    # else:
+                    pxdq_temp = (np.isnan(data) | (pxdq_temp & 1 == 1)) & np.logical_not(pxdq_temp & 512 == 512)
+                    method_split = method.split('+')
+                    for k in range(len(method_split)):
+                        head, tail = os.path.split(fitsfile)
+                        if method_split[k] == 'sigclip':
+                            log.info('  --> Method ' + method_split[k] + ': ' + tail)
+                            self.find_bad_pixels_sigclip(data, erro, pxdq_temp, pxdq & 512 == 512, sigclip_kwargs)
+                        elif method_split[k] == 'custom':
+                            log.info('  --> Method ' + method_split[k] + ': ' + tail)
+                            if self.database.obs[key]['TYPE'][j] not in ['SCI_TA', 'REF_TA']:
+                                self.find_bad_pixels_custom(data, erro, pxdq_temp, key, custom_kwargs)
+                            else:
+                                log.info('  --> Method ' + method_split[k] + ': skipped because TA file')
+                        elif method_split[k] == 'timemed':
+                            log.info('  --> Method ' + method_split[k] + ': ' + tail)
+                            self.fix_bad_pixels_timemed(data, erro, pxdq_temp, timemed_kwargs)
+                        elif method_split[k] == 'localmed':
+                            log.info('  --> Method ' + method_split[k] + ': ' + tail)
+                            self.fix_bad_pixels_localmed(data, erro, pxdq_temp, localmed_kwargs)
+                        elif method_split[k] == 'medfilt':
+                            log.info('  --> Method ' + method_split[k] + ': ' + tail)
+                            self.fix_bad_pixels_medfilt(data, erro, pxdq_temp, medfilt_kwargs)
+                        else:
+                            log.info('  --> Unknown method ' + method_split[k] + ': skipped')
+                    # if self.database.obs[key]['TELESCOP'][j] == 'JWST' and self.database.obs[key]['INSTRUME'][j] == 'NIRCAM':
+                    #     pxdq[(pxdq != 0) & np.logical_not(pxdq & 512 == 512) & (pxdq_temp == 0)] = 0
+                    # else:
+                    # pxdq[(pxdq & 1 == 1) & np.logical_not(pxdq & 512 == 512) & (pxdq_temp == 0)] = 0
+                
+                # update the pixel DQ bit flags for the output files.
+                #  The pxdq variable here is effectively just the DO_NOT_USE flag, discarding other bits.
+                #  We want to make a new dq which retains the other bits as much as possible.
+                #  first, retain all the other bits (bits greater than 1), then add in the new/cleaned DO_NOT_USE bit
+                import jwst.datamodels
+                do_not_use = jwst.datamodels.dqflags.pixel['DO_NOT_USE']
+                new_dq = np.bitwise_and(pxdq.copy(), np.invert(do_not_use))  # retain all other bits except the do_not_use bit
+                new_dq = np.bitwise_or(new_dq, pxdq_temp)  # add in the do_not_use bit from the cleaned version
+                new_dq = new_dq.astype(np.uint32)   # ensure correct output type for saving
+                                                    # (the bitwise steps otherwise return np.int64 which isn't FITS compatible)
+
+                # Write FITS file and PSF mask.
+                fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, new_dq, head_pri, head_sci, is2d, imshifts, maskoffs)
+                maskfile = ut.write_msk(maskfile, mask, fitsfile)
+                
+                # Update spaceKLIP database.
+                self.database.update_obs(key, j, fitsfile, maskfile)
+        
+        pass
+
+    def clean_bad_pixels(self,
                        method='timemed+medfilt',
                        timemed_kwargs={},
                        localmed_kwargs={},
