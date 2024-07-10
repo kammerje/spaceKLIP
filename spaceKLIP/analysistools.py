@@ -843,6 +843,7 @@ class AnalysisTools():
                            starfile,
                            mstar_err,
                            spectral_type='G2V',
+                           planetfile=None,
                            klmode='max',
                            date='auto',
                            use_fm_psf=True,
@@ -877,6 +878,9 @@ class AnalysisTools():
         spectral_type : str, optional
             Host star spectral type for the stellar model SED. The default is
             'G2V'.
+        planetfile : path
+            Path of VizieR VOTable containing companion photometry or two
+            column TXT file with wavelength (micron) and flux (Jy).
         klmode : int or 'max', optional
             KL mode for which the companions shall be extracted. If 'max', then
             the maximum possible KL mode will be used. The default is 'max'.
@@ -1015,13 +1019,15 @@ class AnalysisTools():
                         raise UserWarning('Data originates from unknown JWST instrument')
                 else:
                     raise UserWarning('Data originates from unknown telescope')
-                if 'planetfile' not in kwargs.keys() or kwargs['planetfile'] is None:
-                    if starfile is not None and starfile.endswith('.txt'):
-                        sed = read_spec_file(starfile)
-                    else:
-                        sed = None
+                if planetfile is None:
+                    # Keep backward compatibility where planetfile was part of
+                    # the kwargs.
+                    if 'planetfile' in kwargs.keys() and kwargs['planetfile'] is not None:
+                        planetfile = kwargs['planetfile']
+                if planetfile is not None:
+                    sed = read_spec_file(planetfile)
                 else:
-                    sed = read_spec_file(kwargs['planetfile'])
+                    sed = None
                 ww_sci = np.where(self.database.obs[key]['TYPE'] == 'SCI')[0]
                 if date is not None:
                     if date == 'auto':
@@ -1031,7 +1037,7 @@ class AnalysisTools():
                                           date=date,
                                           fov_pix=65,
                                           oversample=2,
-                                          sp=None,
+                                          sp=sed,
                                           use_coeff=False)
                 
                 # Loop through companions.
