@@ -1342,7 +1342,7 @@ class AnalysisTools():
                     else:
                         yrange = kwargs['yrange']
                     if 'frange' not in kwargs.keys() or kwargs['frange'] is None:
-                        frange = 10.  # mag
+                        frange = 2. #i.e. bounds=[guess_flux/(10.**frange),guess_flux*(10**frange)]
                     else:
                         frange = kwargs['frange']
                     if 'corr_len_range' not in kwargs.keys() or kwargs['corr_len_range'] is None:
