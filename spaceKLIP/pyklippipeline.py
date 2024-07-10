@@ -132,19 +132,24 @@ def run_obs(database,
         
         # Run KLIP subtraction.
         for mode in kwargs['mode']:
+            
+            # Initialize pyKLIP dataset.
+            pop_pxar_kw(np.append(filepaths, psflib_filepaths))
+            dataset = JWSTData(filepaths, psflib_filepaths, highpass=kwargs_temp['highpass'])
+            kwargs_temp['dataset'] = dataset
+            kwargs_temp['aligned_center'] = dataset._centers[0]
+            kwargs_temp['psf_library'] = dataset.psflib
+            kwargs_temp['mode'] = mode
+            
+            # Can run pyKLIP multiple times on the same dataset with different
+            # annuli and subsections.
             for annu in kwargs['annuli']:
                 for subs in kwargs['subsections']:
                     log.info('  --> pyKLIP: mode = ' + mode + ', annuli = ' + str(annu) + ', subsections = ' + str(subs))
                     fileprefix = mode + '_NANNU' + str(annu) + '_NSUBS' + str(subs) + '_' + key
                     
-                    # Initialize pyKLIP dataset.
-                    pop_pxar_kw(np.append(filepaths, psflib_filepaths))
-                    dataset = JWSTData(filepaths, psflib_filepaths, highpass=kwargs_temp['highpass'])
-                    kwargs_temp['dataset'] = dataset
-                    kwargs_temp['aligned_center'] = dataset._centers[0]
-                    kwargs_temp['psf_library'] = dataset.psflib
+                    # Add/update ramaining keywords.
                     kwargs_temp['fileprefix'] = fileprefix
-                    kwargs_temp['mode'] = mode
                     kwargs_temp['annuli'] = annu
                     kwargs_temp['subsections'] = subs
                     kwargs_temp_temp = kwargs_temp.copy()
