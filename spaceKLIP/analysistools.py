@@ -1531,7 +1531,7 @@ class AnalysisTools():
                                          appmag,  # mag
                                          appmag_err,  # mag
                                          mstar[filt],  # mag
-                                         mstar_err,  # mag
+                                         mstar_err_temp,  # mag
                                          np.nan,
                                          np.nan,
                                          scale_factor_avg,
@@ -1630,7 +1630,7 @@ class AnalysisTools():
                                          appmag,  # mag
                                          appmag_err,  # mag
                                          mstar[filt],  # mag
-                                         mstar_err,  # mag
+                                         mstar_err_temp,  # mag
                                          np.nan,
                                          evidence_ratio,
                                          scale_factor_avg,
