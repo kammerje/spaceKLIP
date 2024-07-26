@@ -1698,7 +1698,7 @@ class ImageTools():
                             # and the shift between the star and coronagraphic
                             # mask position.
                             if j == ww_sci[0] and k == 0:
-                                xc, yc, xshift, yshift = self.find_nircam_centers(data0=data[k].copy(),
+                                xc, yc, xshift, yshift = self.find_nircam_centers(data0=data.copy(),
                                                                                   key=key,
                                                                                   j=j,
                                                                                   shft_exp=shft_exp,
@@ -1843,12 +1843,12 @@ class ImageTools():
         
         Parameters
         ----------
-        data0 : 2D-array
-            Frame for which the star position shall be determined.
+        data0 : list
+            List of frame for which the star position shall be determined.
         key : str
-            Database key of the observation containing the data0 frame.
+            Database key of the observation containing the first frame in data0.
         j : int
-            Database index of the observation containing the data0 frame.
+            Database index of the observation containing the first frame in data0.
         spectral_type : str, optional
             Host star spectral type for the WebbPSF model used to determine the
             star position behind the coronagraphic mask. The default is 'G2V'.
@@ -1913,46 +1913,57 @@ class ImageTools():
         if not np.isnan(self.database.obs[key]['BLURFWHM'][j]):
             gauss_sigma = self.database.obs[key]['BLURFWHM'][j] / np.sqrt(8. * np.log(2.))
             model_psf = gaussian_filter(model_psf, gauss_sigma)
-        
-        # Get transmission mask.
-        yi, xi = np.indices(data0.shape)
-        xidl, yidl = apsiaf.sci_to_idl(xi + 1 - xoff, yi + 1 - yoff)
-        mask = psf.inst_on.gen_mask_transmission_map((xidl, yidl), 'idl')
-        
-        # Determine relative shift between data and model PSF. Iterate 3 times
-        # to improve precision.
-        xc, yc = (crpix1, crpix2)
-        for i in range(3):
-            
-            # Crop data and transmission mask.
-            datasub, xsub_indarr, ysub_indarr = ut.crop_image(image=data0,
-                                                              xycen=(xc, yc),
-                                                              npix=fov_pix,
-                                                              return_indices=True)
-            masksub = ut.crop_image(image=mask,
-                                    xycen=(xc, yc),
-                                    npix=fov_pix)
-            
-            if shft_exp == 1:
-                img1 = datasub* masksub
-                img2 = model_psf* masksub
-            else:
-                img1 = np.power(np.abs(datasub), shft_exp)* masksub
-                img2 = np.power(np.abs(model_psf), shft_exp) * masksub
-            
-            # Determine relative shift between data and model PSF.
-            shift, error, phasediff = phase_cross_correlation(img1,
-                                                              img2,
-                                                              upsample_factor=1000,
-                                                              normalization=None)
-            yshift, xshift = shift
-            
-            # Update star position.
-            xc = np.mean(xsub_indarr) + xshift
-            yc = np.mean(ysub_indarr) + yshift
-        xshift, yshift = (xc - crpix1, yc - crpix2)
-        log.info('  --> Recenter frames: star offset from coronagraph center (dx, dy) = (%.2f, %.2f) pix' % (xshift, yshift))
-        
+
+        shift_list=[]
+        count=0
+
+        for data in data0:
+            # Get transmission mask.
+            yi, xi = np.indices(data.shape)
+            xidl, yidl = apsiaf.sci_to_idl(xi + 1 - xoff, yi + 1 - yoff)
+            mask = psf.inst_on.gen_mask_transmission_map((xidl, yidl), 'idl')
+
+            # Determine relative shift between data and model PSF. Iterate 3 times
+            # to improve precision.
+            xc, yc = (crpix1, crpix2)
+            for i in range(3):
+
+                # Crop data and transmission mask.
+                datasub, xsub_indarr, ysub_indarr = ut.crop_image(image=data,
+                                                                  xycen=(xc, yc),
+                                                                  npix=fov_pix,
+                                                                  return_indices=True)
+                masksub = ut.crop_image(image=mask,
+                                        xycen=(xc, yc),
+                                        npix=fov_pix)
+
+                if shft_exp == 1:
+                    img1 = datasub* masksub
+                    img2 = model_psf* masksub
+                else:
+                    img1 = np.power(np.abs(datasub), shft_exp)* masksub
+                    img2 = np.power(np.abs(model_psf), shft_exp) * masksub
+
+                # Determine relative shift between data and model PSF.
+                shift, error, phasediff = phase_cross_correlation(img1,
+                                                                  img2,
+                                                                  upsample_factor=1000,
+                                                                  normalization=None)
+                yshift, xshift = shift
+
+                # Update star position.
+                xc = np.mean(xsub_indarr) + xshift
+                yc = np.mean(ysub_indarr) + yshift
+            xshift, yshift = (xc - crpix1, yc - crpix2)
+            shift_list.append([xshift, yshift])
+            log.info('  --> Recenter frames: star offset between frame %i and coronagraph center (dx, dy) = (%.3f, %.3f) pix' % (count,xshift, yshift))
+            count+=1
+
+        median_xshift, median_yshift = np.median(np.array(shift_list),axis=0)
+        std_xshift, std_yshift = np.std(np.array(shift_list),axis=0)
+        log.info( '  --> Recenter frames: median star offset from coronagraph center (dx, dy) = (%.3f, %.3f) pix' % (median_xshift, median_yshift))
+        log.info( '  --> Recenter frames: std for the star offset from coronagraph center (dx, dy) = (%.3f, %.3f) pix' % (std_xshift, std_yshift))
+
         # Plot data, model PSF, and scene overview.
         if output_dir is not None:
             fig, ax = plt.subplots(1, 3, figsize=(3 * 6.4, 1 * 4.8))
@@ -1988,7 +1999,7 @@ class ImageTools():
             plt.close(fig)
         
         # Return star position.
-        return xc, yc, xshift, yshift
+        return xc, yc, median_xshift, median_yshift
     
     @plt.style.context('spaceKLIP.sk_style')
     def align_frames(self,
