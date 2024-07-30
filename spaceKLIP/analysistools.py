@@ -27,6 +27,7 @@ import shutil
 
 from pyklip import klip, parallelized
 from pyklip.instruments.JWST import JWSTData
+from pyklip.kpp.metrics.matchedfilter import run_matchedfilter
 from scipy.ndimage import gaussian_filter, rotate
 from scipy.ndimage import shift as spline_shift
 from scipy.interpolate import interp1d
@@ -1627,6 +1628,187 @@ class AnalysisTools():
         
         pass
 
+    def generate_snr_map(self,
+                         date='auto',
+                         nthreads=None,
+                         maskedge=False,
+                         subdir='snrmap',
+                         **kwargs):
+        '''
+        Function to generate an SNR map of a PSF subtracted image. 
+
+        Parameters
+        ----------
+        date : str, optional
+            Observation date in the format 'YYYY-MM-DDTHH:MM:SS.MMM'. Will
+            query for the wavefront measurement closest in time to the given
+            date. If 'auto', will grab date from the FITS file header. If None,
+            then the default WebbPSF OPD is used (RevAA). The default is
+            'auto'.
+        nthreads : int
+            Number of CPU threads to use. If None, maximum number of cpus will be used. 
+        maskedge: bool
+            If True (default), mask the edges of the image to prevent partial projection of the PSF.
+            if False, does not mask the edges.
+        subdir : str, optional
+            Name of the directory where the data products shall be saved. The
+            default is 'companions'.
+
+        Returns
+        -------
+        None
+        '''
+
+        # Check input.
+        kwargs_temp = {}
+        
+        # Set output directory.
+        output_dir = os.path.join(self.database.output_dir, subdir)
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        
+        # Loop through concatenations.
+        for i, key in enumerate(self.database.red.keys()):
+            log.info('--> Concatenation ' + key)
+            
+            # Loop through FITS files.
+            nfitsfiles = len(self.database.red[key])
+            for j in range(nfitsfiles):
+
+                # Read FITS file
+                fitsfile = self.database.red[key]['FITSFILE'][j]
+                data, head_pri, head_sci, is2d = ut.read_red(fitsfile)
+
+                # Initialize a function that can generate model offset PSFs.
+                inst = self.database.red[key]['INSTRUME'][j]
+                filt = self.database.red[key]['FILTER'][j]
+                apername = self.database.red[key]['APERNAME'][j]
+                if self.database.red[key]['TELESCOP'][j] == 'JWST':
+                    if inst == 'NIRCAM':
+                        pass
+                    elif inst == 'NIRISS':
+                        raise NotImplementedError()
+                    elif inst == 'MIRI':
+                        pass
+                    else:
+                        raise UserWarning('Data originates from unknown JWST instrument')
+                else:
+                    raise UserWarning('Data originates from unknown telescope')
+
+                if 'planetfile' not in kwargs.keys() or kwargs['planetfile'] is None:
+                    sed = None
+                else:
+                    sed = read_spec_file(kwargs['planetfile'])
+                ww_sci = np.where(self.database.obs[key]['TYPE'] == 'SCI')[0]
+                # if date is not None:
+                #     if date == 'auto':
+                #         date = fits.getheader(self.database.obs[key]['FITSFILE'][ww_sci[0]], 0)['DATE-BEG']
+                date = '2024-06-15T10:44:20.414'
+                fov = 453
+                #PSF Generation Function
+                offsetpsf_func = JWST_PSF(apername,
+                                          filt,
+                                          date=date,
+                                          fov_pix=fov,
+                                          oversample=2,
+                                          sp=sed,
+                                          use_coeff=False)
+
+                # Let's just use an offaxis PSF for now
+                PSF = offsetpsf_func.gen_psf([5, 0],
+                                               mode='rth',
+                                               PA_V3=118.39976578781746,
+                                               do_shift=False,
+                                               quick=False,
+                                               addV3Yidl=False,
+                                               normalize='exit_pupil')
+                PSF = rotate(PSF, -118.39976578781746, reshape=False, mode='constant', cval=0.)
+                #TODO: Add blurring of undersampled PSFs
+                # plt.imshow(PSF, origin='upper')
+                # plt.show()
+                data = data[2]
+                mask = np.isnan(data)
+                data = np.nan_to_num(data, nan=np.nanmedian(data))
+                # plt.imshow(data, origin='upper')
+                # plt.show()
+                # Run matched filter
+                pix_list = [5,12,40]
+                for pix in pix_list:
+                    mf_map,cc_map,flux_map = run_matchedfilter(data,
+                                                               PSF,
+                                                               N_threads=nthreads,
+                                                               maskedge=maskedge,
+                                                               aprad_frac=pix/fov)
+
+                    mf_map[mask] = np.nan
+                    cc_map[mask] = np.nan
+                    flux_map[mask] = np.nan
+
+                    # Create a PrimaryHDU object to encapsulate the data
+                    hdu = fits.PrimaryHDU(mf_map)
+                    # Create an HDUList to contain the HDU
+                    hdul = fits.HDUList([hdu])
+                    # Write the HDUList to a FITS file
+                    hdul.writeto(output_dir+'/{}_mfmap{}.fits'.format(key, pix), overwrite=True)
+
+                    # Create a PrimaryHDU object to encapsulate the data
+                    hdu = fits.PrimaryHDU(cc_map)
+                    # Create an HDUList to contain the HDU
+                    hdul = fits.HDUList([hdu])
+                    # Write the HDUList to a FITS file
+                    hdul.writeto(output_dir+'/{}_ccmap{}.fits'.format(key, pix), overwrite=True)
+
+                    # Create a PrimaryHDU object to encapsulate the data
+                    hdu = fits.PrimaryHDU(flux_map)
+                    hdul = fits.HDUList([hdu])
+                    hdul.writeto(output_dir+'/{}_fluxmap{}.fits'.format(key, pix), overwrite=True)
+
+                    import csv
+                    from pyklip.kpp.detection.detection import point_source_detection
+
+                    detec_threshold = 4 # lower SNR to consider
+                    pix2as = 0.063 # platescale (pixel to arcsecond)
+                    mask_radius = 40 # Size of the mask to be applied at each iteration
+                    maskout_edge = 10 # Size of the mask to be applied at the edge of the field of view. Works even if the outskirt is full of nans.
+
+                    candidates_table = point_source_detection(mf_map,[159.5,159.5],detec_threshold,pix2as=pix2as,
+                                                             mask_radius = mask_radius,maskout_edge=maskout_edge,IWA=None,OWA=None)
+
+                    savedetections = os.path.join(output_dir+'/{}_detections{}.csv'.format(key,pix))
+                    with open(savedetections, 'w+') as csvfile:
+                        csvwriter = csv.writer(csvfile, delimiter=';')
+                        csvwriter.writerows([["index","value","PA","Sep (pix)","Sep (as)","x","y","row","col"]])
+                        csvwriter.writerows(candidates_table)
+
+                from pyklip.kpp.metrics.crossCorr import calculate_cc
+                image_cc = calculate_cc(data, PSF, spectrum = None, nans2zero=True)
+                from pyklip.kpp.stat.stat_utils import get_image_stat_map
+                SNR_map = get_image_stat_map(image_cc,
+                                           r_step=2,
+                                           Dr = 2,
+                                           type = "SNR")
+
+                detec_threshold = 3 # lower SNR to consider
+                pix2as = 0.063 # platescale (pixel to arcsecond)
+                mask_radius = 10 # Size of the mask to be applied at each iteration
+                maskout_edge = 10 # Size of the mask to be applied at the edge of the field of view. Works even if the outskirt is full of nans.
+
+                candidates_table = point_source_detection(SNR_map,[159.5,159.5],detec_threshold,pix2as=pix2as,
+                                                         mask_radius = mask_radius,maskout_edge=maskout_edge,IWA=None,OWA=None)
+
+                savedetections = os.path.join(output_dir+'/{}_detections_crosscorr.csv'.format(key,pix))
+                with open(savedetections, 'w+') as csvfile:
+                    csvwriter = csv.writer(csvfile, delimiter=';')
+                    csvwriter.writerows([["index","value","PA","Sep (pix)","Sep (as)","x","y","row","col"]])
+                    csvwriter.writerows(candidates_table)
+
+                # Create a PrimaryHDU object to encapsulate the data
+                hdu = fits.PrimaryHDU(SNR_map)
+                hdul = fits.HDUList([hdu])
+                hdul.writeto(output_dir+'/{}_snrmap.fits'.format(key), overwrite=True)
+
+        pass
+
 def inject_and_recover(raw_dataset,
                        injection_psf, 
                        injection_seps,
@@ -1878,3 +2060,5 @@ def inject_and_recover(raw_dataset,
         all_retr_fluxes = all_retr_fluxes[:, np.newaxis]
 
     return all_seps, all_pas, all_inj_fluxes, all_retr_fluxes
+
+
