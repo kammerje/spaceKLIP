@@ -6,7 +6,7 @@ numpy<2
 synphot
 stsynphot
 scipy
-stsci.stimage==0.2.6
+stsci.stimage>=0.2.6
 webbpsf
 webbpsf_ext>=1.2.0
 pyklip
