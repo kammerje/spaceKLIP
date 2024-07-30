@@ -390,13 +390,11 @@ class AnalysisTools():
                     columns = [seps[0]]
                     names = ['separation']
                     for i, klmode in enumerate(klmodes):
-                        if mask is None:
-                            columns.append(cons[i])
-                        else:
-                            columns.append(cons_mask[i])
+                        columns.append(cons[i])
                         names.append(f'contrast, N_kl={klmode}')
-                        columns.append(cons_mask[i])
-                        names.append(f'contrast+mask, N_kl={klmode}')
+                        if mask is not None:
+                            columns.append(cons_mask[i])
+                            names.append(f'contrast+mask, N_kl={klmode}')
                     results_table = Table(columns,
                                           names=names)
                     results_table['separation'].unit = u.arcsec
