@@ -20,6 +20,7 @@ from scipy.integrate import simpson
 from scipy.ndimage import fourier_shift, gaussian_filter
 from scipy.ndimage import shift as spline_shift
 
+import pysiaf
 from webbpsf_ext.imreg_tools import get_coron_apname as nircam_apname
 from webbpsf_ext.image_manip import expand_mask
 
@@ -123,8 +124,14 @@ def read_obs(fitsfile,
     # Read FITS file.
     hdul = pyfits.open(fitsfile)
     data = hdul['SCI'].data
-    erro = hdul['ERR'].data
-    pxdq = hdul['DQ'].data
+    try:
+        erro = hdul['ERR'].data
+    except:
+        erro = np.sqrt(data)
+    try:
+        pxdq = hdul['DQ'].data
+    except:
+        pxdq = np.zeros_like(data).astype('int')
     head_pri = hdul[0].header
     head_sci = hdul['SCI'].header
     is2d = False
@@ -384,10 +391,10 @@ def write_fitpsf_images(fitpsf,
             pri.header[key] = 'NONE'
         else:
             pri.header[key] = row[key]
+    res = pyfits.ImageHDU(residual_image, name='RES')
     sci = pyfits.ImageHDU(fitpsf.data_stamp, name='SCI')
     mod = pyfits.ImageHDU(fm_bestfit, name='MOD')
-    res = pyfits.ImageHDU(residual_image, name='RES')
-    hdul = pyfits.HDUList([pri, sci, res, mod])
+    hdul = pyfits.HDUList([pri, res, sci, mod])
     hdul.writeto(fitsfile, output_verify='fix', overwrite=True)
     
     pass
@@ -1075,3 +1082,38 @@ def get_dqmask(dqarr, bitvalues):
         dqmask = dqmask | (dqarr & bitval)
 
     return dqmask
+
+def pop_pxar_kw(filepaths):
+    """
+    
+    Populate the PIXAR_A2 SCI header keyword which is required by pyKLIP in
+    case it is not already available.
+
+    Parameters
+    ----------
+    filepaths : list or array
+        File paths of the FITS files whose headers shall be checked.
+    """
+    
+    for filepath in filepaths:
+        try:
+            pxar = pyfits.getheader(filepath, 'SCI')['PIXAR_A2']
+        except:
+            hdul = pyfits.open(filepath)
+            siaf_nrc = pysiaf.Siaf('NIRCam')
+            siaf_nis = pysiaf.Siaf('NIRISS')
+            siaf_mir = pysiaf.Siaf('MIRI')
+            if hdul[0].header['INSTRUME'] == 'NIRCAM':
+                ap = siaf_nrc[hdul[0].header['APERNAME']]
+            elif hdul[0].header['INSTRUME'] == 'NIRISS':
+                ap = siaf_nis[hdul[0].header['APERNAME']]
+            elif hdul[0].header['INSTRUME'] == 'MIRI':
+                ap = siaf_mir[hdul[0].header['APERNAME']]
+            else:
+                raise UserWarning('Data originates from unknown JWST instrument')
+            pix_scale = (ap.XSciScale + ap.YSciScale) / 2.
+            hdul['SCI'].header['PIXAR_A2'] = pix_scale**2
+            hdul.writeto(filepath, output_verify='fix', overwrite=True)
+            hdul.close()
+    
+    pass

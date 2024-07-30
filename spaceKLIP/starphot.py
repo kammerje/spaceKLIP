@@ -19,6 +19,7 @@ import webbpsf_ext
 
 import astropy.units as u
 
+from astropy.table import Table
 from astroquery.svo_fps import SvoFps
 from synphot import Observation, SourceSpectrum, SpectralElement
 from synphot.models import Empirical1D
@@ -165,7 +166,16 @@ def get_stellar_magnitudes(starfile,
     # http://svo2.cab.inta-csic.es/theory/fps/
     filts = []
     zeros = []
-    filter_list = SvoFps.get_filter_list(facility='JWST', instrument=instrume)
+    path = os.path.abspath(__file__)
+    path = path[:path.rfind('/')]
+    path = os.path.join(path, 'resources/svo_filter_table.dat')
+    try:
+        filter_list = SvoFps.get_filter_list(facility='JWST', instrument=instrume)
+        filter_list.write(path, format='ascii', overwrite=True)
+    except:
+        log.warning('Using SVO Filter Profile Service timed out. Using cached data instead.')
+        filter_list = Table.read(path, format='ascii')
+    
     for i in range(len(filter_list)):
         filts += [filter_list['filterID'][i].split('.')[-1]]
         zeros += [filter_list['ZeroPoint'][i]]

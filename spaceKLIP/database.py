@@ -20,8 +20,8 @@ import pysiaf
 import webbpsf, webbpsf_ext
 
 from astropy.table import Table
-from astroquery.svo_fps import SvoFps
 from jwst.pipeline import Detector1Pipeline, Image2Pipeline, Coron3Pipeline
+from stdatamodels.jwst import datamodels
 
 from .utils import nircam_apname, get_nrcmask_from_apname, get_filter_info
 
@@ -191,6 +191,7 @@ class Database():
         APERNAME = []
         PPS_APER = []
         PIXSCALE = []  # arcsec
+        PIXAR_SR = []  # sr
         BUNIT = []
         CRPIX1 = []  # pix
         CRPIX2 = []  # pix
@@ -274,6 +275,7 @@ class Database():
                 raise UserWarning('Data originates from unknown telescope')
             BLURFWHM += [head.get('BLURFWHM', np.nan)]
             head = hdul['SCI'].header
+            PIXAR_SR += [head.get('PIXAR_SR', np.nan)]
             BUNIT += [head.get('BUNIT', 'NONE')]
             if cr_from_siaf:
                 CRPIX1 += [ap.XSciRef]
@@ -313,6 +315,7 @@ class Database():
         APERNAME = np.array(APERNAME)
         PPS_APER = np.array(PPS_APER)
         PIXSCALE = np.array(PIXSCALE)
+        PIXAR_SR = np.array(PIXAR_SR)
         BUNIT = np.array(BUNIT)
         CRPIX1 = np.array(CRPIX1)
         CRPIX2 = np.array(CRPIX2)
@@ -410,6 +413,7 @@ class Database():
                                'APERNAME',
                                'PPS_APER',
                                'PIXSCALE',
+                               'PIXAR_SR',
                                'BUNIT',
                                'CRPIX1',
                                'CRPIX2',
@@ -442,6 +446,7 @@ class Database():
                                'float',
                                'object',
                                'object', 
+                               'float',
                                'float',
                                'object',
                                'float',
@@ -481,10 +486,9 @@ class Database():
                 maskfile = allpaths[ww][j].replace('.fits', '_psfmask.fits')
                 if not os.path.exists(maskfile):    
                     if EXP_TYPE[ww][j] == 'NRC_CORON':
-                        maskpath = APERNAME[ww][j] + '_' + FILTER[ww][j] + '.fits'
-                        maskfile = os.path.join(maskbase, maskpath)
-                        if not os.path.exists(maskfile):
-                            maskfile = 'NONE'
+                        pipeline = Detector1Pipeline()
+                        input = datamodels.open(allpaths[ww][j])
+                        maskfile = pipeline.get_reference_file(input, 'psfmask')
                     elif EXP_TYPE[ww][j] == 'MIR_4QPM' or EXP_TYPE[ww][j] == 'MIR_LYOT':
                         if APERNAME[ww][j] == 'MIRIM_MASK1065':
                             maskpath = 'JWST_MIRI_F1065C_transmission_webbpsf-ext_v2.fits'
@@ -521,6 +525,7 @@ class Database():
                              APERNAME[ww][j],
                              PPS_APER[ww][j],
                              PIXSCALE[ww][j],
+                             PIXAR_SR[ww][j],
                              BUNIT[ww][j],
                              CRPIX1[ww][j],
                              CRPIX2[ww][j],
@@ -627,6 +632,7 @@ class Database():
         APERNAME = []
         PPS_APER = []
         PIXSCALE = []  # arcsec
+        PIXAR_SR = []  # sr
         MODE = []
         ANNULI = []
         SUBSECTS = []
@@ -723,6 +729,7 @@ class Database():
             BLURFWHM += [head.get('BLURFWHM', np.nan)]
             if TYPE[-1] == 'CORON3':
                 head = hdul['SCI'].header
+            PIXAR_SR += [head.get('PIXAR_SR', np.nan)]
             BUNIT += [head.get('BUNIT', 'NONE')]
             if cr_from_siaf:
                 CRPIX1 += [ap.XSciRef]
@@ -753,6 +760,7 @@ class Database():
         APERNAME = np.array(APERNAME)
         PPS_APER = np.array(PPS_APER)
         PIXSCALE = np.array(PIXSCALE)
+        PIXAR_SR = np.array(PIXAR_SR)
         MODE = np.array(MODE)
         ANNULI = np.array(ANNULI)
         SUBSECTS = np.array(SUBSECTS)
@@ -794,6 +802,7 @@ class Database():
                                    'APERNAME',
                                    'PPS_APER',
                                    'PIXSCALE',
+                                   'PIXAR_SR',
                                    'MODE',
                                    'ANNULI',
                                    'SUBSECTS',
@@ -822,6 +831,7 @@ class Database():
                                    'object',
                                    'object',
                                    'object',
+                                   'float',
                                    'float',
                                    'object',
                                    'int',
@@ -858,6 +868,7 @@ class Database():
                              APERNAME[ww[j]],
                              PPS_APER[ww[j]],
                              PIXSCALE[ww[j]],
+                             PIXAR_SR[ww[j]],
                              MODE[ww[j]],
                              ANNULI[ww[j]],
                              SUBSECTS[ww[j]],
@@ -1021,8 +1032,10 @@ class Database():
             else:
                 print_tab.remove_columns(['TARG_RA', 'TARG_DEC', 'EXPSTART', 'APERNAME', 'PPS_APER', 
                                           'CRPIX1', 'CRPIX2', 'RA_REF', 'DEC_REF', 'FITSFILE', 'MASKFILE'])
+            print_tab['XOFFSET'] *= 1e3
             print_tab['XOFFSET'] = np.round(print_tab['XOFFSET'])
             print_tab['XOFFSET'][print_tab['XOFFSET'] == 0.] = 0.
+            print_tab['YOFFSET'] *= 1e3
             print_tab['YOFFSET'] = np.round(print_tab['YOFFSET'])
             print_tab['YOFFSET'][print_tab['YOFFSET'] == 0.] = 0.
             print_tab.pprint()
@@ -1102,7 +1115,8 @@ class Database():
                    yoffset=None,
                    crpix1=None,
                    crpix2=None,
-                   blurfwhm=None):
+                   blurfwhm=None,
+                   update_pxar=False):
         """
         Update the content of the observations database.
         
@@ -1138,6 +1152,9 @@ class Database():
         blurfwhm : float, optional
             New FWHM for the Gaussian filter blurring (pix) for the observation
             to be updated. The default is None.
+        update_pxar : bool, optional
+            Update the pixel area column of the database based on the FITS file
+            header information? The default is False.
         
         Returns
         -------
@@ -1174,6 +1191,12 @@ class Database():
         self.obs[key]['FITSFILE'][index] = fitsfile
         if maskfile is not None:
             self.obs[key]['MASKFILE'][index] = maskfile
+        if update_pxar:
+            try:
+                pxar = pyfits.getheader(self.obs[key]['FITSFILE'][index], 'SCI')['PIXAR_SR']
+                self.obs[key]['PIXAR_SR'][index] = pxar
+            except:
+                pass
         hdul.close()
         
         pass
