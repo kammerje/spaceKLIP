@@ -23,7 +23,7 @@ from copy import deepcopy
 from jwst.pipeline import Detector1Pipeline, Image2Pipeline, Coron3Pipeline
 import jwst.datamodels
 from pyklip import parallelized
-from scipy.ndimage import gaussian_filter, median_filter, fourier_shift
+from scipy.ndimage import gaussian_filter, median_filter, fourier_shift, rotate
 from scipy.ndimage import shift as spline_shift
 from scipy.optimize import leastsq, minimize
 from skimage.registration import phase_cross_correlation
@@ -33,8 +33,15 @@ from spaceKLIP.xara import core
 from webbpsf_ext import robust
 from webbpsf_ext.coords import dist_image
 from webbpsf_ext.webbpsf_ext_core import _transmission_map
-
+from tqdm.auto import trange
+import copy
+import pyklip.fakes as fakes
+from spaceKLIP.psf import get_offsetpsf
+from spaceKLIP.pyklippipeline import get_pyklip_filepaths
+from pyklip.instruments.JWST import JWSTData
 from webbpsf.constants import JWST_CIRCUMSCRIBED_DIAMETER
+from astropy.io import fits
+from spaceKLIP.starphot import get_stellar_magnitudes, read_spec_file
 
 import logging
 log = logging.getLogger(__name__)
@@ -1541,7 +1548,249 @@ class ImageTools():
                 self.database.update_obs(key, j, fitsfile, maskfile)
         
         pass
-    
+
+    def inject_companions(self,
+                          companions,
+                          starfile,
+                          spectral_type,
+                          output_dir,
+                          highpass=False,
+                          subdir='test',
+                          date='auto',
+                          kwargs={}):
+        '''
+        Function to inject synthetic PSFs into a set of frames loaded from a dataset, and save the new frames with the
+        injected companion.
+
+        Parameters (some may need to be adjusted!)
+        ----------
+        companions : list of list of three float, optional
+            List of companions to be injected.
+            For each companion, there should be a three element list containing
+            [RA offset (arcsec), Dec offset (arcsec), contrast].
+        raw_dataset : pyKLIP dataset
+            A pyKLIP dataset which companions will be injected into and KLIP
+            will be performed on.
+        injection_psf : 2D-array
+            The PSF of the companion to be injected.
+        injection_seps : 1D-array
+            List of separations to inject companions at (pixels).
+        injection_pas : 1D-array
+            List of position angles to inject companions at (degrees).
+        injection_spacing : int, None
+            Spacing between companions injected in a single image. If companions
+            are too close then it can pollute the recovered flux. Set to 'None'
+            to inject only one companion at a time (pixels).
+        injection_fluxes : 1D-array
+            Same size as injection_seps, units should correspond to the image
+            units. This is the *peak* flux of the injection.
+        true_companions : list of list of three float, optional
+            List of real companions to be masked before computing the raw contrast.
+            For each companion, there should be a three element list containing
+            [RA offset (pixels), Dec offset (pixels), mask radius (pixels)].
+            The default is None.
+
+        Returns
+        -------
+        None
+        '''
+
+        # Check input.
+        if not isinstance(companions[0], list):
+            if len(companions) == 3:
+                companions = [companions]
+        for i in range(len(companions)):
+            if len(companions[i]) != 3:
+                raise UserWarning('There should be three elements for each companion in the companions list')
+
+        Ncompanions = len(companions)
+        for _, key in enumerate(self.database.obs.keys()):
+            ww_type=list(self.database.obs[key]['TYPE'])
+            list_of_injected = []
+            all_injected = False
+
+            log.info('--> Concatenation ' + key)
+            #######################################################################################################################
+            filepaths, psflib_filepaths = get_pyklip_filepaths(self.database, key)
+            raw_dataset = JWSTData(filepaths, psflib_filepaths)
+
+            for ww in range(len(ww_type)):
+                # Read input files and store values that we just want to save in the output_dir
+                fitsfile = self.database.obs[key]['FITSFILE'][ww]
+                data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs = ut.read_obs(fitsfile)
+                maskfile = self.database.obs[key]['MASKFILE'][ww]
+                mask = ut.read_msk(maskfile)
+                crpix1 = self.database.obs[key]['CRPIX1'][ww]
+                crpix2 = self.database.obs[key]['CRPIX2'][ww]
+                head, tail = os.path.split(fitsfile)
+
+                # Write FITS file and PSF mask.
+                head_sci['CRPIX1'] = crpix1
+                head_sci['CRPIX2'] = crpix2
+
+                # Inject only into SCI type data
+                if ww_type[ww] == 'SCI':
+                    # Convert the host star brightness from vegamag to MJy. Use an
+                    # unocculted model PSF whose integrated flux is normalized to
+                    # one in order to obtain the theoretical peak count of the
+                    # star.
+                    filt = self.database.obs[key]['FILTER'][ww]
+
+                    # Get stellar magnitudes and filter zero points.
+                    mstar, fzero, fzero_si = get_stellar_magnitudes(starfile, spectral_type,
+                                                                    self.database.obs[key]['INSTRUME'][ww], return_si=True,
+                                                                    output_dir=output_dir,
+                                                                    **kwargs)  # vegamag, Jy, erg/cm^2/s/A
+                    # Compute the pixel area in steradian.
+                    pxsc_arcsec = self.database.obs[key]['PIXSCALE'][ww]  # arcsec
+                    pxsc_rad = pxsc_arcsec / 3600. / 180. * np.pi  # rad
+                    pxar = pxsc_rad ** 2  # sr
+
+                    # Set output directory.
+                    output_dir = os.path.join(self.database.output_dir, subdir)
+                    if not os.path.exists(output_dir):
+                        os.makedirs(output_dir)
+
+                    # Make a copy of the dataset
+                    dataset = copy.deepcopy(raw_dataset)
+
+                    apername = self.database.obs[key]['APERNAME'][ww]
+                    if 'planetfile' not in kwargs.keys() or kwargs['planetfile'] is None:
+                        if starfile is not None and starfile.endswith('.txt'):
+                            sed = read_spec_file(starfile)
+                        else:
+                            sed = None
+                    else:
+                        sed = read_spec_file(kwargs['planetfile'])
+                    ww_sci = np.where(self.database.obs[key]['TYPE'] == 'SCI')[0]
+                    if date is not None:
+                        if date == 'auto':
+                            date = fits.getheader(self.database.obs[key]['FITSFILE'][ww_sci[0]], 0)['DATE-BEG']
+
+                    offsetpsf_func = JWST_PSF(apername,
+                                              filt,
+                                              date=date,
+                                              fov_pix=65,
+                                              oversample=2,
+                                              sp=sed,
+                                              use_coeff=False)
+
+                    # Offset PSF that is not affected by the coronagraphic
+                    # mask, but only the Lyot stop.
+                    psf_no_coronmsk = offsetpsf_func.psf_off
+                    log.info('--> Injecting companions, writing FITS files and updating spaceKLIP database: ')
+
+                    # Loop over companions
+                    for i in trange(Ncompanions):
+                        # Initial guesses for the fit parameters.
+                        guess_dx = companions[i][0] / pxsc_arcsec  # pix
+                        guess_dy = companions[i][1] / pxsc_arcsec  # pix
+                        guess_sep = np.sqrt(guess_dx ** 2 + guess_dy ** 2)  # pix
+                        guess_pa = np.rad2deg(np.arctan2(guess_dx, guess_dy))  # deg
+                        guess_flux = companions[i][2]  # contrast
+
+                        roll_ref = self.database.obs[key]['ROLL_REF'][ww]  # deg
+
+                        # Get shift between star and coronagraphic mask
+                        # position. If positive, the coronagraphic mask center
+                        # is to the left/bottom of the star position.
+                        _, _, _, _, _, _, _, maskoffs = ut.read_obs(self.database.obs[key]['FITSFILE'][ww])
+
+                        # NIRCam.
+                        if maskoffs is not None:
+                            mask_xoff = -maskoffs[:, 0]  # pix
+                            mask_yoff = -maskoffs[:, 1]  # pix
+
+                            # Need to rotate by the roll angle (CCW) and flip
+                            # the x-axis so that positive RA is to the left.
+                            mask_raoff = -(mask_xoff * np.cos(np.deg2rad(roll_ref)) - mask_yoff * np.sin(
+                                np.deg2rad(roll_ref)))  # pix
+                            mask_deoff = mask_xoff * np.sin(np.deg2rad(roll_ref)) + mask_yoff * np.cos(
+                                np.deg2rad(roll_ref))  # pix
+
+                            # Compute the true offset between the companion and
+                            # the coronagraphic mask center.
+                            sim_dx = guess_dx - mask_raoff  # pix
+                            sim_dy = guess_dy - mask_deoff  # pix
+                            sim_sep = np.sqrt(sim_dx ** 2 + sim_dy ** 2) * pxsc_arcsec  # arcsec
+                            sim_pa = np.rad2deg(np.arctan2(sim_dx, sim_dy))  # deg
+
+                            # Take median of observation. Typically, each
+                            # dither position is a separate observation.
+                            sim_sep = np.median(sim_sep)
+                            sim_pa = np.median(sim_pa)
+
+                        # Otherwise.
+                        else:
+                            sim_sep = np.sqrt(guess_dx ** 2 + guess_dy ** 2) * pxsc_arcsec  # arcsec
+                            sim_pa = np.rad2deg(np.arctan2(guess_dx, guess_dy))  # deg
+
+                        # Generate offset PSF for this roll angle. Do not add
+                        # the V3Yidl angle as it has already been added to the
+                        # roll angle by spaceKLIP. This is only for estimating
+                        # the coronagraphic mask throughput!
+                        offsetpsf_coronmsk = offsetpsf_func.gen_psf([sim_sep, sim_pa],
+                                                                    mode='rth',
+                                                                    PA_V3=roll_ref,
+                                                                    do_shift=False,
+                                                                    quick=True,
+                                                                    addV3Yidl=False)
+
+                        # Coronagraphic mask throughput is not incorporated
+                        # into the flux calibration of the JWST pipeline so
+                        # that the companion flux from the detector pixels will
+                        # be underestimated. Therefore, we need to scale the
+                        # model offset PSF to account for the coronagraphic
+                        # mask throughput (it becomes fainter). Compute scale
+                        # factor by comparing a model PSF with and without
+                        # coronagraphic mask.
+                        scale_factor = np.sum(offsetpsf_coronmsk) / np.sum(psf_no_coronmsk)
+
+                        # Normalize model offset PSF to a total integrated flux
+                        # of 1 at infinity. Generates a new webbpsf model with
+                        # PSF normalization set to 'exit_pupil'.
+                        offsetpsf = offsetpsf_func.gen_psf([sim_sep, sim_pa],
+                                                           mode='rth',
+                                                           PA_V3=roll_ref,
+                                                           do_shift=False,
+                                                           quick=False,
+                                                           addV3Yidl=False,
+                                                           normalize='exit_pupil')
+
+                        # Normalize model offset PSF by the flux of the star.
+                        mcomp = mstar[filt] -2.5*np.log10(guess_flux)
+                        offsetpsf *= fzero[filt] / 10 ** (mcomp / 2.5) / 1e6 / pxar  # MJy/sr
+
+                        ## Question: am I injecting companions too bright?! Shouldn't I rescale them to the distance
+                        ## of the target? Why doesen't work if I try.
+                        # parallax_mas=12.1549
+                        # parallax_arcseconds = parallax_mas / 1000
+                        # distance_parsecs = 1 / parallax_arcseconds
+                        # offsetpsf *= (1 / distance_parsecs) ** 2
+
+
+                        # Apply scale factor to incorporate the coronagraphic
+                        # mask througput.
+                        offsetpsf *= scale_factor
+
+                        # Injected PSF needs to be a 3D array that matches dataset
+                        inj_psf_3d = np.array([offsetpsf for k in range(dataset.input.shape[0])])
+
+                        # Inject the PSF
+                        fakes.inject_planet(frames=dataset.input, centers=dataset.centers, inputflux=inj_psf_3d,
+                                            astr_hdrs=dataset.wcs, radius=guess_sep, pa=guess_pa, stampsize=65)
+
+                    data = dataset.input
+
+
+                # Write FITS file and PSF mask.
+                fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d,
+                                        imshifts, maskoffs)
+                maskfile = ut.write_msk(maskfile, mask, fitsfile)
+
+                # Update spaceKLIP database.
+                self.database.update_obs(key,ww, fitsfile, maskfile, crpix1=crpix1, crpix2=crpix2)
+
     def update_nircam_centers(self):
         """
         Determine offset between SIAF reference pixel position and true mask
@@ -1720,8 +1969,9 @@ class ImageTools():
                             # For the first SCI frame, get the star position
                             # and the shift between the star and coronagraphic
                             # mask position.
+
                             if (not first_sci_only or j == ww_sci[0]) and k == 0:
-                                xc, yc, xshift, yshift = self.find_nircam_centers(data0=data[k].copy(),
+                                xc, yc, xshift, yshift = self.find_nircam_centers(data0=data.copy(),
                                                                                   key=key,
                                                                                   j=j,
                                                                                   shft_exp=shft_exp,
@@ -1868,12 +2118,12 @@ class ImageTools():
         
         Parameters
         ----------
-        data0 : 2D-array
-            Frame for which the star position shall be determined.
+        data0 : list
+            List of frame for which the star position shall be determined.
         key : str
-            Database key of the observation containing the data0 frame.
+            Database key of the observation containing the first frame in data0.
         j : int
-            Database index of the observation containing the data0 frame.
+            Database index of the observation containing the first frame in data0.
         spectral_type : str, optional
             Host star spectral type for the WebbPSF model used to determine the
             star position behind the coronagraphic mask. The default is 'G2V'.
@@ -1945,46 +2195,57 @@ class ImageTools():
         if not np.isnan(self.database.obs[key]['BLURFWHM'][j]):
             gauss_sigma = self.database.obs[key]['BLURFWHM'][j] / np.sqrt(8. * np.log(2.))
             model_psf = gaussian_filter(model_psf, gauss_sigma)
-        
-        # Get transmission mask.
-        yi, xi = np.indices(data0.shape)
-        xidl, yidl = apsiaf.sci_to_idl(xi + 1 - xoff, yi + 1 - yoff)
-        mask = psf.inst_on.gen_mask_transmission_map((xidl, yidl), 'idl')
-        
-        # Determine relative shift between data and model PSF. Iterate 3 times
-        # to improve precision.
-        xc, yc = (crpix1, crpix2)
-        for i in range(3):
-            
-            # Crop data and transmission mask.
-            datasub, xsub_indarr, ysub_indarr = ut.crop_image(image=data0,
-                                                              xycen=(xc, yc),
-                                                              npix=fov_pix,
-                                                              return_indices=True)
-            masksub = ut.crop_image(image=mask,
-                                    xycen=(xc, yc),
-                                    npix=fov_pix)
-            
-            if shft_exp == 1:
-                img1 = datasub* masksub
-                img2 = model_psf* masksub
-            else:
-                img1 = np.power(np.abs(datasub), shft_exp)* masksub
-                img2 = np.power(np.abs(model_psf), shft_exp) * masksub
-            
-            # Determine relative shift between data and model PSF.
-            shift, error, phasediff = phase_cross_correlation(img1,
-                                                              img2,
-                                                              upsample_factor=1000,
-                                                              normalization=None)
-            yshift, xshift = shift
-            
-            # Update star position.
-            xc = np.mean(xsub_indarr) + xshift
-            yc = np.mean(ysub_indarr) + yshift
-        xshift, yshift = (xc - crpix1, yc - crpix2)
-        log.info('  --> Recenter frames: star offset from coronagraph center (dx, dy) = (%.2f, %.2f) pix' % (xshift, yshift))
-        
+
+        shift_list=[]
+        count=0
+
+        for data in data0:
+            # Get transmission mask.
+            yi, xi = np.indices(data.shape)
+            xidl, yidl = apsiaf.sci_to_idl(xi + 1 - xoff, yi + 1 - yoff)
+            mask = psf.inst_on.gen_mask_transmission_map((xidl, yidl), 'idl')
+
+            # Determine relative shift between data and model PSF. Iterate 3 times
+            # to improve precision.
+            xc, yc = (crpix1, crpix2)
+            for i in range(3):
+
+                # Crop data and transmission mask.
+                datasub, xsub_indarr, ysub_indarr = ut.crop_image(image=data,
+                                                                  xycen=(xc, yc),
+                                                                  npix=fov_pix,
+                                                                  return_indices=True)
+                masksub = ut.crop_image(image=mask,
+                                        xycen=(xc, yc),
+                                        npix=fov_pix)
+
+                if shft_exp == 1:
+                    img1 = datasub* masksub
+                    img2 = model_psf* masksub
+                else:
+                    img1 = np.power(np.abs(datasub), shft_exp)* masksub
+                    img2 = np.power(np.abs(model_psf), shft_exp) * masksub
+
+                # Determine relative shift between data and model PSF.
+                shift, error, phasediff = phase_cross_correlation(img1,
+                                                                  img2,
+                                                                  upsample_factor=1000,
+                                                                  normalization=None)
+                yshift, xshift = shift
+
+                # Update star position.
+                xc = np.mean(xsub_indarr) + xshift
+                yc = np.mean(ysub_indarr) + yshift
+            xshift, yshift = (xc - crpix1, yc - crpix2)
+            shift_list.append([xshift, yshift])
+            log.info('  --> Recenter frames: star offset between frame %i and coronagraph center (dx, dy) = (%.3f, %.3f) pix' % (count,xshift, yshift))
+            count+=1
+
+        median_xshift, median_yshift = np.median(np.array(shift_list),axis=0)
+        std_xshift, std_yshift = np.std(np.array(shift_list),axis=0)
+        log.info( '  --> Recenter frames: median star offset from coronagraph center (dx, dy) = (%.3f, %.3f) pix' % (median_xshift, median_yshift))
+        log.info( '  --> Recenter frames: std for the star offset from coronagraph center (dx, dy) = (%.3f, %.3f) pix' % (std_xshift, std_yshift))
+
         # Plot data, model PSF, and scene overview.
         if output_dir is not None:
             fig, ax = plt.subplots(1, 3, figsize=(3 * 6.4, 1 * 4.8))
@@ -2022,7 +2283,7 @@ class ImageTools():
             plt.close(fig)
         
         # Return star position.
-        return xc, yc, xshift, yshift
+        return xc, yc, median_xshift, median_yshift
     
     @plt.style.context('spaceKLIP.sk_style')
     def align_frames(self,
