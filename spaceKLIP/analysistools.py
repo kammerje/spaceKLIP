@@ -19,6 +19,9 @@ from cycler import cycler
 import numpy as np
 
 import copy
+import corner
+import emcee
+import matplotlib.patheffects as PathEffects
 import pyklip.fakes as fakes
 import pyklip.fitpsf as fitpsf
 import pyklip.fm as fm
@@ -27,14 +30,14 @@ import shutil
 
 from pyklip import klip, parallelized
 from pyklip.instruments.JWST import JWSTData
-from scipy.ndimage import gaussian_filter, rotate
+from scipy.ndimage import fourier_shift, gaussian_filter, rotate
 from scipy.ndimage import shift as spline_shift
 from scipy.interpolate import interp1d
 from spaceKLIP import utils as ut
 from spaceKLIP.psf import get_offsetpsf, JWST_PSF
 from spaceKLIP.starphot import get_stellar_magnitudes, read_spec_file
 from spaceKLIP.pyklippipeline import get_pyklip_filepaths
-from spaceKLIP.utils import write_starfile, set_surrounded_pixels
+from spaceKLIP.utils import write_starfile, set_surrounded_pixels, pop_pxar_kw
 
 from webbpsf.constants import JWST_CIRCUMSCRIBED_DIAMETER
 
@@ -171,7 +174,10 @@ class AnalysisTools():
                 # Compute the pixel area in steradian.
                 pxsc_arcsec = self.database.red[key]['PIXSCALE'][j] # arcsec
                 pxsc_rad = pxsc_arcsec / 3600. / 180. * np.pi  # rad
-                pxar = pxsc_rad**2  # sr
+                pxar = self.database.red[key]['PIXAR_SR'][j]  # sr
+                if np.isnan(pxar):
+                    log.warning("PIXAR_SR not found in database, falling back to use PIXSCALE")
+                    pxar = pxsc_rad**2  # sr
                 
                 # Convert the host star brightness from vegamag to MJy. Use an
                 # unocculted model PSF whose integrated flux is normalized to
@@ -386,8 +392,9 @@ class AnalysisTools():
                     for i, klmode in enumerate(klmodes):
                         columns.append(cons[i])
                         names.append(f'contrast, N_kl={klmode}')
-                        columns.append(cons_mask[i])
-                        names.append(f'contrast+mask, N_kl={klmode}')
+                        if mask is not None:
+                            columns.append(cons_mask[i])
+                            names.append(f'contrast+mask, N_kl={klmode}')
                     results_table = Table(columns,
                                           names=names)
                     results_table['separation'].unit = u.arcsec
@@ -528,6 +535,7 @@ class AnalysisTools():
 
                 # Read Stage 2 files and make pyKLIP dataset
                 filepaths, psflib_filepaths = get_pyklip_filepaths(self.database, key)
+                pop_pxar_kw(np.append(filepaths, psflib_filepaths))
                 pyklip_dataset = JWSTData(filepaths, psflib_filepaths)
 
                 # Compute the resolution element. Account for possible blurring.
@@ -833,6 +841,7 @@ class AnalysisTools():
                            starfile,
                            mstar_err,
                            spectral_type='G2V',
+                           planetfile=None,
                            klmode='max',
                            date='auto',
                            use_fm_psf=True,
@@ -841,6 +850,8 @@ class AnalysisTools():
                            fitkernel='diag',
                            subtract=True,
                            inject=False,
+                           remove_background=False,
+                           save_preklip=False,
                            overwrite=True,
                            subdir='companions',
                            **kwargs):
@@ -865,6 +876,9 @@ class AnalysisTools():
         spectral_type : str, optional
             Host star spectral type for the stellar model SED. The default is
             'G2V'.
+        planetfile : path
+            Path of VizieR VOTable containing companion photometry or two
+            column TXT file with wavelength (micron) and flux (Jy).
         klmode : int or 'max', optional
             KL mode for which the companions shall be extracted. If 'max', then
             the maximum possible KL mode will be used. The default is 'max'.
@@ -892,6 +906,12 @@ class AnalysisTools():
         inject : bool, optional
             Instead of fitting for a companion at the guessed location and
             contrast, inject one into the data.
+        remove_background : bool, optional
+            Remove a constant background level from the KLIP-subtracted data
+            before fitting the FM PSF. The default is False.
+        save_preklip : bool, optional
+            Save the stage 2 files when injecting/killing a companion? The
+            default is False.
         overwrite : bool, optional
             If True, compute a new FM PSF and overwrite any existing one,
             otherwise try to load an existing one and only compute a new one if
@@ -933,7 +953,10 @@ class AnalysisTools():
                 # Compute the pixel area in steradian.
                 pxsc_arcsec = self.database.red[key]['PIXSCALE'][j] # arcsec
                 pxsc_rad = pxsc_arcsec / 3600. / 180. * np.pi  # rad
-                pxar = pxsc_rad**2  # sr
+                pxar = self.database.red[key]['PIXAR_SR'][j]  # sr
+                if np.isnan(pxar):
+                    log.warning("PIXAR_SR not found in database, falling back to use PIXSCALE")
+                    pxar = pxsc_rad**2  # sr
                 
                 # Compute the resolution element. Account for possible
                 # blurring.
@@ -954,10 +977,14 @@ class AnalysisTools():
                     kwargs_temp['maxnumbasis'] = maxnumbasis
                 
                 # Initialize pyKLIP dataset.
-                dataset = JWSTData(filepaths, psflib_filepaths)
+                pop_pxar_kw(np.append(filepaths, psflib_filepaths))
+                dataset = JWSTData(filepaths, psflib_filepaths, highpass=highpass)
                 kwargs_temp['dataset'] = dataset
                 kwargs_temp['aligned_center'] = dataset._centers[0]
                 kwargs_temp['psf_library'] = dataset.psflib
+                
+                # Make copy of the original pyKLIP dataset.
+                dataset_orig = copy.deepcopy(dataset)
                 
                 # Get index of desired KL mode.
                 klmodes = self.database.red[key]['KLMODES'][j].split(',')
@@ -990,13 +1017,15 @@ class AnalysisTools():
                         raise UserWarning('Data originates from unknown JWST instrument')
                 else:
                     raise UserWarning('Data originates from unknown telescope')
-                if 'planetfile' not in kwargs.keys() or kwargs['planetfile'] is None:
-                    if starfile is not None and starfile.endswith('.txt'):
-                        sed = read_spec_file(starfile)
-                    else:
-                        sed = None
+                if planetfile is None:
+                    # Keep backward compatibility where planetfile was part of
+                    # the kwargs.
+                    if 'planetfile' in kwargs.keys() and kwargs['planetfile'] is not None:
+                        planetfile = kwargs['planetfile']
+                if planetfile is not None:
+                    sed = read_spec_file(planetfile)
                 else:
-                    sed = read_spec_file(kwargs['planetfile'])
+                    sed = None
                 ww_sci = np.where(self.database.obs[key]['TYPE'] == 'SCI')[0]
                 if date is not None:
                     if date == 'auto':
@@ -1065,9 +1094,10 @@ class AnalysisTools():
                     output_dir_fm = os.path.join(output_dir_comp, 'KLIP_FM')
                     if not os.path.exists(output_dir_fm):
                         os.makedirs(output_dir_fm)
-                    output_dir_pk = os.path.join(output_dir_comp, 'PREKLIP')
-                    if not os.path.exists(output_dir_pk):
-                        os.makedirs(output_dir_pk)
+                    if save_preklip:
+                        output_dir_pk = os.path.join(output_dir_comp, 'PREKLIP')
+                        if not os.path.exists(output_dir_pk):
+                            os.makedirs(output_dir_pk)
                     
                     # Offset PSF that is not affected by the coronagraphic
                     # mask, but only the Lyot stop.
@@ -1244,10 +1274,11 @@ class AnalysisTools():
                                         fileprefix='FM-' + key,
                                         annuli=annuli,
                                         subsections=subsections,
-                                        movement=1,
+                                        movement=1.,
                                         numbasis=klmodes,
                                         maxnumbasis=maxnumbasis,
                                         calibrate_flux=False,
+                                        aligned_center=dataset._centers[0],
                                         psf_library=dataset.psflib,
                                         highpass=highpass_temp,
                                         mute_progression=True)
@@ -1269,7 +1300,7 @@ class AnalysisTools():
                         av_offsetpsf = np.average(rot_offsetpsfs, weights=sci_totinttime, axis=0)
                         sx = av_offsetpsf.shape[1]
                         sy = av_offsetpsf.shape[0]
-                        
+
                         # Make sure that the model offset PSF has odd shape and
                         # perform the required subpixel shift before inserting
                         # it into the fm_frame.
@@ -1289,11 +1320,11 @@ class AnalysisTools():
                     
                     # assign forward model kwargs
                     if 'boxsize' not in kwargs.keys() or kwargs['boxsize'] is None:
-                        boxsize = 31
+                        boxsize = 35
                     else:
                         boxsize = kwargs['boxsize']
                     if 'dr' not in kwargs.keys() or kwargs['dr'] is None:
-                        dr = 3
+                        dr = 5
                     else:
                         dr = kwargs['dr']
                     if 'exclr' not in kwargs.keys() or kwargs['exclr'] is None:
@@ -1301,15 +1332,15 @@ class AnalysisTools():
                     else:
                         exclr = kwargs['exclr']*resolution
                     if 'xrange' not in kwargs.keys() or kwargs['xrange'] is None:
-                        xrange = 2.
+                        xrange = 3.
                     else:
                         xrange = kwargs['xrange']
                     if 'yrange' not in kwargs.keys() or kwargs['yrange'] is None:
-                        yrange = 2.
+                        yrange = 3.
                     else:
                         yrange = kwargs['yrange']
                     if 'frange' not in kwargs.keys() or kwargs['frange'] is None:
-                        frange = [-1e-2, 1e2] # * guess_flux
+                        frange = 2. #i.e. bounds=[guess_flux/(10.**frange),guess_flux*(10**frange)]
                     else:
                         frange = kwargs['frange']
                     if 'corr_len_range' not in kwargs.keys() or kwargs['corr_len_range'] is None:
@@ -1317,14 +1348,18 @@ class AnalysisTools():
                     else:
                         corr_len_range = kwargs['corr_len_range']
                     if 'corr_len_guess' not in kwargs.keys() or kwargs['corr_len_guess'] is None:
-                        corr_len_guess = 2.
+                        corr_len_guess = 3.
                     else:
                         corr_len_guess = kwargs['corr_len_guess']
 
                     # Fit the FM PSF to the KLIP-subtracted data.
                     if inject == False:
-                        # MCMC.
-                        if fitmethod == 'mcmc':
+
+                        # Remove a constant background level from the
+                        # KLIP-subtracted data before fitting the FM PSF?
+                        if remove_background:
+                            
+                            # Initialize pyKLIP FMAstrometry class.
                             fma = fitpsf.FMAstrometry(guess_sep=guess_sep,
                                                       guess_pa=guess_pa,
                                                       fitboxsize=boxsize)
@@ -1344,9 +1379,7 @@ class AnalysisTools():
                             fma.noise_map[np.isnan(fma.noise_map)] = noise_map_max
                             fma.noise_map[fma.noise_map == 0.] = noise_map_max
                             
-                            # Run the MCMC fit.
-
-                            # set MCMC parameters from kwargs
+                            # Set MCMC parameters from kwargs.
                             if 'nwalkers' not in kwargs.keys() or kwargs['nwalkers'] is None:
                                 nwalkers = 50
                             else:
@@ -1356,14 +1389,89 @@ class AnalysisTools():
                             else:
                                 nburn = kwargs['nburn']
                             if 'nsteps' not in kwargs.keys() or kwargs['nsteps'] is None:
-                                nsteps = 200
+                                nsteps = 100
                             else:
                                 nsteps = kwargs['nsteps']
                             if 'nthreads' not in kwargs.keys() or kwargs['nthreads'] is None:
                                 nthreads = 4
                             else:
                                 nthreads = kwargs['nthreads']
-
+                            
+                            # Run the MCMC fit.
+                            chain_output = os.path.join(output_dir_kl, key + '-bka_chain_c%.0f' % (k + 1) + '.pkl')
+                            fma.fit_astrometry(nwalkers=nwalkers,
+                                               nburn=nburn,
+                                               nsteps=nsteps,
+                                               numthreads=nthreads,
+                                               chain_output=chain_output)
+                            
+                            # Estimate the background level from those pixels
+                            # in the KLIP-subtracted data which have a small
+                            # flux in the best fit FM PSF.
+                            if 'hsz' not in kwargs.keys() or kwargs['hsz'] is None:
+                                hsz = 35
+                            else:
+                                hsz = kwargs['hsz']
+                            stamp = data_frame.copy()
+                            xp = int(round(data_centx - guess_dx))
+                            yp = int(round(data_centy + guess_dy))
+                            stamp = stamp[yp-hsz:yp+hsz+1, xp-hsz:xp+hsz+1]
+                            psf = fm_frame.copy()
+                            xp = int(round(fm_centx - guess_dx))
+                            yp = int(round(fm_centy + guess_dy))
+                            psf = psf[yp-hsz:yp+hsz+1, xp-hsz:xp+hsz+1]
+                            xshift = -(fma.raw_RA_offset.bestfit - guess_dx)
+                            yshift = fma.raw_Dec_offset.bestfit - guess_dy
+                            yxshift = np.array([yshift, xshift])
+                            psf_shift = np.fft.ifftn(fourier_shift(np.fft.fftn(psf), yxshift)).real
+                            con = fma.fit_flux.bestfit * guess_flux
+                            res = stamp - fma.fit_flux.bestfit * psf_shift
+                            thresh = np.nanmax(psf_shift) / 150.
+                            bg = np.nanmedian(stamp[np.abs(psf_shift) < thresh])
+                            data_frame -= bg
+                        
+                        # MCMC.
+                        if fitmethod == 'mcmc':
+                            
+                            # Initialize pyKLIP FMAstrometry class.
+                            fma = fitpsf.FMAstrometry(guess_sep=guess_sep,
+                                                      guess_pa=guess_pa,
+                                                      fitboxsize=boxsize)
+                            fma.generate_fm_stamp(fm_image=fm_frame,
+                                                  fm_center=[fm_centx, fm_centy],
+                                                  padding=5)
+                            fma.generate_data_stamp(data=data_frame,
+                                                    data_center=[data_centx, data_centy],
+                                                    dr=dr,
+                                                    exclusion_radius=exclr)
+                            corr_len_label = r'$l$'
+                            fma.set_kernel(fitkernel, [corr_len_guess], [corr_len_label])
+                            fma.set_bounds(xrange, yrange, frange, [corr_len_range])
+                            
+                            # Make sure that the noise map is invertible.
+                            noise_map_max = np.nanmax(fma.noise_map)
+                            fma.noise_map[np.isnan(fma.noise_map)] = noise_map_max
+                            fma.noise_map[fma.noise_map == 0.] = noise_map_max
+                            
+                            # Set MCMC parameters from kwargs.
+                            if 'nwalkers' not in kwargs.keys() or kwargs['nwalkers'] is None:
+                                nwalkers = 50
+                            else:
+                                nwalkers = kwargs['nwalkers']
+                            if 'nburn' not in kwargs.keys() or kwargs['nburn'] is None:
+                                nburn = 100
+                            else:
+                                nburn = kwargs['nburn']
+                            if 'nsteps' not in kwargs.keys() or kwargs['nsteps'] is None:
+                                nsteps = 100
+                            else:
+                                nsteps = kwargs['nsteps']
+                            if 'nthreads' not in kwargs.keys() or kwargs['nthreads'] is None:
+                                nthreads = 4
+                            else:
+                                nthreads = kwargs['nthreads']
+                            
+                            # Run the MCMC fit.
                             chain_output = os.path.join(output_dir_kl, key + '-bka_chain_c%.0f' % (k + 1) + '.pkl')
                             fma.fit_astrometry(nwalkers=nwalkers,
                                                nburn=nburn,
@@ -1533,13 +1641,43 @@ class AnalysisTools():
                         # Otherwise.
                         else:
                             raise NotImplementedError()
+                        
+                        # Plot estimated background level.
+                        if remove_background:
+                            f, ax = plt.subplots(1, 4, figsize=(4 * 6.4, 4.8))
+                            p0 = ax[0].imshow(res, origin='lower')
+                            c0 = plt.colorbar(p0, ax=ax[0])
+                            c0.set_label('Flux (arbitrary units)', rotation=270, labelpad=20)
+                            text = ax[0].text(0.99, 0.99, 'Contrast = %.3e' % con, ha='right', va='top', transform=ax[0].transAxes)
+                            text.set_path_effects([PathEffects.withStroke(linewidth=3, foreground='white')])
+                            ax[0].set_title('Residuals before bg. subtraction')
+                            p1 = ax[1].imshow(np.abs(psf_shift) < thresh, origin='lower')
+                            c1 = plt.colorbar(p1, ax=ax[1])    
+                            ax[1].set_title('Pixels used for bg. estimation')
+                            ax[2].hist(stamp[np.abs(psf_shift) < thresh], bins=20)
+                            ax[2].axvline(bg, ls='--', color='black', label='bg. = %.2f' % bg)
+                            ax[2].set_xlabel('Pixel value')
+                            ax[2].set_ylabel('Occurrence')
+                            ax[2].legend(loc='upper right')
+                            ax[2].set_title('Distribution of bg. pixels')
+                            con = fma.fit_flux.bestfit * guess_flux
+                            res = stamp - fma.fit_flux.bestfit * psf_shift
+                            imgs = ax[0].get_images()
+                            if len(imgs) > 0:
+                                vmin, vmax = imgs[0].get_clim()
+                            p3 = ax[3].imshow(res, origin='lower', vmin=vmin, vmax=vmax)
+                            c3 = plt.colorbar(p3, ax=ax[3])
+                            c3.set_label('Flux (arbitrary units)', rotation=270, labelpad=20)
+                            text = ax[3].text(0.99, 0.99, 'Contrast = %.3e' % con, ha='right', va='top', transform=ax[3].transAxes)
+                            text.set_path_effects([PathEffects.withStroke(linewidth=3, foreground='white')])
+                            ax[3].set_title('Residuals after bg. subtraction')
+                            plt.tight_layout()
+                            path = os.path.join(output_dir_kl, key + '-bgest_c%.0f' % (k + 1) + '.pdf')
+                            plt.savefig(path)
+                            plt.close()
                     
                     # Subtract companion before fitting the next one.
                     if subtract or inject:
-                        
-                        # Make copy of the original pyKLIP dataset.
-                        if k == 0:
-                            dataset_orig = copy.deepcopy(dataset)
                         
                         # Subtract companion from pyKLIP dataset. Use offset
                         # PSFs w/o high-pass filtering because this will be
@@ -1548,68 +1686,71 @@ class AnalysisTools():
                             ra = companions[k][0]  # arcsec
                             dec = companions[k][1]  # arcsec
                             con = companions[k][2]
-                            inputflux = con * np.array(all_offsetpsfs)  # positive to inject companion
+                            inputflux = con * np.array(all_offsetpsfs_nohpf)  # positive to inject companion
                             fileprefix = 'INJECTED-' + key
                         else:
                             ra = tab[-1]['RA']  # arcsec
                             dec = tab[-1]['DEC']  # arcsec
                             con = tab[-1]['CON']
-                            inputflux = -con * np.array(all_offsetpsfs)  # negative to remove companion
+                            inputflux = -con * np.array(all_offsetpsfs_nohpf)  # negative to remove companion
                             fileprefix = 'KILLED-' + key
                         sep = np.sqrt(ra**2 + dec**2) / pxsc_arcsec  # pix
                         pa = np.rad2deg(np.arctan2(ra, dec))  # deg
                         thetas = [pa + 90. - all_pa for all_pa in all_pas]
-                        fakes.inject_planet(frames=dataset.input, centers=dataset.centers, inputflux=inputflux, astr_hdrs=dataset.wcs, radius=sep, pa=pa, thetas=np.array(thetas), field_dependent_correction=None)
+                        fakes.inject_planet(frames=dataset_orig.input, centers=dataset_orig.centers, inputflux=inputflux, astr_hdrs=dataset_orig.wcs, radius=sep, pa=pa, thetas=np.array(thetas), field_dependent_correction=None)
                         
-                        # Copy pre-KLIP files.
-                        for filepath in filepaths:
-                            src = filepath
-                            dst = os.path.join(output_dir_pk, os.path.split(src)[1])
-                            shutil.copy(src, dst)
-                        for psflib_filepath in psflib_filepaths:
-                            src = psflib_filepath
-                            dst = os.path.join(output_dir_pk, os.path.split(src)[1])
-                            shutil.copy(src, dst)
-                        
-                        # Update content of pre-KLIP files.
-                        filenames = dataset.filenames.copy()
-                        for l, filename in enumerate(filenames):
-                            filenames[l] = filename[:filename.find('_INT')]
-                        for filepath in filepaths:
-                            ww_file = filenames == os.path.split(filepath)[1]
-                            file = os.path.join(output_dir_pk, os.path.split(filepath)[1])
-                            hdul = fits.open(file)
-                            hdul['SCI'].data = dataset.input[ww_file]
-                            hdul.writeto(file, output_verify='fix', overwrite=True)
-                            hdul.close()
-                        
-                        # Update and write observations database.
-                        temp = self.database.obs.copy()
-                        for l in range(len(self.database.obs[key])):
-                            file = os.path.split(self.database.obs[key]['FITSFILE'][l])[1]
-                            self.database.obs[key]['FITSFILE'][l] = os.path.join(output_dir_pk, file)
-                        file = os.path.split(self.database.red[key]['FITSFILE'][j])[1]
-                        file = file[file.find('JWST'):file.find('-KLmodes-all')]
-                        file = os.path.join(output_dir_fm, file + '.dat')
-                        self.database.obs[key].write(file, format='ascii', overwrite=True)
-                        self.database.obs = temp
+                        if save_preklip:
+                            
+                            # Copy pre-KLIP files.
+                            for filepath in filepaths:
+                                src = filepath
+                                dst = os.path.join(output_dir_pk, os.path.split(src)[1])
+                                shutil.copy(src, dst)
+                            for psflib_filepath in psflib_filepaths:
+                                src = psflib_filepath
+                                dst = os.path.join(output_dir_pk, os.path.split(src)[1])
+                                shutil.copy(src, dst)
+                            
+                            # Update content of pre-KLIP files.
+                            filenames = dataset_orig.filenames.copy()
+                            for l, filename in enumerate(filenames):
+                                filenames[l] = filename[:filename.find('_INT')]
+                            for filepath in filepaths:
+                                ww_file = filenames == os.path.split(filepath)[1]
+                                file = os.path.join(output_dir_pk, os.path.split(filepath)[1])
+                                hdul = fits.open(file)
+                                hdul['SCI'].data = dataset_orig.input[ww_file]
+                                hdul.writeto(file, output_verify='fix', overwrite=True)
+                                hdul.close()
+                            
+                            # Update and write observations database.
+                            temp = self.database.obs.copy()
+                            for l in range(len(self.database.obs[key])):
+                                file = os.path.split(self.database.obs[key]['FITSFILE'][l])[1]
+                                self.database.obs[key]['FITSFILE'][l] = os.path.join(output_dir_pk, file)
+                            file = os.path.split(self.database.red[key]['FITSFILE'][j])[1]
+                            file = file[file.find('JWST'):file.find('-KLmodes-all')]
+                            file = os.path.join(output_dir_fm, file + '.dat')
+                            self.database.obs[key].write(file, format='ascii', overwrite=True)
+                            self.database.obs = temp
                         
                         # Reduce companion-subtracted data.
                         mode = self.database.red[key]['MODE'][j]
                         annuli = self.database.red[key]['ANNULI'][j]
                         subsections = self.database.red[key]['SUBSECTS'][j]
-                        parallelized.klip_dataset(dataset=dataset,
+                        parallelized.klip_dataset(dataset=dataset_orig,
                                                   mode=mode,
                                                   outputdir=output_dir_fm,
                                                   fileprefix=fileprefix,
                                                   annuli=annuli,
                                                   subsections=subsections,
-                                                  movement=1,
+                                                  movement=1.,
                                                   numbasis=klmodes,
                                                   maxnumbasis=maxnumbasis,
                                                   calibrate_flux=False,
-                                                  psf_library=dataset.psflib,
-                                                  highpass=False,
+                                                  aligned_center=dataset_orig._centers[0],
+                                                  psf_library=dataset_orig.psflib,
+                                                  highpass=highpass_temp,
                                                   verbose=False)
                         head = fits.getheader(self.database.red[key]['FITSFILE'][j], 0)
                         temp = os.path.join(output_dir_fm, fileprefix + '-KLmodes-all.fits')
@@ -1617,13 +1758,13 @@ class AnalysisTools():
                         hdul[0].header = head
                         hdul.writeto(temp, output_verify='fix', overwrite=True)
                         hdul.close()
+                    
+                    # Restore original pyKLIP dataset.
+                    if subtract:
+                        dataset = dataset_orig
                 
                 # Update source database.
                 self.database.update_src(key, j, tab)
-                
-                # Restore original pyKLIP dataset.
-                if subtract:
-                    dataset = dataset_orig
         
         pass
 
