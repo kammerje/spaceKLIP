@@ -65,6 +65,38 @@ file = open(path, 'r')
 filter_shifts_jarron = json.load(file)
 file.close()
 
+def gaussian_kernel(sigma_x=1, sigma_y=1, theta_degrees=0, n=6):
+    """
+    Generates a 2D Gaussian kernel with specified standard deviations and rotation.
+
+    Parameters:
+    sigma_x (float): Standard deviation of the Gaussian in the x direction.
+    sigma_y (float): Standard deviation of the Gaussian in the y direction.
+    theta_degrees (float): Rotation angle of the Gaussian kernel in degrees.
+
+    Returns:
+    numpy.ndarray: The generated Gaussian kernel.
+    """
+    # Ensure kernel size is at least 3x3 and odd
+    kernel_size_x = max(3, int(n * sigma_x + 1) | 1)  # Ensure odd size
+    kernel_size_y = max(3, int(n * sigma_y + 1) | 1)  # Ensure odd size
+
+    # Convert theta from degrees to radians
+    theta = np.deg2rad(theta_degrees)
+
+    # Create coordinate grids
+    x = np.linspace(-kernel_size_x // 2, kernel_size_x // 2, kernel_size_x)
+    y = np.linspace(-kernel_size_y // 2, kernel_size_y // 2, kernel_size_y)
+    x, y = np.meshgrid(x, y)
+
+    # Rotate the coordinates
+    x_rot = x * np.cos(theta) + y * np.sin(theta)
+    y_rot = -x * np.sin(theta) + y * np.cos(theta)
+
+    kernel = np.exp(-(x_rot ** 2 / (2 * sigma_x ** 2) + y_rot ** 2 / (2 * sigma_y ** 2)))
+    kernel /= kernel.sum()
+    return kernel
+
 class ImageTools():
     """
     The spaceKLIP image manipulation tools class.
@@ -1760,46 +1792,15 @@ class ImageTools():
                         # For Test only, we apply a gaussian kernel to the psf we want to inject to test if we are able
                         # to recover it later when using Analysis.extract_companions
                         if 'sigma_xy' in kwargs.keys() and 'theta_degrees' in kwargs.keys():
-                            def gaussian_kernel(sigma_x=1, sigma_y=1, theta_degrees=0, n=6):
-                                """
-                                Generates a 2D Gaussian kernel with specified standard deviations and rotation.
-
-                                Parameters:
-                                sigma_x (float): Standard deviation of the Gaussian in the x direction.
-                                sigma_y (float): Standard deviation of the Gaussian in the y direction.
-                                theta_degrees (float): Rotation angle of the Gaussian kernel in degrees.
-
-                                Returns:
-                                numpy.ndarray: The generated Gaussian kernel.
-                                """
-                                # Ensure kernel size is at least 3x3 and odd
-                                kernel_size_x = max(3, int(n * sigma_x + 1) | 1)  # Ensure odd size
-                                kernel_size_y = max(3, int(n * sigma_y + 1) | 1)  # Ensure odd size
-
-                                # Convert theta from degrees to radians
-                                theta = np.deg2rad(theta_degrees)
-
-                                # Create coordinate grids
-                                x = np.linspace(-kernel_size_x // 2, kernel_size_x // 2, kernel_size_x)
-                                y = np.linspace(-kernel_size_y // 2, kernel_size_y // 2, kernel_size_y)
-                                x, y = np.meshgrid(x, y)
-
-                                # Rotate the coordinates
-                                x_rot = x * np.cos(theta) + y * np.sin(theta)
-                                y_rot = -x * np.sin(theta) + y * np.cos(theta)
-
-                                kernel = np.exp(-(x_rot ** 2 / (2 * sigma_x ** 2) + y_rot ** 2 / (2 * sigma_y ** 2)))
-                                kernel /= kernel.sum()
-                                return kernel
-
                             sigma_xy = kwargs['sigma_xy']
                             theta_degrees = kwargs['theta_degrees']
-                            kernel = gaussian_kernel(sigma_x=sigma_xy[0], sigma_y=sigma_xy[1], theta_degrees=0,n=6)
+                            kernel = gaussian_kernel(sigma_x=sigma_xy[0], sigma_y=sigma_xy[1], theta_degrees=theta_degrees,n=6)
                             fig,axes=plt.subplots(1,2,figsize=(12, 6))
                             axes[0].set_title("Original PSF")
                             axes[0].imshow(offsetpsf, cmap='gray', origin='lower')
                             offsetpsf = scipy.ndimage.convolve(offsetpsf, kernel)
-                            offsetpsf = scipy.ndimage.rotate(offsetpsf, theta_degrees, reshape=False)
+                            if 'rot_degree' in kwargs.keys() and kwargs['rot_degree'] is not None:
+                                offsetpsf = scipy.ndimage.rotate(offsetpsf, kwargs['rot_degree'], reshape=False)
                             axes[1].set_title(f"Convolved PSF:\nsigma xy: {sigma_xy}, theta: {theta_degrees}")
                             axes[1].imshow(offsetpsf, cmap='gray', origin='lower')
                             path = os.path.join(output_dir, key + '-injpsf.pdf')
