@@ -879,6 +879,7 @@ def run_obs(database,
         itervals = range(nkeys)
 
     groupmaskflag = 0 # Set flag for group masking
+    skip_revert = False # Set flag for skipping a file
     # Loop through concatenations.
     for i in itervals:
         key = keys[i]
@@ -897,29 +898,32 @@ def run_obs(database,
                 continue
 
             # Need to do some preparation steps for group masking before running pipeline
-            if 'mask_groups' in steps:
+            steps['mask_groups'] = steps.setdefault('mask_groups', {})
+            if not steps['mask_groups']:
+                # If mask_groups unspecified or has no parameters, skip by default
+                steps['mask_groups']['skip'] = True
+            else:
+                # If mask_groups specified but skip isn't mentioned, set to False
+                steps['mask_groups'].setdefault('skip', False)
+            steps['mask_groups'].setdefault('mask_method', 'basic')
+            steps['mask_groups'].setdefault('types', ['REF', 'REF_BG'])
+
+            # Check if we are skipping the mask_groups, if not run routine.
+            if not steps['mask_groups']['skip']:
                 if ('mask_array' not in steps['mask_groups']) and (groupmaskflag == 0):
                     # set a flag that we are running the group optimisation
                     groupmaskflag = 1
 
-                # set method to basic if it wasn't set
-                if 'mask_method' not in steps['mask_groups']:
-                    steps['mask_groups']['mask_method'] = 'basic'
-
-                # Also ensure certain files are skipped if necessary
-                if not 'types' in steps['mask_groups']:
-                    steps['mask_groups']['types'] = ['REF', 'REF_BG']
-
-                if database.obs[key]['TYPE'][j] not in steps['mask_groups']['types']:
-                    steps['mask_groups']['skip'] = True
-                elif database.obs[key]['TYPE'][j] not in ['REF', 'REF_BG']:
-                    log.info('  --> Group masking only works for reference images! Skipping...')
-                    steps['mask_groups']['skip'] = True
-                else:
-                    steps['mask_groups']['skip'] = False
+                # Even if we are not skipping the routine, at the moment it only works on
+                # REF/REF_BG data, and don't want to run on unspecified file types
+                file_type = database.obs[key]['TYPE'][j]
+                this_skip = file_type not in steps['mask_groups']['types']
+                if not this_skip and file_type not in ['REF', 'REF_BG']:
+                    log.info('  --> Group masking only works for reference images at this time! Skipping...')
+                    this_skip = True
                     
                 # Don't run function prep function if we don't need to
-                if not steps['mask_groups']['skip']:
+                if not this_skip:
                     if steps['mask_groups']['mask_method'] == 'basic':
                         steps = prepare_group_masking_basic(steps, 
                                                             database.obs[key], 
@@ -931,8 +935,11 @@ def run_obs(database,
                                                                fitspath, 
                                                                fitstype,
                                                                quiet)
-            else:
-                steps['mask_groups'] = {'skip': True}
+                else:
+                    # Even though we are using mask_groups, this particular file will not have any groups masked
+                    # Instruct to skip the step, but keep a record using skip_revert so we can undo for the next file.
+                    steps['mask_groups']['skip'] = True
+                    skip_revert = True
 
             # Get expected output file name
             outfile_name = tail.replace('uncal.fits', 'rateints.fits')
@@ -946,7 +953,12 @@ def run_obs(database,
                 if not quiet: log.info('  --> Coron1Pipeline: processing ' + tail)
                 _ = run_single_file(fitspath, output_dir, steps=steps, 
                                     verbose=verbose, **kwargs)
-                
+
+            if skip_revert:
+                # Need to make sure we don't skip later files if we just didn't want to mask_groups for this file
+                steps['mask_groups']['skip'] = False
+                skip_revert = False
+
             if (j == jtervals[-1]) and (groupmaskflag == 1):
                 '''This is the last file for this concatenation, and the groupmaskflag has been
                 set. This means we need to reset the mask_array back to original state, 
@@ -1061,6 +1073,7 @@ def prepare_group_masking_basic(steps, observations, quiet=False):
 
         # Assign to steps so this stage doesn't get repeated. 
         steps['mask_groups']['mask_array'] = mask_array
+        print(mask_array)
 
     return steps
 
