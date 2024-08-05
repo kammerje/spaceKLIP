@@ -27,6 +27,7 @@ from webbpsf_ext import robust
 from scipy.interpolate import interp1d
 from skimage.metrics import structural_similarity
 
+import warnings
 import logging
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -169,8 +170,10 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
             rate, rateints = (res, None) if self.ramp_fit.skip else res
         else:
             # Use the experimental fitting procedure
-            res = self.run_step(self.experimental_jumpramp, input)
-            rate, rateints = res
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', RuntimeWarning)
+                res = self.run_step(self.experimental_jumpramp, input)
+                rate, rateints = res
         
         if self.rate_int_outliers and rateints is not None:
             # Flag additional outliers by comparing rateints and refit ramp
