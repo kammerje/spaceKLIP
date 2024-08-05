@@ -931,6 +931,8 @@ def run_obs(database,
                                                                fitspath, 
                                                                fitstype,
                                                                quiet)
+            else:
+                steps['mask_groups'] = {'skip': True}
 
             # Get expected output file name
             outfile_name = tail.replace('uncal.fits', 'rateints.fits')
@@ -1167,8 +1169,6 @@ def prepare_group_masking_advanced(steps, observations, refpath, reftype, quiet=
         ref_cubes_shape = ref_cubes_hollow.shape
         mask_4d = np.zeros(ref_cubes_shape, dtype=bool)
         mask_ref = np.tile(mask[0:1], (ref_cubes_shape[0],1,1))
-
-        # FIX THIS TOMORROW! Average rolls? 
 
         for i in range(mask_4d.shape[1]):
             temp = mask_4d[:,i,:,:]
