@@ -30,6 +30,7 @@ from skimage.registration import phase_cross_correlation
 from spaceKLIP import utils as ut
 from spaceKLIP.psf import JWST_PSF
 from spaceKLIP.xara import core
+from spaceKLIP.utils import gaussian_kernel
 from webbpsf_ext import robust
 from webbpsf_ext.coords import dist_image
 from webbpsf_ext.webbpsf_ext_core import _transmission_map
@@ -65,64 +66,32 @@ file = open(path, 'r')
 filter_shifts_jarron = json.load(file)
 file.close()
 
-def gaussian_kernel(sigma_x=1, sigma_y=1, theta_degrees=0, n=6):
-    """
-    Generates a 2D Gaussian kernel with specified standard deviations and rotation.
-
-    Parameters:
-    sigma_x (float): Standard deviation of the Gaussian in the x direction.
-    sigma_y (float): Standard deviation of the Gaussian in the y direction.
-    theta_degrees (float): Rotation angle of the Gaussian kernel in degrees.
-
-    Returns:
-    numpy.ndarray: The generated Gaussian kernel.
-    """
-    # Ensure kernel size is at least 3x3 and odd
-    kernel_size_x = max(3, int(n * sigma_x + 1) | 1)  # Ensure odd size
-    kernel_size_y = max(3, int(n * sigma_y + 1) | 1)  # Ensure odd size
-
-    # Convert theta from degrees to radians
-    theta = np.deg2rad(theta_degrees)
-
-    # Create coordinate grids
-    x = np.linspace(-kernel_size_x // 2, kernel_size_x // 2, kernel_size_x)
-    y = np.linspace(-kernel_size_y // 2, kernel_size_y // 2, kernel_size_y)
-    x, y = np.meshgrid(x, y)
-
-    # Rotate the coordinates
-    x_rot = x * np.cos(theta) + y * np.sin(theta)
-    y_rot = -x * np.sin(theta) + y * np.cos(theta)
-
-    kernel = np.exp(-(x_rot ** 2 / (2 * sigma_x ** 2) + y_rot ** 2 / (2 * sigma_y ** 2)))
-    kernel /= kernel.sum()
-    return kernel
-
 class ImageTools():
     """
     The spaceKLIP image manipulation tools class.
-    
+
     """
-    
+
     def __init__(self,
                  database):
         """
         Initialize the spaceKLIP image manipulation tools class.
-        
+
         Parameters
         ----------
         database : spaceKLIP.Database
             SpaceKLIP database on which the image manipulation steps shall be
             run.
-        
+
         Returns
         -------
         None.
-        
+
         """
-        
+
         # Make an internal alias of the spaceKLIP database class.
         self.database = database
-        
+
         pass
 
     def _get_output_dir(self, subdir):
@@ -177,7 +146,7 @@ class ImageTools():
                       subdir='removed'):
         """
         Remove individual frames from the data.
-        
+
         Parameters
         ----------
         index : int or list of int or dict of list of list of int, optional
@@ -196,40 +165,40 @@ class ImageTools():
         subdir : str, optional
             Name of the directory where the data products shall be saved. The
             default is 'removed'.
-        
+
         Returns
         -------
         None.
-        
+
         """
-        
+
         # Check input.
         if isinstance(index, int):
             index = [index]
-        
+
         # Set output directory.
         output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        
+
         # Loop through concatenations.
         for i, key in enumerate(self.database.obs.keys()):
             log.info('--> Concatenation ' + key)
-            
+
             # Loop through FITS files.
             nfitsfiles = len(self.database.obs[key])
             for j in range(nfitsfiles):
-                
+
                 # Read FITS file and PSF mask.
                 fitsfile = self.database.obs[key]['FITSFILE'][j]
                 data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs = ut.read_obs(fitsfile)
                 maskfile = self.database.obs[key]['MASKFILE'][j]
                 mask = ut.read_msk(maskfile)
                 nints = self.database.obs[key]['NINTS'][j]
-                
+
                 # Skip file types that are not in the list of types.
                 if self.database.obs[key]['TYPE'][j] in types:
-                    
+
                     # Remove frames.
                     head, tail = os.path.split(fitsfile)
                     log.info('  --> Frame removal: ' + tail)
@@ -246,24 +215,24 @@ class ImageTools():
                     if maskoffs is not None:
                         maskoffs = np.delete(maskoffs, index_temp, axis=0)
                     nints = data.shape[0]
-                
+
                 # Write FITS file and PSF mask.
                 head_pri['NINTS'] = nints
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs)
                 maskfile = ut.write_msk(maskfile, mask, fitsfile)
-                
+
                 # Update spaceKLIP database.
                 self.database.update_obs(key, j, fitsfile, maskfile, nints=nints)
-        
+
         pass
-    
+
     def crop_frames(self,
                     npix=1,
                     types=['SCI', 'SCI_BG', 'REF', 'REF_BG'],
                     subdir='cropped'):
         """
         Crop all frames.
-        
+
         Parameters
         ----------
         npix : int or list of four int, optional
@@ -277,32 +246,32 @@ class ImageTools():
         subdir : str, optional
             Name of the directory where the data products shall be saved. The
             default is 'cropped'.
-        
+
         Returns
         -------
         None.
-        
+
         """
-        
+
         # Check input.
         if isinstance(npix, int):
             npix = [npix, npix, npix, npix]  # left, right, bottom, top
         if len(npix) != 4:
             raise UserWarning('Parameter npix must either be an int or a list of four int (left, right, bottom, top)')
-        
+
         # Set output directory.
         output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        
+
         # Loop through concatenations.
         for i, key in enumerate(self.database.obs.keys()):
             log.info('--> Concatenation ' + key)
-            
+
             # Loop through FITS files.
             nfitsfiles = len(self.database.obs[key])
             for j in range(nfitsfiles):
-                
+
                 # Read FITS file and PSF mask.
                 fitsfile = self.database.obs[key]['FITSFILE'][j]
                 data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs = ut.read_obs(fitsfile)
@@ -310,10 +279,10 @@ class ImageTools():
                 mask = ut.read_msk(maskfile)
                 crpix1 = self.database.obs[key]['CRPIX1'][j]
                 crpix2 = self.database.obs[key]['CRPIX2'][j]
-                
+
                 # Skip file types that are not in the list of types.
                 if self.database.obs[key]['TYPE'][j] in types:
-                    
+
                     # Crop frames.
                     head, tail = os.path.split(fitsfile)
                     log.info('  --> Frame cropping: ' + tail)
@@ -326,18 +295,18 @@ class ImageTools():
                     crpix1 -= npix[0]
                     crpix2 -= npix[2]
                     log.info('  --> Frame cropping: old shape = ' + str(sh[1:]) + ', new shape = ' + str(data.shape[1:]))
-                
+
                 # Write FITS file and PSF mask.
                 head_sci['CRPIX1'] = crpix1
                 head_sci['CRPIX2'] = crpix2
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs)
                 maskfile = ut.write_msk(maskfile, mask, fitsfile)
-                
+
                 # Update spaceKLIP database.
                 self.database.update_obs(key, j, fitsfile, maskfile, crpix1=crpix1, crpix2=crpix2)
-        
+
         pass
-    
+
     def pad_frames(self,
                    npix=1,
                    cval=np.nan,
@@ -345,7 +314,7 @@ class ImageTools():
                    subdir='padded'):
         """
         Pad all frames.
-        
+
         Parameters
         ----------
         npix : int or list of four int, optional
@@ -361,32 +330,32 @@ class ImageTools():
         subdir : str, optional
             Name of the directory where the data products shall be saved. The
             default is 'padded'.
-        
+
         Returns
         -------
         None.
-        
+
         """
-        
+
         # Check input.
         if isinstance(npix, int):
             npix = [npix, npix, npix, npix]  # left, right, bottom, top
         if len(npix) != 4:
             raise UserWarning('Parameter npix must either be an int or a list of four int (left, right, bottom, top)')
-        
+
         # Set output directory.
         output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        
+
         # Loop through concatenations.
         for i, key in enumerate(self.database.obs.keys()):
             log.info('--> Concatenation ' + key)
-            
+
             # Loop through FITS files.
             nfitsfiles = len(self.database.obs[key])
             for j in range(nfitsfiles):
-                
+
                 # Read FITS file and PSF mask.
                 fitsfile = self.database.obs[key]['FITSFILE'][j]
                 data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs = ut.read_obs(fitsfile)
@@ -394,10 +363,10 @@ class ImageTools():
                 mask = ut.read_msk(maskfile)
                 crpix1 = self.database.obs[key]['CRPIX1'][j]
                 crpix2 = self.database.obs[key]['CRPIX2'][j]
-                
+
                 # Skip file types that are not in the list of types.
                 if self.database.obs[key]['TYPE'][j] in types:
-                    
+
                     # Crop frames.
                     head, tail = os.path.split(fitsfile)
                     log.info('  --> Frame padding: ' + tail)
@@ -410,25 +379,25 @@ class ImageTools():
                     crpix1 += npix[0]
                     crpix2 += npix[2]
                     log.info('  --> Frame padding: old shape = ' + str(sh[1:]) + ', new shape = ' + str(data.shape[1:]) + ', fill value = %.2f' % cval)
-                
+
                 # Write FITS file and PSF mask.
                 head_sci['CRPIX1'] = crpix1
                 head_sci['CRPIX2'] = crpix2
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs)
                 maskfile = ut.write_msk(maskfile, mask, fitsfile)
-                
+
                 # Update spaceKLIP database.
                 self.database.update_obs(key, j, fitsfile, maskfile, crpix1=crpix1, crpix2=crpix2)
-        
+
         pass
-    
+
     def coadd_frames(self,
                      nframes=None,
                      types=['SCI', 'SCI_BG', 'REF', 'REF_BG'],
                      subdir='coadded'):
         """
         Coadd frames.
-        
+
         Parameters
         ----------
         nframes : int, optional
@@ -440,13 +409,13 @@ class ImageTools():
         subdir : str, optional
             Name of the directory where the data products shall be saved. The
             default is 'coadded'.
-        
+
         Returns
         -------
         None.
-        
+
         """
-        
+
         # Set output directory.
         output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
@@ -454,15 +423,15 @@ class ImageTools():
 
         # The starting value.
         nframes0 = nframes
-        
+
         # Loop through concatenations.
         for i, key in enumerate(self.database.obs.keys()):
             log.info('--> Concatenation ' + key)
-            
+
             # Loop through FITS files.
             nfitsfiles = len(self.database.obs[key])
             for j in range(nfitsfiles):
-                
+
                 # Read FITS file and PSF mask.
                 fitsfile = self.database.obs[key]['FITSFILE'][j]
                 data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs = ut.read_obs(fitsfile)
@@ -470,14 +439,14 @@ class ImageTools():
                 mask = ut.read_msk(maskfile)
                 nints = self.database.obs[key]['NINTS'][j]
                 effinttm = self.database.obs[key]['EFFINTTM'][j]
-                
+
                 # If nframes is not provided, collapse everything.
                 if nframes0 is None:
                     nframes = nints
-                
+
                 # Skip file types that are not in the list of types.
                 if self.database.obs[key]['TYPE'][j] in types:
-                    
+
                     # Coadd frames.
                     head, tail = os.path.split(fitsfile)
                     log.info('  --> Frame coadding: ' + tail)
@@ -497,29 +466,29 @@ class ImageTools():
                     nints = data.shape[0]
                     effinttm *= nframes
                     log.info('  --> Frame coadding: %.0f coadd(s) of %.0f frame(s)' % (ncoadds, nframes))
-                
+
                 # Write FITS file and PSF mask.
                 head_pri['NINTS'] = nints
                 head_pri['EFFINTTM'] = effinttm
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs)
                 maskfile = ut.write_msk(maskfile, mask, fitsfile)
-                
+
                 # Update spaceKLIP database.
                 self.database.update_obs(key, j, fitsfile, maskfile, nints=nints, effinttm=effinttm)
-        
+
         pass
-    
+
     def subtract_median(self,
                         types=['SCI', 'SCI_TA', 'SCI_BG', 'REF', 'REF_TA', 'REF_BG'],
                         method='border',
                         sigma=3.0,
                         borderwidth=32,
                         subdir='medsub'):
-        
+
         """
         Subtract the median from each frame. Clip everything brighter than 5-
         sigma from the background before computing the median.
-        
+
         Parameters
         ----------
         types : list of str, optional
@@ -544,30 +513,30 @@ class ImageTools():
         -------
         None, but writes out new files to subdir and updates database.
          """
-        
+
         # Set output directory.
         output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        
+
         log.info(f'Median subtraction using method={method}')
         # Loop through concatenations.
         for i, key in enumerate(self.database.obs.keys()):
             log.info('--> Concatenation ' + key)
-            
+
             # Loop through FITS files.
             nfitsfiles = len(self.database.obs[key])
             for j in range(nfitsfiles):
-                
+
                 # Read FITS file and PSF mask.
                 fitsfile = self.database.obs[key]['FITSFILE'][j]
                 data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs = ut.read_obs(fitsfile)
                 maskfile = self.database.obs[key]['MASKFILE'][j]
                 mask = ut.read_msk(maskfile)
-                
+
                 # Skip file types that are not in the list of types.
                 if self.database.obs[key]['TYPE'][j] in types:
-                    
+
                     # Subtract median.
                     head, tail = os.path.split(fitsfile)
                     log.info('  --> Median subtraction: ' + tail)
@@ -619,40 +588,40 @@ class ImageTools():
 
                     data -= bg_median
                     log.info('  --> Median subtraction: mean of frame median = %.2f' % np.mean(bg_median))
-                
+
                 # Write FITS file and PSF mask.
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs)
                 maskfile = ut.write_msk(maskfile, mask, fitsfile)
-                
+
                 # Update spaceKLIP database.
                 self.database.update_obs(key, j, fitsfile, maskfile)
-    
+
     def subtract_background(self,
                             nints_per_med=None,
                             subdir='bgsub'):
         """
         Median subtract the corresponding background observations from the SCI and REF
-        data in the spaceKLIP database. 
-        
+        data in the spaceKLIP database.
+
         Parameters
         ----------
         nints_per_med : int
             Number of integrations per median. For example, if you have a target
             + background dataset with 20 integrations each and nints_per_med is
             set to 5, a median of every 5 background images will be subtracted from
-            the corresponding 5 target images. The default is None (i.e. a median 
+            the corresponding 5 target images. The default is None (i.e. a median
             across all images).
 
         subdir : str, optional
             Name of the directory where the data products shall be saved. The
             default is 'bgsub'.
-        
+
         Returns
         -------
         None.
-        
+
         """
-        
+
         # Set output directory.
         output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
@@ -660,24 +629,24 @@ class ImageTools():
 
         # Store the nints_per_med parameter
         orig_nints_per_med = deepcopy(nints_per_med)
-        
+
         # Loop through concatenations.
         for i, key in enumerate(self.database.obs.keys()):
             log.info('--> Concatenation ' + key)
-            
+
             # Find science, reference, and background files.
             ww = np.where((self.database.obs[key]['TYPE'] == 'SCI')
                             | (self.database.obs[key]['TYPE'] == 'REF'))[0]
             ww_sci_bg = np.where(self.database.obs[key]['TYPE'] == 'SCI_BG')[0]
             ww_ref_bg = np.where(self.database.obs[key]['TYPE'] == 'REF_BG')[0]
-            
+
             # Loop through science background files.
             if len(ww_sci_bg) != 0:
                 sci_bg_data = []
                 sci_bg_erro = []
                 sci_bg_pxdq = []
                 for j in ww_sci_bg:
-                    
+
                     # Read science background file.
                     fitsfile = self.database.obs[key]['FITSFILE'][j]
                     data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs = ut.read_obs(fitsfile)
@@ -687,7 +656,7 @@ class ImageTools():
                     if orig_nints_per_med == None:
                         nints_per_med = nints
                     indxs = np.arange(nints)
-                    split_inds = [x+1 for x in indxs if (x+1)%nints_per_med == 0 
+                    split_inds = [x+1 for x in indxs if (x+1)%nints_per_med == 0
                                               and x < (nints-nints_per_med)]
 
                     # Compute median science background.
@@ -708,14 +677,14 @@ class ImageTools():
                     sci_bg_pxdq_split[k] = np.sum(sci_bg_pxdq_split[k] & 1 == 1, axis=0) != 0
             else:
                 sci_bg_data = None
-            
+
             # Loop through reference background files.
             if len(ww_ref_bg) != 0:
                 ref_bg_data = []
                 ref_bg_erro = []
                 ref_bg_pxdq = []
                 for j in ww_ref_bg:
-                    
+
                     # Read reference background file.
                     fitsfile = self.database.obs[key]['FITSFILE'][j]
                     data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs = ut.read_obs(fitsfile)
@@ -725,7 +694,7 @@ class ImageTools():
                     if orig_nints_per_med == None:
                         nints_per_med = nints
                     indxs = np.arange(nints)
-                    split_inds = [x+1 for x in indxs if (x+1)%nints_per_med == 0 
+                    split_inds = [x+1 for x in indxs if (x+1)%nints_per_med == 0
                                                   and x < (nints-nints_per_med)]
                     # Compute median reference background.
                     ref_bg_data += [data]
@@ -745,12 +714,12 @@ class ImageTools():
                     ref_bg_pxdq_split[k] = np.sum(ref_bg_pxdq_split[k] & 1 == 1, axis=0) != 0
             else:
                 ref_bg_data = None
-            
+
             # Check input.
             if sci_bg_data is None and ref_bg_data is None:
                 raise UserWarning('Could not find any background files')
-            
-            # Loop through science and reference files. 
+
+            # Loop through science and reference files.
             for j in ww:
                 # Read FITS file and PSF mask.
                 fitsfile = self.database.obs[key]['FITSFILE'][j]
@@ -769,9 +738,9 @@ class ImageTools():
                 if orig_nints_per_med == None:
                         nints_per_med = nints
                 indxs = np.arange(nints)
-                split_inds = [x+1 for x in indxs if (x+1)%nints_per_med == 0 
+                split_inds = [x+1 for x in indxs if (x+1)%nints_per_med == 0
                                           and x < (nints-nints_per_med)]
-                
+
                 # Subtract background.
                 head, tail = os.path.split(fitsfile)
                 log.info('  --> Background subtraction: ' + tail)
@@ -800,12 +769,12 @@ class ImageTools():
                 # Write FITS file and PSF mask.
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs)
                 maskfile = ut.write_msk(maskfile, mask, fitsfile)
-                
+
                 # Update spaceKLIP database.
                 self.database.update_obs(key, j, fitsfile, maskfile)
-        
+
         pass
-    
+
 
     def fix_bad_pixels(self,
                        method='timemed+dqmed+medfilt',
@@ -885,18 +854,18 @@ class ImageTools():
         subdir : str, optional
             Name of the directory where the data products shall be saved. The
             default is 'bpcleaned'.
-        
+
         Returns
         -------
         None.
 
         """
-        
+
         # Set output directory.
         output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        
+
         # Loop through concatenations.
         for i, key in enumerate(self.database.obs.keys()):
             # if we limit to only processing some concatenations, check whether this concatenation matches the pattern
@@ -904,20 +873,20 @@ class ImageTools():
                 continue
 
             log.info('--> Concatenation ' + key)
-            
+
             # Loop through FITS files.
             nfitsfiles = len(self.database.obs[key])
             for j in range(nfitsfiles):
-                
+
                 # Read FITS file and PSF mask.
                 fitsfile = self.database.obs[key]['FITSFILE'][j]
                 data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs = ut.read_obs(fitsfile)
                 maskfile = self.database.obs[key]['MASKFILE'][j]
                 mask = ut.read_msk(maskfile)
-                
+
                 # Skip file types that are not in the list of types.
                 if self.database.obs[key]['TYPE'][j] in types:
-                    
+
                     # Call bad pixel cleaning routines.
                     pxdq_temp = pxdq.copy()
                     # if self.database.obs[key]['TELESCOP'][j] == 'JWST' and self.database.obs[key]['INSTRUME'][j] == 'NIRCAM':
@@ -951,7 +920,7 @@ class ImageTools():
                     #     pxdq[(pxdq != 0) & np.logical_not(pxdq & 512 == 512) & (pxdq_temp == 0)] = 0
                     # else:
                     # pxdq[(pxdq & 1 == 1) & np.logical_not(pxdq & 512 == 512) & (pxdq_temp == 0)] = 0
-                
+
                 # update the pixel DQ bit flags for the output files.
                 #  The pxdq variable here is effectively just the DO_NOT_USE flag, discarding other bits.
                 #  We want to make a new dq which retains the other bits as much as possible.
@@ -966,12 +935,12 @@ class ImageTools():
                 # Write FITS file and PSF mask.
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, new_dq, head_pri, head_sci, is2d, imshifts, maskoffs)
                 maskfile = ut.write_msk(maskfile, mask, fitsfile)
-                
+
                 # Update spaceKLIP database.
                 self.database.update_obs(key, j, fitsfile, maskfile)
-        
+
         pass
-    
+
     def find_bad_pixels_bpclean(self,
                                 data,
                                 erro,
@@ -981,7 +950,7 @@ class ImageTools():
         """
         Use an iterative sigma clipping algorithm to identify additional bad
         pixels in the data.
-        
+
         Parameters
         ----------
         data : 3D-array
@@ -1007,13 +976,13 @@ class ImageTools():
                 The default is [-1, 0, 1].
 
             The default is {}.
-        
+
         Returns
         -------
         None.
 
         """
-        
+
         # Check input.
         if 'sigclip' not in bpclean_kwargs.keys():
             bpclean_kwargs['sigclip'] = 5.
@@ -1025,7 +994,7 @@ class ImageTools():
             bpclean_kwargs['shift_x'] += [0]
         if 0 not in bpclean_kwargs['shift_y']:
             bpclean_kwargs['shift_y'] += [0]
-        
+
         # Pad data.
         pad_left = np.abs(np.min(bpclean_kwargs['shift_x']))
         pad_right = np.abs(np.max(bpclean_kwargs['shift_x']))
@@ -1040,7 +1009,7 @@ class ImageTools():
         else:
             top = -pad_top
         pad_vals = ((pad_bottom, pad_top), (pad_left, pad_right))
-        
+
         # Find bad pixels using median of neighbors.
         pxdq_orig = pxdq.copy()
         ww = pxdq != 0
@@ -1049,23 +1018,23 @@ class ImageTools():
         erro_temp = erro.copy()
         erro_temp[ww] = np.nan
         for i in range(ww.shape[0]):
-            
+
             # Get median background and standard deviation.
             bg_med = np.nanmedian(data_temp[i])
             bg_std = robust.medabsdev(data_temp[i])
             bg_ind = data[i] < (bg_med + 10. * bg_std)  # clip bright PSFs for final calculation
             bg_med = np.nanmedian(data_temp[i][bg_ind])
             bg_std = robust.medabsdev(data_temp[i][bg_ind])
-            
+
             # Create initial mask of large negative values.
             ww[i] = ww[i] | (data[i] < bg_med - bpclean_kwargs['sigclip'] * bg_std)
-            
+
             # Loop through max 10 iterations.
             for it in range(10):
                 data_temp[i][ww[i]] = np.nan
                 erro_temp[i][ww[i]] = np.nan
-                
-                # Shift data. 
+
+                # Shift data.
                 pad_data = np.pad(data_temp[i], pad_vals, mode='edge')
                 pad_erro = np.pad(erro_temp[i], pad_vals, mode='edge')
                 data_arr = []
@@ -1093,9 +1062,9 @@ class ImageTools():
             pxdq[i][ww[i]] = 1
         print('')
         log.info('  --> Method bpclean: identified %.0f additional bad pixel(s) -- %.2f%%' % (np.sum(pxdq) - np.sum(pxdq_orig), 100. * (np.sum(pxdq) - np.sum(pxdq_orig)) / np.prod(pxdq.shape)))
-        
+
         pass
-    
+
     def find_bad_pixels_custom(self,
                                data,
                                erro,
@@ -1104,7 +1073,7 @@ class ImageTools():
                                custom_kwargs={}):
         """
         Use a custom bad pixel map to flag additional bad pixels in the data.
-        
+
         Parameters
         ----------
         data : 3D-array
@@ -1121,23 +1090,23 @@ class ImageTools():
             match the keys of the observations database and the dictionary
             content must be binary bad pixel maps (1 = bad, 0 = good) with the
             same shape as the corresponding data. The default is {}.
-        
+
         Returns
         -------
         None.
-        
+
         """
-        
+
         # Find bad pixels using median of neighbors.
         pxdq_orig = pxdq.copy()
         pxdq_custom = custom_kwargs[key] != 0
         if pxdq_custom.ndim == pxdq.ndim - 1: # Enable 3D bad pixel map to flag individual frames
-            pxdq_custom = np.array([pxdq_custom] * pxdq.shape[0]) 
+            pxdq_custom = np.array([pxdq_custom] * pxdq.shape[0])
         pxdq[pxdq_custom] = 1
         log.info('  --> Method custom: flagged %.0f additional bad pixel(s) -- %.2f%%' % (np.sum(pxdq) - np.sum(pxdq_orig), 100. * (np.sum(pxdq) - np.sum(pxdq_orig)) / np.prod(pxdq.shape)))
-        
+
         pass
-    
+
     def fix_bad_pixels_timemed(self,
                                data,
                                erro,
@@ -1146,7 +1115,7 @@ class ImageTools():
         """
         Replace pixels which are only bad in some frames with their median
         value from the good frames.
-        
+
         Parameters
         ----------
         data : 3D-array
@@ -1160,13 +1129,13 @@ class ImageTools():
             Keyword arguments for the 'timemed' method. Available keywords are:
             - n/a
             The default is {}.
-        
+
         Returns
         -------
         None.
-        
+
         """
-        
+
         # Fix bad pixels using time median.
         ww = pxdq != 0
         ww_all_bad = np.array([np.sum(ww, axis=0) == ww.shape[0]] * ww.shape[0])
@@ -1177,9 +1146,9 @@ class ImageTools():
         erro[ww_not_all_bad] = np.nan
         erro[ww_not_all_bad] = np.array([np.nanmedian(erro, axis=0)] * erro.shape[0])[ww_not_all_bad]
         pxdq[ww_not_all_bad] = 0
-        
+
         pass
-    
+
     def fix_bad_pixels_dqmed(self,
                              data,
                              erro,
@@ -1188,7 +1157,7 @@ class ImageTools():
         """
         Replace bad pixels with the median value of their surrounding good
         pixels.
-        
+
         Parameters
         ----------
         data : 3D-array
@@ -1209,13 +1178,13 @@ class ImageTools():
                 The default is [-1, 0, 1].
 
             The default is {}.
-        
+
         Returns
         -------
         None.
 
         """
-        
+
         # Check input.
         if 'shift_x' not in dqmed_kwargs.keys():
             dqmed_kwargs['shift_x'] = [-1, 0, 1]
@@ -1225,7 +1194,7 @@ class ImageTools():
             dqmed_kwargs['shift_x'] += [0]
         if 0 not in dqmed_kwargs['shift_y']:
             dqmed_kwargs['shift_y'] += [0]
-        
+
         # Pad data.
         pad_left = np.abs(np.min(dqmed_kwargs['shift_x']))
         pad_right = np.abs(np.max(dqmed_kwargs['shift_x']))
@@ -1240,7 +1209,7 @@ class ImageTools():
         else:
             top = -pad_top
         pad_vals = ((0, 0), (pad_bottom, pad_top), (pad_left, pad_right))
-        
+
         # Fix bad pixels using median of neighbors.
         ww = pxdq != 0
         data_temp = data.copy()
@@ -1268,9 +1237,9 @@ class ImageTools():
             erro[i][ww[i]] = erro_med[ww[i]]
             pxdq[i][ww[i]] = 0
         log.info('  --> Method dqmed: fixing %.0f bad pixel(s) -- %.2f%%' % (np.sum(ww), 100. * np.sum(ww) / np.prod(ww.shape)))
-        
+
         pass
-    
+
     def fix_bad_pixels_medfilt(self,
                                data,
                                erro,
@@ -1278,7 +1247,7 @@ class ImageTools():
                                medfilt_kwargs={}):
         """
         Replace bad pixels with an image plane median filter.
-        
+
         Parameters
         ----------
         data : 3D-array
@@ -1301,11 +1270,11 @@ class ImageTools():
         None.
 
         """
-        
+
         # Check input.
         if 'size' not in medfilt_kwargs.keys():
             medfilt_kwargs['size'] = 4
-        
+
         # Fix bad pixels using median filter.
         ww = pxdq != 0
         log.info('  --> Method medfilt: fixing %.0f bad pixel(s) -- %.2f%%' % (np.sum(ww), 100. * np.sum(ww) / np.prod(ww.shape)))
@@ -1317,16 +1286,16 @@ class ImageTools():
             data[i][ww[i]] = median_filter(data_temp[i], **medfilt_kwargs)[ww[i]]
             erro[i][ww[i]] = median_filter(erro_temp[i], **medfilt_kwargs)[ww[i]]
             pxdq[i][ww[i]] = 0
-        
+
         pass
-    
+
     def replace_nans(self,
                      cval=0.,
                      types=['SCI', 'SCI_BG', 'REF', 'REF_BG'],
                      subdir='nanreplaced'):
         """
         Replace all nans in the data with a constant value.
-        
+
         Parameters
         ----------
         cval : float, optional
@@ -1337,58 +1306,58 @@ class ImageTools():
         subdir : str, optional
             Name of the directory where the data products shall be saved. The
             default is 'nanreplaced'.
-        
+
         Returns
         -------
         None.
-        
+
         """
-        
+
         # Set output directory.
         output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        
+
         # Loop through concatenations.
         for i, key in enumerate(self.database.obs.keys()):
             log.info('--> Concatenation ' + key)
-            
+
             # Loop through FITS files.
             nfitsfiles = len(self.database.obs[key])
             for j in range(nfitsfiles):
-                
+
                 # Read FITS file and PSF mask.
                 fitsfile = self.database.obs[key]['FITSFILE'][j]
                 data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs = ut.read_obs(fitsfile)
                 maskfile = self.database.obs[key]['MASKFILE'][j]
                 mask = ut.read_msk(maskfile)
-                
+
                 # Skip file types that are not in the list of types.
                 if self.database.obs[key]['TYPE'][j] in types:
-                    
+
                     # Replace nans.
                     head, tail = os.path.split(fitsfile)
                     log.info('  --> Nan replacement: ' + tail)
                     ww = np.isnan(data)
                     data[ww] = cval
                     log.info('  --> Nan replacement: replaced %.0f nan pixel(s) with value ' % (np.sum(ww)) + str(cval) + ' -- %.2f%%' % (100. * np.sum(ww)/np.prod(ww.shape)))
-                
+
                 # Write FITS file and PSF mask.
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs)
                 maskfile = ut.write_msk(maskfile, mask, fitsfile)
-                
+
                 # Update spaceKLIP database.
                 self.database.update_obs(key, j, fitsfile, maskfile)
-        
+
         pass
-    
+
     def blur_frames(self,
                     fact='auto',
                     types=['SCI', 'SCI_BG', 'REF', 'REF_BG'],
                     subdir='blurred'):
         """
         Blur frames with a Gaussian filter.
-        
+
         Parameters
         ----------
         fact : 'auto' or float or dict of list of float or None, optional
@@ -1407,36 +1376,36 @@ class ImageTools():
         subdir : str, optional
             Name of the directory where the data products shall be saved. The
             default is 'blurred'.
-        
+
         Returns
         -------
         None.
-        
+
         """
-        
+
         # Set output directory.
         output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        
+
         # Loop through concatenations.
         for i, key in enumerate(self.database.obs.keys()):
             log.info('--> Concatenation ' + key)
-            
+
             # Loop through FITS files.
             Nfitsfiles = len(self.database.obs[key])
             for j in range(Nfitsfiles):
-                
+
                 # Read FITS file.
                 fitsfile = self.database.obs[key]['FITSFILE'][j]
                 data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs = ut.read_obs(fitsfile)
                 maskfile = self.database.obs[key]['MASKFILE'][j]
                 mask = ut.read_msk(maskfile)
-                
+
                 # Skip file types that are not in the list of types.
                 fact_temp = None
                 if self.database.obs[key]['TYPE'][j] in types:
-                    
+
                     # Blur frames.
                     head, tail = os.path.split(fitsfile)
                     log.info('  --> Frame blurring: ' + tail)
@@ -1465,7 +1434,7 @@ class ImageTools():
                             mask = gaussian_filter(mask, fact_temp)
                     else:
                         log.info('  --> Frame blurring: skipped')
-                
+
                 # Write FITS file.
                 if fact_temp is None:
                     pass
@@ -1473,22 +1442,22 @@ class ImageTools():
                     head_pri['BLURFWHM'] = fact_temp * np.sqrt(8. * np.log(2.)) # Factor to convert from sigma to FWHM
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs)
                 maskfile = ut.write_msk(maskfile, mask, fitsfile)
-                
+
                 # Update spaceKLIP database.
                 if fact_temp is None:
                     self.database.update_obs(key, j, fitsfile, maskfile, blurfwhm=np.nan)
                 else:
                     self.database.update_obs(key, j, fitsfile, maskfile, blurfwhm=fact_temp * np.sqrt(8. * np.log(2.)))
-        
+
         pass
-    
+
     def hpf(self,
             size='auto',
             types=['SCI', 'SCI_BG', 'REF', 'REF_BG'],
             subdir='filtered'):
         """
         Blur frames with a Gaussian filter.
-        
+
         Parameters
         ----------
         fact : 'auto' or float or dict of list of float or None, optional
@@ -1507,36 +1476,36 @@ class ImageTools():
         subdir : str, optional
             Name of the directory where the data products shall be saved. The
             default is 'blurred'.
-        
+
         Returns
         -------
         None.
-        
+
         """
-        
+
         # Set output directory.
         output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        
+
         # Loop through concatenations.
         for i, key in enumerate(self.database.obs.keys()):
             log.info('--> Concatenation ' + key)
-            
+
             # Loop through FITS files.
             Nfitsfiles = len(self.database.obs[key])
             for j in range(Nfitsfiles):
-                
+
                 # Read FITS file.
                 fitsfile = self.database.obs[key]['FITSFILE'][j]
                 data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs = ut.read_obs(fitsfile)
                 maskfile = self.database.obs[key]['MASKFILE'][j]
                 mask = ut.read_msk(maskfile)
-                
+
                 # Skip file types that are not in the list of types.
                 fact_temp = None
                 if self.database.obs[key]['TYPE'][j] in types:
-                    
+
                     # High-pass filter frames.
                     head, tail = os.path.split(fitsfile)
                     log.info('  --> Frame filtering: ' + tail)
@@ -1551,7 +1520,7 @@ class ImageTools():
                         erro = parallelized.high_pass_filter_imgs(erro, numthreads=None, filtersize=fourier_sigma_size)
                     else:
                         log.info('  --> Frame filtering: skipped')
-                
+
                 # Write FITS file.
                 if size_temp is None:
                     pass
@@ -1559,10 +1528,10 @@ class ImageTools():
                     head_pri['HPFSIZE'] = fact_temp
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs)
                 maskfile = ut.write_msk(maskfile, mask, fitsfile)
-                
+
                 # Update spaceKLIP database.
                 self.database.update_obs(key, j, fitsfile, maskfile)
-        
+
         pass
 
     def inject_companions(self,
@@ -1777,34 +1746,19 @@ class ImageTools():
                         mcomp = mstar[filt] -2.5*np.log10(guess_flux)
                         offsetpsf *= fzero[filt] / 10 ** (mcomp / 2.5) / 1e6 / pxar  # MJy/sr
 
-                        ## Question: am I injecting companions too bright?! Shouldn't I rescale them to the distance
-                        ## of the target? Why doesen't work if I try.
-                        # parallax_mas=12.1549
-                        # parallax_arcseconds = parallax_mas / 1000
-                        # distance_parsecs = 1 / parallax_arcseconds
-                        # offsetpsf *= (1 / distance_parsecs) ** 2
-
-
                         # Apply scale factor to incorporate the coronagraphic
                         # mask througput.
                         offsetpsf *= scale_factor
 
                         # For Test only, we apply a gaussian kernel to the psf we want to inject to test if we are able
                         # to recover it later when using Analysis.extract_companions
-                        if 'sigma_xy' in kwargs.keys() and 'theta_degrees' in kwargs.keys():
+                        if 'sigma_xy' in kwargs.keys():
+                            if 'theta_degrees' not in kwargs.keys():
+                                kwargs['theta_degrees'] = 0
                             sigma_xy = kwargs['sigma_xy']
                             theta_degrees = kwargs['theta_degrees']
                             kernel = gaussian_kernel(sigma_x=sigma_xy[0], sigma_y=sigma_xy[1], theta_degrees=theta_degrees,n=6)
-                            fig,axes=plt.subplots(1,2,figsize=(12, 6))
-                            axes[0].set_title("Original PSF")
-                            axes[0].imshow(offsetpsf, cmap='gray', origin='lower')
                             offsetpsf = scipy.ndimage.convolve(offsetpsf, kernel)
-                            if 'rot_degree' in kwargs.keys() and kwargs['rot_degree'] is not None:
-                                offsetpsf = scipy.ndimage.rotate(offsetpsf, kwargs['rot_degree'], reshape=False)
-                            axes[1].set_title(f"Convolved PSF:\nsigma xy: {sigma_xy}, theta: {theta_degrees}")
-                            axes[1].imshow(offsetpsf, cmap='gray', origin='lower')
-                            path = os.path.join(output_dir, key + '-injpsf.pdf')
-                            fig.savefig(path)
 
                         # Injected PSF needs to be a 3D array that matches dataset
                         inj_psf_3d = np.array([offsetpsf for k in range(dataset.input.shape[0])])
@@ -1837,56 +1791,56 @@ class ImageTools():
 
         This information will eventually be applied as updates into the SIAF,
         after which point this step will become not necessary.
-        
+
         Returns
         -------
         None.
-        
+
         """
-        
+
         # Loop through concatenations.
         for i, key in enumerate(self.database.obs.keys()):
             log.info('--> Concatenation ' + key)
-            
+
             # Loop through FITS files.
             for j in range(len(self.database.obs[key])):
-                
+
                 # Skip file types that are not NIRCam coronagraphy.
                 if self.database.obs[key]['EXP_TYPE'][j] == 'NRC_CORON':
-                    
+
                     # Read FITS file and PSF mask.
                     fitsfile = self.database.obs[key]['FITSFILE'][j]
                     data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs = ut.read_obs(fitsfile)
                     maskfile = self.database.obs[key]['MASKFILE'][j]
                     mask = ut.read_msk(maskfile)
-                    
+
                     # Update current reference pixel position.
                     head, tail = os.path.split(fitsfile)
                     log.info('  --> Update NIRCam coronagraphy centers: ' + tail)
-                    
+
                     # Get current reference pixel position.
                     crpix1 = self.database.obs[key]['CRPIX1'][j]
                     crpix2 = self.database.obs[key]['CRPIX2'][j]
-                    
+
                     # Get SIAF reference pixel position.
                     siaf = pysiaf.Siaf('NIRCAM')
                     apsiaf = siaf[self.database.obs[key]['APERNAME'][j]]
                     xsciref, ysciref = (apsiaf.XSciRef, apsiaf.YSciRef)
-                    
+
                     # Get true mask center from Jarron.
                     try:
                         crpix1_jarron, crpix2_jarron = crpix_jarron[self.database.obs[key]['APERNAME'][j]]
                     except KeyError:
                         log.warning('  --> Update NIRCam coronagraphy centers: no true mask center found for ' + self.database.obs[key]['APERNAME'][j])
                         crpix1_jarron, crpix2_jarron = xsciref, ysciref
-                    
+
                     # Get filter shift from Jarron.
                     try:
                         xshift_jarron, yshift_jarron = filter_shifts_jarron[self.database.obs[key]['FILTER'][j]]
                     except KeyError:
                         log.warning('  --> Update NIRCam coronagraphy centers: no filter shift found for ' + self.database.obs[key]['FILTER'][j])
                         xshift_jarron, yshift_jarron = 0., 0.
-                    
+
                     # Determine offset between SIAF reference pixel position
                     # and true mask center from Jarron and update current
                     # reference pixel position. Account for filter-dependent
@@ -1895,12 +1849,12 @@ class ImageTools():
                     log.info('  --> Update NIRCam coronagraphy centers: old = (%.2f, %.2f), new = (%.2f, %.2f)' % (crpix1, crpix2, crpix1 + xoff, crpix2 + yoff))
                     crpix1 += xoff
                     crpix2 += yoff
-                    
+
                     # Update spaceKLIP database.
                     self.database.update_obs(key, j, fitsfile, maskfile, crpix1=crpix1, crpix2=crpix2)
-        
+
         pass
-    
+
     def recenter_frames(self,
                         method='fourier',
                         subpix_first_sci_only=False,
@@ -1914,7 +1868,7 @@ class ImageTools():
         behind the coronagraphic mask for the first SCI frame. Then, shift all
         other SCI and REF frames by the same amount. For MIRI coronagraphy, do
         nothing. For all other data types, simply recenter the host star PSF.
-        
+
         Parameters
         ----------
         method : 'fourier' or 'spline' (not recommended), optional
@@ -1939,45 +1893,45 @@ class ImageTools():
         subdir : str, optional
             Name of the directory where the data products shall be saved. The
             default is 'recentered'.
-        
+
         Returns
         -------
         None.
-        
+
         """
-        
+
         # Update NIRCam coronagraphy centers, i.e., change SIAF CRPIX position
         # to true mask center determined by Jarron.
         # self.update_nircam_centers()  # shall be run purposely by the user
-        
+
         # Set output directory.
         output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        
+
         # Loop through concatenations.
         for i, key in enumerate(self.database.obs.keys()):
             log.info('--> Concatenation ' + key)
-            
+
             # Find science and reference files.
             ww_sci = np.where(self.database.obs[key]['TYPE'] == 'SCI')[0]
             ww_sci_ta = np.where(self.database.obs[key]['TYPE'] == 'SCI_TA')[0]
             ww_ref = np.where(self.database.obs[key]['TYPE'] == 'REF')[0]
             ww_ref_ta = np.where(self.database.obs[key]['TYPE'] == 'REF_TA')[0]
-            
+
             # Loop through FITS files.
             ww_all = np.append(ww_sci, ww_ref)
             ww_all = np.append(ww_all, ww_sci_ta)
             ww_all = np.append(ww_all, ww_ref_ta)
             shifts_all = []
             for j in ww_all:
-                
+
                 # Read FITS file and PSF mask.
                 fitsfile = self.database.obs[key]['FITSFILE'][j]
                 data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs = ut.read_obs(fitsfile)
                 maskfile = self.database.obs[key]['MASKFILE'][j]
                 mask = ut.read_msk(maskfile)
-                
+
                 # Recenter frames. Use different algorithms based on data type.
                 head, tail = os.path.split(fitsfile)
                 log.info('  --> Recenter frames: ' + tail)
@@ -1985,14 +1939,14 @@ class ImageTools():
                     raise UserWarning('Please replace nan pixels before attempting to recenter frames')
                 shifts = []  # shift between star position and image center (data.shape // 2)
                 maskoffs_temp = []  # shift between star and coronagraphic mask position
-                
+
                 # SCI and REF data.
                 if j in ww_sci or j in ww_ref:
-                    
+
                     # NIRCam coronagraphy.
                     if self.database.obs[key]['EXP_TYPE'][j] in ['NRC_CORON']:
                         for k in range(data.shape[0]):
-                            
+
                             # For the first SCI frame, get the star position
                             # and the shift between the star and coronagraphic
                             # mask position.
@@ -2004,7 +1958,7 @@ class ImageTools():
                                                                                   spectral_type=spectral_type,
                                                                                   date=head_pri['DATE-BEG'],
                                                                                   output_dir=output_dir)
-                            
+
                             # Apply the same shift to all SCI and REF frames.
                             shifts += [np.array([-(xc - data.shape[-1]//2), -(yc - data.shape[-2]//2)])]
                             maskoffs_temp += [np.array([xshift, yshift])]
@@ -2017,12 +1971,12 @@ class ImageTools():
                         yoffset = self.database.obs[key]['YOFFSET'][j] - self.database.obs[key]['YOFFSET'][ww_sci[0]]  # arcsec
                         crpix1 = data.shape[-1]//2 + 1  # 1-indexed
                         crpix2 = data.shape[-2]//2 + 1  # 1-indexed
-                    
+
                     # MIRI coronagraphy.
                     elif self.database.obs[key]['EXP_TYPE'][j] in ['MIR_4QPM', 'MIR_LYOT']:
                         log.warning('  --> Recenter frames: not implemented for MIRI coronagraphy, skipped')
                         for k in range(data.shape[0]):
-                            
+
                             # Do nothing.
                             shifts += [np.array([0., 0.])]
                             maskoffs_temp += [np.array([0., 0.])]
@@ -2030,11 +1984,11 @@ class ImageTools():
                         yoffset = self.database.obs[key]['YOFFSET'][j]  # arcsec
                         crpix1 = self.database.obs[key]['CRPIX1'][j]  # 1-indexed
                         crpix2 = self.database.obs[key]['CRPIX2'][j]  # 1-indexed
-                    
+
                     # Other data types.
                     else:
                         for k in range(data.shape[0]):
-                            
+
                             # Recenter SCI and REF frames to subpixel precision
                             # using the 'BCEN' routine from XARA.
                             # https://github.com/fmartinache/xara
@@ -2047,7 +2001,7 @@ class ImageTools():
                             else:
                                 shifts += [np.array([0., 0.])]
                                 maskoffs_temp += [np.array([0., 0.])]
-                            
+
                             # Recenter SCI and REF frames to integer pixel
                             # precision by rolling the image.
                             ww_max = np.unravel_index(np.argmax(data[k]), data[k].shape)
@@ -2061,11 +2015,11 @@ class ImageTools():
                         yoffset = 0.  # arcsec
                         crpix1 = data.shape[-1]//2 + 1  # 1-indexed
                         crpix2 = data.shape[-2]//2 + 1  # 1-indexed
-                
+
                 # TA data.
                 if j in ww_sci_ta or j in ww_ref_ta:
                     for k in range(data.shape[0]):
-                        
+
                         # Center TA frames on the nearest pixel center. This
                         # pixel center is not necessarily the image center,
                         # which is why a subsequent integer pixel recentering
@@ -2078,7 +2032,7 @@ class ImageTools():
                         maskoffs_temp += [np.array([0., 0.])]
                         data[k] = ut.imshift(data[k], [shifts[k][0], shifts[k][1]], method=method, kwargs=kwargs)
                         erro[k] = ut.imshift(erro[k], [shifts[k][0], shifts[k][1]], method=method, kwargs=kwargs)
-                        
+
                         # Recenter TA frames to integer pixel precision by
                         # rolling the image.
                         ww_max = np.unravel_index(np.argmax(data[k]), data[k].shape)
@@ -2103,14 +2057,14 @@ class ImageTools():
                     maskoffs += maskoffs_temp
                 else:
                     maskoffs = maskoffs_temp
-                
+
                 # Compute shift distances.
                 dist = np.sqrt(np.sum(shifts[:, :2]**2, axis=1))  # pix
                 dist *= self.database.obs[key]['PIXSCALE'][j] * 1000  # mas
                 head, tail = os.path.split(self.database.obs[key]['FITSFILE'][j])
                 log.info('  --> Recenter frames: ' + tail)
                 log.info('  --> Recenter frames: median required shift = %.2f mas' % np.median(dist))
-                
+
                 # Write FITS file and PSF mask.
                 head_pri['XOFFSET'] = xoffset #arcsec
                 head_pri['YOFFSET'] = yoffset #arcsec
@@ -2118,12 +2072,12 @@ class ImageTools():
                 head_sci['CRPIX2'] = crpix2
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs)
                 maskfile = ut.write_msk(maskfile, mask, fitsfile)
-                
+
                 # Update spaceKLIP database.
                 self.database.update_obs(key, j, fitsfile, maskfile, xoffset=xoffset, yoffset=yoffset, crpix1=crpix1, crpix2=crpix2)
-        
+
         pass
-    
+
     @plt.style.context('spaceKLIP.sk_style')
     def find_nircam_centers(self,
                             data0,
@@ -2139,7 +2093,7 @@ class ImageTools():
         """
         Find the star position behind the coronagraphic mask using a WebbPSF
         model.
-        
+
         Parameters
         ----------
         data0 : list
@@ -2165,7 +2119,7 @@ class ImageTools():
         use_coeff : bool, optional
             Use pre-computed coefficients to generate the WebbPSF model. The
             default is False.
-        
+
         Returns
         -------
         xc : float
@@ -2176,16 +2130,16 @@ class ImageTools():
             X-shift between star and coronagraphic mask position (pix).
         yshift : float
             Y-shift between star and coronagraphic mask position (pix).
-        
+
         """
-        
+
         # Generate host star spectrum.
         spectrum = webbpsf_ext.stellar_spectrum(spectral_type)
-        
+
         # Get true mask center.
         crpix1 = self.database.obs[key]['CRPIX1'][j] - 1  # 0-indexed
         crpix2 = self.database.obs[key]['CRPIX2'][j] - 1  # 0-indexed
-        
+
         # Initialize JWST_PSF object. Use odd image size so that PSF is
         # centered in pixel center.
         log.info('  --> Recenter frames: generating WebbPSF image for absolute centering (this might take a while)')
@@ -2199,11 +2153,11 @@ class ImageTools():
             'sp': spectrum
         }
         psf = JWST_PSF(APERNAME, FILTER, **kwargs)
-        
+
         # Get SIAF reference pixel position.
         apsiaf = psf.inst_on.siaf_ap
         xsciref, ysciref = (apsiaf.XSciRef, apsiaf.YSciRef)
-        
+
         # Generate model PSF. Apply offset between SIAF reference pixel
         # position and true mask center.
         xoff = (crpix1 + 1) - xsciref
@@ -2296,10 +2250,10 @@ class ImageTools():
             log.info(f" Plot saved in {output_file}")
             # plt.show()
             plt.close(fig)
-        
+
         # Return star position.
         return xc, yc, median_xshift, median_yshift
-    
+
     @plt.style.context('spaceKLIP.sk_style')
     def align_frames(self,
                      method='fourier',
@@ -2311,14 +2265,14 @@ class ImageTools():
                      subdir='aligned'):
         """
         Align all SCI and REF frames to the first SCI frame.
-        
+
         Parameters
         ----------
         method : 'fourier' or 'spline' (not recommended), optional
             Method for shifting the frames. The default is 'fourier'.
         align_algo : 'leastsq' or 'header'
             Algorithm to determine the alignment offsets. Default is 'leastsq',
-            'header' assumes perfect header offsets. 
+            'header' assumes perfect header offsets.
         mask_override : str, optional
             Mask some pixels when cross correlating for shifts
         msk_shp : int, optional
@@ -2331,13 +2285,13 @@ class ImageTools():
         subdir : str, optional
             Name of the directory where the data products shall be saved. The
             default is 'aligned'.
-        
+
         Returns
         -------
         None.
-        
+
         """
-        
+
         # Set output directory.
         output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
@@ -2379,23 +2333,23 @@ class ImageTools():
             mask[center[1]-z:center[1]+z,:] = True
 
             return mask
-        
+
         # Loop through concatenations.
         database_temp = deepcopy(self.database.obs)
         for i, key in enumerate(self.database.obs.keys()):
             log.info('--> Concatenation ' + key)
-            
+
             # Find science and reference files.
             ww_sci = np.where(self.database.obs[key]['TYPE'] == 'SCI')[0]
             if len(ww_sci) == 0:
                 raise UserWarning('Could not find any science files')
             ww_ref = np.where(self.database.obs[key]['TYPE'] == 'REF')[0]
             ww_all = np.append(ww_sci, ww_ref)
-            
+
             # Loop through FITS files.
             shifts_all = []
             for j in ww_all:
-                
+
                 # Read FITS file and PSF mask.
                 fitsfile = self.database.obs[key]['FITSFILE'][j]
                 data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs = ut.read_obs(fitsfile)
@@ -2425,7 +2379,7 @@ class ImageTools():
                     raise UserWarning('Please replace nan pixels before attempting to align frames')
                 shifts = []
                 for k in range(data.shape[0]):
-                    
+
                     # Take the first science frame as reference frame.
                     if j == ww_sci[0] and k == 0:
                         ref_image = data[k].copy()
@@ -2435,7 +2389,7 @@ class ImageTools():
                         crpix1 = self.database.obs[key]['CRPIX1'][j] #pixels
                         crpix2 = self.database.obs[key]['CRPIX2'][j] #pixels
                         pxsc = self.database.obs[key]['PIXSCALE'][j] #arcsec
-                    
+
                     # Align all other SCI and REF frames to the first science
                     # frame.
                     else:
@@ -2470,7 +2424,7 @@ class ImageTools():
                             pp = p0
 
                     # Append shifts to array and apply shift to image
-                    # using defined method. 
+                    # using defined method.
                     shifts += [np.array([pp[0], pp[1], pp[2]])]
                     if j != ww_sci[0] or k != 0:
                         data[k] = ut.imshift(data[k], [shifts[k][0], shifts[k][1]], method=method, kwargs=kwargs)
@@ -2490,7 +2444,7 @@ class ImageTools():
                     maskoffs -= shifts[:, :-1]
                 else:
                     maskoffs = -shifts[:, :-1]
-                
+
                 # Compute shift distances.
                 dist = np.sqrt(np.sum(shifts[:, :2]**2, axis=1))  # pix
                 dist *= self.database.obs[key]['PIXSCALE'][j]*1000  # mas
@@ -2507,26 +2461,26 @@ class ImageTools():
                     ww = np.where(ww == True)[0]
                     if align_algo != 'header':
                         log.warning('  --> The following frames might not be properly aligned: '+str(ww))
-                
+
                 # Write FITS file and PSF mask.
                 head_pri['XOFFSET'] = xoffset #arcseconds
-                head_pri['YOFFSET'] = yoffset #arcseconds 
+                head_pri['YOFFSET'] = yoffset #arcseconds
                 head_sci['CRPIX1'] = crpix1
                 head_sci['CRPIX2'] = crpix2
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs)
                 maskfile = ut.write_msk(maskfile, mask, fitsfile)
-                
+
                 # Update spaceKLIP database.
                 self.database.update_obs(key, j, fitsfile, maskfile, xoffset=xoffset, yoffset=yoffset, crpix1=crpix1, crpix2=crpix2)
-            
+
             # Plot science frame alignment.
             colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
             fig = plt.figure(figsize=(6.4, 4.8))
             ax = plt.gca()
             for index, j in enumerate(ww_sci):
-                ax.scatter(shifts_all[index][:, 0] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
-                           shifts_all[index][:, 1] * self.database.obs[key]['PIXSCALE'][j] * 1000, 
-                           s=5, color=colors[index%len(colors)], marker='o', 
+                ax.scatter(shifts_all[index][:, 0] * self.database.obs[key]['PIXSCALE'][j] * 1000,
+                           shifts_all[index][:, 1] * self.database.obs[key]['PIXSCALE'][j] * 1000,
+                           s=5, color=colors[index%len(colors)], marker='o',
                            label='PA = %.0f deg' % self.database.obs[key]['ROLL_REF'][j])
             ax.axhline(0., color='gray', lw=1, zorder=-1)  # set zorder to ensure lines are drawn behind all the scatter points
             ax.axvline(0., color='gray', lw=1, zorder=-1)
