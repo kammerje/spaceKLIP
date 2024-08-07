@@ -863,7 +863,7 @@ class ImageTools():
                     # Make copy of DQ array filled with zeros, i.e. all good pixels
                     pxdq_temp = np.zeros_like(pxdq)
                 else:
-                    pxdq_temp = pxdq
+                    pxdq_temp = pxdq.copy()
                 
                 # Skip file types that are not in the list of types.
                 if self.database.obs[key]['TYPE'][j] in types:
@@ -1072,7 +1072,7 @@ class ImageTools():
         pass
 
     def clean_bad_pixels(self,
-                       method='timemed+medfilt',
+                       method='timemed+localmed+medfilt',
                        timemed_kwargs={},
                        localmed_kwargs={},
                        medfilt_kwargs={},
@@ -1093,13 +1093,29 @@ class ImageTools():
             - timemed: replace pixels which are only bad in some frames with
                        their median value from the good frames.
 
+            - localmed: replace bad pixels with the median value of their
+                        surrounding good pixels.
+
             - medfilt: replace bad pixels with an image plane median filter.
 
-            The default is 'timemed+medfilt'.
+            - interp2d: replace bad pixels with an interpolation of neighbouring pixels.
+
+            The default is 'timemed+localmed+medfilt'.
         timemed_kwargs : dict, optional
             Keyword arguments for the 'timemed' method. Available keywords are:
 
             - n/a
+
+            The default is {}.
+        localmed_kwargs: dict, optional
+            Keyword arguments for the 'localmed' method. Available keywords are:
+
+            - shift_x : list of int, optional
+                Pixels in x-direction from which the median shall be computed.
+                The default is [-1, 0, 1].
+            - shift_y : list of int, optional
+                Pixels in y-direction from which the median shall be computed.
+                The default is [-1, 0, 1].
 
             The default is {}.
         medfilt_kwargs : dict, optional
@@ -1109,6 +1125,14 @@ class ImageTools():
                 Kernel size of the median filter to be used. The default is 4.
 
             The default is {}.
+        interp2d_kwargs: dict, optional
+            Keyword arguments for the 'interp2d' method. Available keywords are:
+
+            - size : int, optional
+                Kernel size of the median filter to be used. The default is 4.
+
+            The default is {}.
+
         types : list of str, optional
             List of data types for which bad pixels shall be identified and
             fixed. The default is ['SCI', 'SCI_TA', 'SCI_BG', 'REF', 'REF_TA',
@@ -1155,6 +1179,9 @@ class ImageTools():
 
                 # Make copy of DQ array
                 pxdq_temp = pxdq.copy()
+
+                # Don't want to clean anything that isn't bad or is a non-science pixel
+                pxdq_temp = (np.isnan(data) | (pxdq_temp & 1 == 1)) & np.logical_not(pxdq_temp & 512 == 512)
                 
                 # Skip file types that are not in the list of types.
                 if self.database.obs[key]['TYPE'][j] in types:
@@ -1163,8 +1190,12 @@ class ImageTools():
                     spatial = ['localmed', 'medfilt', 'interp2d']
                     # If localmed and medfilt in cleaning, can't run both
                     if len(set(method_split) & set(spatial)) > 1:
-                        log.info('  --> The localmed/medfilt/interp2d methods are redundant,')
-                        log.info('      only the first method you listed will be affect the data.')
+                        log.info('  --> WARNING: Multiple spatial cleaning routines detected!')
+                        log.info('  --> The localmed/medfilt/interp2d methods clean data in a similar manner!')
+                        log.info('  --> medfilt and interp2d are redundant')
+                        log.info('      --> only the first method listed will affect the data')
+                        log.info('  --> localmed is partially redundant with other methods')
+                        log.info('      --> if run first, large clusters of bad pixels may not be fully cleaned.')
 
                     # Loop over methods
                     for k in range(len(method_split)):
