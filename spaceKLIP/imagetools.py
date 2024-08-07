@@ -769,6 +769,7 @@ class ImageTools():
     
     def find_bad_pixels(self,
                         method='dqarr',
+                        overwrite_dq=True,
                         dqarr_kwargs={},
                         sigclip_kwargs={},
                         custom_kwargs={},
@@ -794,6 +795,10 @@ class ImageTools():
             - custom: use a custom bad pixel map
 
             The default is 'dqarr'.
+        overwrite_dq : bool, optional
+            Toggle to start a new empty DQ array, or built upon the existing array.
+
+            The default is True
         dqarr_kwargs : dict, optional
             Keyword arguments for the 'dqarr' identification method. Available keywords are:
             
@@ -854,8 +859,11 @@ class ImageTools():
                 maskfile = self.database.obs[key]['MASKFILE'][j]
                 mask = ut.read_msk(maskfile)
 
-                # Make copy of DQ array filled with zeros, i.e. all good pixels
-                pxdq_temp = np.zeros_like(pxdq)
+                if overwrite_dq:
+                    # Make copy of DQ array filled with zeros, i.e. all good pixels
+                    pxdq_temp = np.zeros_like(pxdq)
+                else:
+                    pxdq_temp = pxdq
                 
                 # Skip file types that are not in the list of types.
                 if self.database.obs[key]['TYPE'][j] in types:
