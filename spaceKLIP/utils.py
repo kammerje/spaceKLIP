@@ -1079,6 +1079,38 @@ def interpret_dq_value(dq_value):
         return {'GOOD'}
     return dqflags_to_mnemonics(dq_value, pixel)
 
+def gaussian_kernel(sigma_x=1, sigma_y=1, theta_degrees=0, n=6):
+    """
+    Generates a 2D Gaussian kernel with specified standard deviations and rotation.
+
+    Parameters:
+    sigma_x (float): Standard deviation of the Gaussian in the x direction.
+    sigma_y (float): Standard deviation of the Gaussian in the y direction.
+    theta_degrees (float): Rotation angle of the Gaussian kernel in degrees.
+
+    Returns:
+    numpy.ndarray: The generated Gaussian kernel.
+    """
+    # Ensure kernel size is at least 3x3 and odd
+    kernel_size_x = max(3, int(n * sigma_x + 1) | 1)  # Ensure odd size
+    kernel_size_y = max(3, int(n * sigma_y + 1) | 1)  # Ensure odd size
+
+    # Convert theta from degrees to radians
+    theta = np.deg2rad(theta_degrees)
+
+    # Create coordinate grids
+    x = np.linspace(-kernel_size_x // 2, kernel_size_x // 2, kernel_size_x)
+    y = np.linspace(-kernel_size_y // 2, kernel_size_y // 2, kernel_size_y)
+    x, y = np.meshgrid(x, y)
+
+    # Rotate the coordinates
+    x_rot = x * np.cos(theta) + y * np.sin(theta)
+    y_rot = -x * np.sin(theta) + y * np.cos(theta)
+
+    kernel = np.exp(-(x_rot ** 2 / (2 * sigma_x ** 2) + y_rot ** 2 / (2 * sigma_y ** 2)))
+    kernel /= kernel.sum()
+    return kernel
+
 def get_dqmask(dqarr, bitvalues):
     """Get DQ mask from DQ array
     
