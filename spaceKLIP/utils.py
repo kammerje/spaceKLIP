@@ -826,7 +826,7 @@ def get_filter_info(instrument, timeout=1, do_svo=True, return_more=False):
             'MIRI'  : webbpsf.MIRI,
         }
         inst = inst_func[iname_upper]()
-        filter_list = inst.filter_list
+        filter_list = inst.filter_list 
 
     wave, weff = ({}, {})
     if do_svo:
@@ -1032,6 +1032,32 @@ def cube_outlier_detection(data, sigma_cut=10, nint_min=10):
     indbad = ~indgood
 
     return indbad
+
+def bg_minimize(par,X,Y,bgmaskfile):
+    """Simple minimisation function for Godoy background subtraction
+    
+    Parameters
+    ----------
+    par : int
+        Variable to scale background array
+    X : ndarray
+        Science / reference image
+    Y : ndarray
+        Background image
+    bgmaskfile : str
+        File which provides a mask to select which pixels
+        to compare during minimisation
+
+    Returns
+    -------
+    Sum of the squares of the residuals between images X and Y. 
+    """
+    mask = pyfits.getdata(bgmaskfile)
+    indices = np.where(mask == 1)
+    X0 = X[indices]
+    Y0 = Y[indices]
+    Z0 = X0 - Y0*par/100
+    return np.nansum(np.sqrt(Z0**2))
 
 def interpret_dq_value(dq_value):
     """Interpret DQ value using DQ definition
