@@ -37,15 +37,11 @@ With the Anaconda environment created, move to the cloned directory and install 
 ::
 
 	cd where/you/saved/the/git/repo
+	conda install conda-forge::git-lfs	
 	pip install -r requirements.txt
 	pip install -e .
 
-NEW AS OF 1 JUNE 2023: you also need to make the custom PSF mask files before running spaceKLIP for the first time:
-
-::
-
-	cd spaceKLIP/
-        python make_psfmasks.py
+Note that installing git-lfs from pip does not work as of 25 June 2024.
 
 Finally, and very importantly, you will need to download the reference files and set the environment variables supporting the functioning of :code:`webbpsf` and :code:`webbpsf_ext`. Instructions to do this can be found at the respective package websites (`WebbPSF <https://webbpsf.readthedocs.io/en/latest/installation.html#installing-the-required-data-files>`_, `WebbPSF_ext <https://github.com/JarronL/webbpsf_ext>`_). Ensure that if you edit your .bashrc file, close and reopen your terminal to fully apply the changes (:code:`source ~/.bashrc` or :code:`source ~/.zshrc` may also work).
 

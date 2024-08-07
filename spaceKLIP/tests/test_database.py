@@ -5,7 +5,6 @@ import spaceKLIP
 
 import pytest
 
-
 testdatapath = os.getenv('SPACEKLIP_TEST_DATA_PATH')
 testpath = os.path.dirname(os.path.abspath(__file__))
 
