@@ -31,6 +31,8 @@ import shutil
 from pyklip import klip, parallelized
 from pyklip.instruments.JWST import JWSTData
 from scipy.ndimage import fourier_shift, gaussian_filter, rotate
+from scipy.optimize import minimize
+from scipy.ndimage import gaussian_filter, rotate, convolve
 from scipy.ndimage import shift as spline_shift
 from scipy.interpolate import interp1d
 from spaceKLIP import utils as ut
@@ -38,7 +40,9 @@ from spaceKLIP.psf import get_offsetpsf, JWST_PSF
 from spaceKLIP.starphot import get_stellar_magnitudes, read_spec_file
 from spaceKLIP.pyklippipeline import get_pyklip_filepaths
 from spaceKLIP.utils import write_starfile, set_surrounded_pixels, pop_pxar_kw
+from spaceKLIP.imagetools import gaussian_kernel
 
+from functools import partial
 from webbpsf.constants import JWST_CIRCUMSCRIBED_DIAMETER
 
 from tqdm.auto import trange
@@ -985,7 +989,7 @@ class AnalysisTools():
                 
                 # Make copy of the original pyKLIP dataset.
                 dataset_orig = copy.deepcopy(dataset)
-                
+
                 # Get index of desired KL mode.
                 klmodes = self.database.red[key]['KLMODES'][j].split(',')
                 klmodes = np.array([int(temp) for temp in klmodes])
@@ -1037,56 +1041,138 @@ class AnalysisTools():
                                           oversample=2,
                                           sp=sed,
                                           use_coeff=False)
-                
-                # Loop through companions.
-                tab = Table(names=('ID',
-                                   'RA',
-                                   'RA_ERR',
-                                   'DEC',
-                                   'DEC_ERR',
-                                   'FLUX_JY',
-                                   'FLUX_JY_ERR',
-                                   'FLUX_SI',
-                                   'FLUX_SI_ERR',
-                                   'FLUX_SI_ALT',
-                                   'FLUX_SI_ALT_ERR',
-                                   'CON',
-                                   'CON_ERR',
-                                   'DELMAG',
-                                   'DELMAG_ERR',
-                                   'APPMAG',
-                                   'APPMAG_ERR',
-                                   'MSTAR',
-                                   'MSTAR_ERR',
-                                   'SNR',
-                                   'LN(Z/Z0)',
-                                   'TP_CORONMSK',
-                                   'TP_COMSUBST',
-                                   'FITSFILE'),
-                            dtype=('int',
-                                   'float',
-                                   'float',
-                                   'float',
-                                   'float',
-                                   'float',
-                                   'float',
-                                   'float',
-                                   'float',
-                                   'float',
-                                   'float',
-                                   'float',
-                                   'float',
-                                   'float',
-                                   'float',
-                                   'float',
-                                   'float',
-                                   'float',
-                                   'float',
-                                   'float',
-                                   'float',
-                                   'float',
-                                   'float',
-                                   'object'))
+
+                # NOTE: if convgauss kwarg is True, it will enable the fit by a psf convolved by a 2D Gaussian
+                # function during the mcmc fit.
+                if 'convgauss' in kwargs.keys():
+                    convgauss = kwargs['convgauss']
+                else:
+                    convgauss = False
+
+                if convgauss:
+                    if not all(x in kwargs.keys() for x in ['sigma_xrange', 'sigma_yrange', 'theta_range']):
+                        gauss_param_bounds = [1,1,1]
+                    else:
+                        gauss_param_bounds = [kwargs['sigma_xrange'], kwargs['sigma_yrange'], kwargs['theta_range']]
+
+                    if not all(x in kwargs.keys() for x in ['sigma_xguess', 'sigma_yguess', 'theta_guess']):
+                        gauss_param_guesses = [0.3,0.3,0]
+                    else:
+                        gauss_param_guesses = [kwargs['sigma_xrange'], kwargs['sigma_yrange'], kwargs['theta_range']]
+
+
+                    # Loop through companions.
+                    tab = Table(names=('ID',
+                                       'RA',
+                                       'RA_ERR',
+                                       'DEC',
+                                       'DEC_ERR',
+                                       'FLUX_JY',
+                                       'FLUX_JY_ERR',
+                                       'FLUX_SI',
+                                       'FLUX_SI_ERR',
+                                       'FLUX_SI_ALT',
+                                       'FLUX_SI_ALT_ERR',
+                                       'CON',
+                                       'CON_ERR',
+                                       'DELMAG',
+                                       'DELMAG_ERR',
+                                       'APPMAG',
+                                       'APPMAG_ERR',
+                                       'MSTAR',
+                                       'MSTAR_ERR',
+                                       'SNR',
+                                       'LN(Z/Z0)',
+                                       'TP_CORONMSK',
+                                       'TP_COMSUBST',
+                                       'FITSFILE',
+                                       'SIGMA_X',
+                                       'SIGMA_X_ERROR',
+                                       'SIGMA_Y',
+                                       'SIGMA_Y_ERROR',
+                                       'THETA',
+                                       'THETA_ERROR'),
+                                dtype=('int',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'object',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float'))
+                else:
+                    gauss_param_bounds=None
+                    # Loop through companions.
+                    tab = Table(names=('ID',
+                                       'RA',
+                                       'RA_ERR',
+                                       'DEC',
+                                       'DEC_ERR',
+                                       'FLUX_JY',
+                                       'FLUX_JY_ERR',
+                                       'FLUX_SI',
+                                       'FLUX_SI_ERR',
+                                       'FLUX_SI_ALT',
+                                       'FLUX_SI_ALT_ERR',
+                                       'CON',
+                                       'CON_ERR',
+                                       'DELMAG',
+                                       'DELMAG_ERR',
+                                       'APPMAG',
+                                       'APPMAG_ERR',
+                                       'MSTAR',
+                                       'MSTAR_ERR',
+                                       'SNR',
+                                       'LN(Z/Z0)',
+                                       'TP_CORONMSK',
+                                       'TP_COMSUBST',
+                                       'FITSFILE'),
+                                dtype=('int',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'float',
+                                       'object'))
                 for k in range(len(companions)):
                     output_dir_comp = os.path.join(output_dir_kl, 'C%.0f' % (k + 1))
                     if not os.path.exists(output_dir_comp):
@@ -1358,7 +1444,7 @@ class AnalysisTools():
                         # Remove a constant background level from the
                         # KLIP-subtracted data before fitting the FM PSF?
                         if remove_background:
-                            
+
                             # Initialize pyKLIP FMAstrometry class.
                             fma = fitpsf.FMAstrometry(guess_sep=guess_sep,
                                                       guess_pa=guess_pa,
@@ -1373,12 +1459,12 @@ class AnalysisTools():
                             corr_len_label = r'$l$'
                             fma.set_kernel(fitkernel, [corr_len_guess], [corr_len_label])
                             fma.set_bounds(xrange, yrange, frange, [corr_len_range])
-                            
+
                             # Make sure that the noise map is invertible.
                             noise_map_max = np.nanmax(fma.noise_map)
                             fma.noise_map[np.isnan(fma.noise_map)] = noise_map_max
                             fma.noise_map[fma.noise_map == 0.] = noise_map_max
-                            
+
                             # Set MCMC parameters from kwargs.
                             if 'nwalkers' not in kwargs.keys() or kwargs['nwalkers'] is None:
                                 nwalkers = 50
@@ -1396,7 +1482,7 @@ class AnalysisTools():
                                 nthreads = 4
                             else:
                                 nthreads = kwargs['nthreads']
-                            
+
                             # Run the MCMC fit.
                             chain_output = os.path.join(output_dir_kl, key + '-bka_chain_c%.0f' % (k + 1) + '.pkl')
                             fma.fit_astrometry(nwalkers=nwalkers,
@@ -1404,7 +1490,7 @@ class AnalysisTools():
                                                nsteps=nsteps,
                                                numthreads=nthreads,
                                                chain_output=chain_output)
-                            
+
                             # Estimate the background level from those pixels
                             # in the KLIP-subtracted data which have a small
                             # flux in the best fit FM PSF.
@@ -1429,14 +1515,19 @@ class AnalysisTools():
                             thresh = np.nanmax(psf_shift) / 150.
                             bg = np.nanmedian(stamp[np.abs(psf_shift) < thresh])
                             data_frame -= bg
-                        
+
                         # MCMC.
                         if fitmethod == 'mcmc':
-                            
+
                             # Initialize pyKLIP FMAstrometry class.
                             fma = fitpsf.FMAstrometry(guess_sep=guess_sep,
                                                       guess_pa=guess_pa,
-                                                      fitboxsize=boxsize)
+                                                      fitboxsize=boxsize,
+                                                      convgauss=convgauss,
+                                                      guess_sigma_x=gauss_param_guesses[0],
+                                                      guess_sigma_y=gauss_param_guesses[1],
+                                                      guess_theta=gauss_param_guesses[2]
+                                                      )
                             fma.generate_fm_stamp(fm_image=fm_frame,
                                                   fm_center=[fm_centx, fm_centy],
                                                   padding=5)
@@ -1446,7 +1537,7 @@ class AnalysisTools():
                                                     exclusion_radius=exclr)
                             corr_len_label = r'$l$'
                             fma.set_kernel(fitkernel, [corr_len_guess], [corr_len_label])
-                            fma.set_bounds(xrange, yrange, frange, [corr_len_range])
+                            fma.set_bounds(xrange, yrange, frange, [corr_len_range],gauss_param_bounds=gauss_param_bounds)
                             
                             # Make sure that the noise map is invertible.
                             noise_map_max = np.nanmax(fma.noise_map)
@@ -1470,7 +1561,7 @@ class AnalysisTools():
                                 nthreads = 4
                             else:
                                 nthreads = kwargs['nthreads']
-                            
+
                             # Run the MCMC fit.
                             chain_output = os.path.join(output_dir_kl, key + '-bka_chain_c%.0f' % (k + 1) + '.pkl')
                             fma.fit_astrometry(nwalkers=nwalkers,
@@ -1481,7 +1572,7 @@ class AnalysisTools():
                             
                             # Plot the MCMC fit results.
                             path = os.path.join(output_dir_kl, key + '-corner_c%.0f' % (k + 1) + '.pdf')
-                            fig = fma.make_corner_plot()
+                            fig = fma.make_corner_plot(**kwargs)
                             fig.savefig(path)
                             plt.close(fig)
                             path = os.path.join(output_dir_kl, key + '-model_c%.0f' % (k + 1) + '.pdf')
@@ -1511,30 +1602,63 @@ class AnalysisTools():
                             appmag = mstar[filt] + delmag  # vegamag
                             appmag_err = np.sqrt(mstar_err_temp**2 + delmag_err**2)
                             fitsfile = os.path.join(output_dir_kl, key + '-fitpsf_c%.0f' % (k + 1) + '.fits')
-                            tab.add_row((k + 1,
-                                         fma.raw_RA_offset.bestfit * pxsc_arcsec,  # arcsec
-                                         fma.raw_RA_offset.error * pxsc_arcsec,  # arcsec
-                                         fma.raw_Dec_offset.bestfit * pxsc_arcsec,  # arcsec
-                                         fma.raw_Dec_offset.error * pxsc_arcsec,  # arcsec
-                                         flux_jy,
-                                         flux_jy_err,
-                                         flux_si,
-                                         flux_si_err,
-                                         flux_si_alt,
-                                         flux_si_alt_err,
-                                         fma.raw_flux.bestfit * guess_flux,
-                                         fma.raw_flux.error * guess_flux,
-                                         delmag,  # mag
-                                         delmag_err,  # mag
-                                         appmag,  # mag
-                                         appmag_err,  # mag
-                                         mstar[filt],  # mag
-                                         mstar_err_temp,  # mag
-                                         np.nan,
-                                         np.nan,
-                                         scale_factor_avg,
-                                         tp_comsubst,
-                                         fitsfile))
+                            if convgauss:
+                                tab.add_row((k + 1,
+                                             fma.raw_RA_offset.bestfit * pxsc_arcsec,  # arcsec
+                                             fma.raw_RA_offset.error * pxsc_arcsec,  # arcsec
+                                             fma.raw_Dec_offset.bestfit * pxsc_arcsec,  # arcsec
+                                             fma.raw_Dec_offset.error * pxsc_arcsec,  # arcsec
+                                             flux_jy,
+                                             flux_jy_err,
+                                             flux_si,
+                                             flux_si_err,
+                                             flux_si_alt,
+                                             flux_si_alt_err,
+                                             fma.raw_flux.bestfit * guess_flux,
+                                             fma.raw_flux.error * guess_flux,
+                                             delmag,  # mag
+                                             delmag_err,  # mag
+                                             appmag,  # mag
+                                             appmag_err,  # mag
+                                             mstar[filt],  # mag
+                                             mstar_err_temp,  # mag
+                                             np.nan,
+                                             np.nan,
+                                             scale_factor_avg,
+                                             tp_comsubst,
+                                             fitsfile,
+                                             fma.fit_sigma_x.bestfit,
+                                             fma.fit_sigma_x.error,
+                                             fma.fit_sigma_y.bestfit,
+                                             fma.fit_sigma_y.error,
+                                             fma.fit_theta.bestfit,
+                                             fma.fit_theta.error,
+                                             ))
+                            else:
+                                tab.add_row((k + 1,
+                                             fma.raw_RA_offset.bestfit * pxsc_arcsec,  # arcsec
+                                             fma.raw_RA_offset.error * pxsc_arcsec,  # arcsec
+                                             fma.raw_Dec_offset.bestfit * pxsc_arcsec,  # arcsec
+                                             fma.raw_Dec_offset.error * pxsc_arcsec,  # arcsec
+                                             flux_jy,
+                                             flux_jy_err,
+                                             flux_si,
+                                             flux_si_err,
+                                             flux_si_alt,
+                                             flux_si_alt_err,
+                                             fma.raw_flux.bestfit * guess_flux,
+                                             fma.raw_flux.error * guess_flux,
+                                             delmag,  # mag
+                                             delmag_err,  # mag
+                                             appmag,  # mag
+                                             appmag_err,  # mag
+                                             mstar[filt],  # mag
+                                             mstar_err_temp,  # mag
+                                             np.nan,
+                                             np.nan,
+                                             scale_factor_avg,
+                                             tp_comsubst,
+                                             fitsfile))
                             
                             # Write the FM PSF to a file for future plotting.
                             ut.write_fitpsf_images(fma, fitsfile, tab[-1])
@@ -1641,7 +1765,7 @@ class AnalysisTools():
                         # Otherwise.
                         else:
                             raise NotImplementedError()
-                        
+
                         # Plot estimated background level.
                         if remove_background:
                             f, ax = plt.subplots(1, 4, figsize=(4 * 6.4, 4.8))
@@ -1652,7 +1776,7 @@ class AnalysisTools():
                             text.set_path_effects([PathEffects.withStroke(linewidth=3, foreground='white')])
                             ax[0].set_title('Residuals before bg. subtraction')
                             p1 = ax[1].imshow(np.abs(psf_shift) < thresh, origin='lower')
-                            c1 = plt.colorbar(p1, ax=ax[1])    
+                            c1 = plt.colorbar(p1, ax=ax[1])
                             ax[1].set_title('Pixels used for bg. estimation')
                             ax[2].hist(stamp[np.abs(psf_shift) < thresh], bins=20)
                             ax[2].axvline(bg, ls='--', color='black', label='bg. = %.2f' % bg)
@@ -1675,10 +1799,10 @@ class AnalysisTools():
                             path = os.path.join(output_dir_kl, key + '-bgest_c%.0f' % (k + 1) + '.pdf')
                             plt.savefig(path)
                             plt.close()
-                    
+
                     # Subtract companion before fitting the next one.
                     if subtract or inject:
-                        
+
                         # Subtract companion from pyKLIP dataset. Use offset
                         # PSFs w/o high-pass filtering because this will be
                         # applied by the klip_dataset routine below.
@@ -1700,7 +1824,7 @@ class AnalysisTools():
                         fakes.inject_planet(frames=dataset_orig.input, centers=dataset_orig.centers, inputflux=inputflux, astr_hdrs=dataset_orig.wcs, radius=sep, pa=pa, thetas=np.array(thetas), field_dependent_correction=None)
                         
                         if save_preklip:
-                            
+
                             # Copy pre-KLIP files.
                             for filepath in filepaths:
                                 src = filepath
@@ -1710,7 +1834,7 @@ class AnalysisTools():
                                 src = psflib_filepath
                                 dst = os.path.join(output_dir_pk, os.path.split(src)[1])
                                 shutil.copy(src, dst)
-                            
+
                             # Update content of pre-KLIP files.
                             filenames = dataset_orig.filenames.copy()
                             for l, filename in enumerate(filenames):
@@ -1722,7 +1846,7 @@ class AnalysisTools():
                                 hdul['SCI'].data = dataset_orig.input[ww_file]
                                 hdul.writeto(file, output_verify='fix', overwrite=True)
                                 hdul.close()
-                            
+
                             # Update and write observations database.
                             temp = self.database.obs.copy()
                             for l in range(len(self.database.obs[key])):
@@ -1758,15 +1882,71 @@ class AnalysisTools():
                         hdul[0].header = head
                         hdul.writeto(temp, output_verify='fix', overwrite=True)
                         hdul.close()
-                    
+
                     # Restore original pyKLIP dataset.
                     if subtract:
                         dataset = dataset_orig
-                
+
                 # Update source database.
                 self.database.update_src(key, j, tab)
         
         pass
+
+def loss_function(params,
+                  offset_psf,
+                  target_array):
+    '''
+    Loss function for the minimization process in fit_for_extended_sources.
+    '''
+    sigma_x, sigma_y, theta_degrees = params
+    kernel = gaussian_kernel(sigma_x=sigma_x, sigma_y=sigma_y, theta_degrees=theta_degrees, n=6)
+    convolved_image = convolve(offset_psf, kernel)
+
+    mse = np.mean((target_array - convolved_image) ** 2)
+    return mse
+
+def estimate_extended(target,
+                     offset_psf,
+                     bounds=None,
+                     initial_params=None,
+                     method='Powell'):
+    '''
+    Fit for extended sources with a 2D gaussian kernel.
+
+    Parameters
+    ----------
+    target: 2-D array.
+        The target tile containing the companion to be fitted.
+    offset_psf: 2-D array.
+        The PSF of the companion to be used for the fit.
+    bounds: list of 2-D arrays.
+        list of 3 elements, containing the min, max values for the sigma_x, sigma_y and theta_degrees parameters
+        for the 2-D gaussian kernel. If None, use default bounds = [(0.01, 20),(0.01, 20),(-180, 180)]
+    initial_params: list of floats
+        list of initial guesses for the sigma_x, sigma_y and theta_degrees parameters
+        for the 2-D gaussian kernel. If None, use default initial_params = [0.1, 0.1, 0]
+    method: str
+        Minimization method. Default is 'Powell'.
+
+    Returns
+    -------
+    result: array
+        Array containing the fitted  parameters from the minimization process
+
+    '''
+    if initial_params is None:
+        initial_params = [0.1, 0.1, 0]
+
+    if bounds is None:
+        # Bounds for parameters (sigma_x, sigma_y, theta, intensity)
+        bounds = [(0.01, 20),  # sigma_x should be positive and within a reasonable range
+                  (0.01, 20),  # sigma_y should be positive and within a reasonable range
+                  (-180, 180)]  # theta should be between -180 and 180 degrees
+
+    # Use partial to pass target_array as a fixed argument to the loss function
+    loss_with_target = partial(loss_function, offset_psf=offset_psf, target_array=target)
+    result = minimize(loss_with_target, initial_params, method=method, bounds=bounds)
+    return result
 
 def inject_and_recover(raw_dataset,
                        injection_psf, 
