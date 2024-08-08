@@ -219,9 +219,9 @@ def run_obs(database,
                             ww = [k for k in range(len(dataset._filenames)) if fitsfile in dataset._filenames[k]]
                             hdul = fits.open(datapath)
                             if dataset.allints.shape[1] == 1:
-                                hdul[0].data = np.median(dataset.allints[:, :, ww, :, :], axis=(1, 2))
+                                hdul[0].data = np.nanmedian(dataset.allints[:, :, ww, :, :], axis=(1, 2))
                             else:
-                                hdul[0].data = np.median(dataset.allints[:, :, ww, :, :], axis=2)
+                                hdul[0].data = np.nanmedian(dataset.allints[:, :, ww, :, :], axis=2)
                             hdul[0].header['NINTS'] = database.obs[key]['NINTS'][j]
                             hdul[0].header['WCSAXES'] = head_sci['WCSAXES']
                             hdul[0].header['CRVAL1'] = head_sci['CRVAL1']
