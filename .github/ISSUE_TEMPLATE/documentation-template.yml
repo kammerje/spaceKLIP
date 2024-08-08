@@ -1,0 +1,43 @@
+name: Documentation Issue or Request
+description: Report issues or suggest improvements to the spaceKLIP documentation.
+title: "[Documentation]: "
+labels: ["documentation"]
+body:
+  - type: checkboxes
+    id: verify
+    attributes:
+      label: Check Existing Issues
+      description: |
+        Before submitting this issue, please confirm the following:
+      options:
+        - label: Yes, I have checked existing issues to ensure this problem hasn't already been reported.
+          required: true
+  - type: textarea
+    id: problem-description
+    attributes:
+      label: Describe the issue or suggest an improvement
+      description: |
+        Please describe any issues with our documentation or suggest improvements. Your feedback is appreciated!
+      placeholder: Describe the issue or suggest improvements here.
+    validations:
+      required: true
+  - type: textarea
+    id: page-urls
+    attributes:
+      label: URLs of the documentation pages (if applicable)
+      description: |
+        If the issue is specific to particular pages, provide the URLs here.
+        This helps us locate and address the issue more efficiently. You can list multiple URLs if needed.
+      placeholder: Enter the URLs.
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context or information
+      description: |
+        Provide any additional context or information that might be relevant to this issue or suggestion.
+      placeholder: Add any additional context or information here.
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping us improve our documentation! After you submit this issue, check this GitHub thread for any updates/responses from the spaceKLIP team.
+

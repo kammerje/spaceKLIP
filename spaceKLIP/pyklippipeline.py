@@ -22,6 +22,7 @@ from pyklip import parallelized, rdi
 from pyklip.instruments.JWST import JWSTData
 from pyklip.klip import _rotate_wcs_hdr
 from spaceKLIP.psf import get_transmission
+from spaceKLIP.utils import pop_pxar_kw
 
 import logging
 log = logging.getLogger(__name__)
@@ -106,6 +107,8 @@ def run_obs(database,
         kwargs_temp['save_rolls'] = False
     else:
         kwargs_temp['save_ints'] = kwargs_temp['save_rolls']
+    if 'highpass' not in kwargs_temp.keys():
+        kwargs_temp['highpass'] = False
     
     # Set output directory.
     output_dir = os.path.join(database.output_dir, subdir)
@@ -127,20 +130,26 @@ def run_obs(database,
         if 'maxnumbasis' not in kwargs_temp.keys() or kwargs_temp['maxnumbasis'] is None:
             kwargs_temp['maxnumbasis'] = maxnumbasis
         
-        # Initialize pyKLIP dataset.
-        dataset = JWSTData(filepaths, psflib_filepaths)
-        kwargs_temp['dataset'] = dataset
-        kwargs_temp['aligned_center'] = dataset._centers[0]
-        kwargs_temp['psf_library'] = dataset.psflib
-        
         # Run KLIP subtraction.
         for mode in kwargs['mode']:
+            
+            # Initialize pyKLIP dataset.
+            pop_pxar_kw(np.append(filepaths, psflib_filepaths))
+            dataset = JWSTData(filepaths, psflib_filepaths, highpass=kwargs_temp['highpass'])
+            kwargs_temp['dataset'] = dataset
+            kwargs_temp['aligned_center'] = dataset._centers[0]
+            kwargs_temp['psf_library'] = dataset.psflib
+            kwargs_temp['mode'] = mode
+            
+            # Can run pyKLIP multiple times on the same dataset with different
+            # annuli and subsections.
             for annu in kwargs['annuli']:
                 for subs in kwargs['subsections']:
                     log.info('  --> pyKLIP: mode = ' + mode + ', annuli = ' + str(annu) + ', subsections = ' + str(subs))
                     fileprefix = mode + '_NANNU' + str(annu) + '_NSUBS' + str(subs) + '_' + key
+                    
+                    # Add/update ramaining keywords.
                     kwargs_temp['fileprefix'] = fileprefix
-                    kwargs_temp['mode'] = mode
                     kwargs_temp['annuli'] = annu
                     kwargs_temp['subsections'] = subs
                     kwargs_temp_temp = kwargs_temp.copy()
@@ -175,6 +184,10 @@ def run_obs(database,
                     hdul[0].header['APERNAME'] = database.obs[key]['APERNAME'][ww_sci[0]]
                     hdul[0].header['PPS_APER'] = database.obs[key]['PPS_APER'][ww_sci[0]]
                     hdul[0].header['PIXSCALE'] = database.obs[key]['PIXSCALE'][ww_sci[0]]
+                    try:
+                        hdul[0].header['PIXAR_SR'] = database.obs[key]['PIXAR_SR'][ww_sci[0]]
+                    except:
+                        pass
                     hdul[0].header['MODE'] = mode
                     hdul[0].header['ANNULI'] = annu
                     hdul[0].header['SUBSECTS'] = subs

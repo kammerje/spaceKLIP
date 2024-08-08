@@ -1,0 +1,14 @@
+name: "Set Issue Label and Assignee"
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: Naturalclar/issue-action@v2.0.2
+        with:
+          title-or-body: "both"
+          parameters: '[ {"keywords": ["NIRCam Stage 1/2 Pipeline"], "labels": ["NIRCam"], "assignees": ["AarynnCarter","mperrin","JarronL"]}, {"keywords": ["MIRI Stage 1/2 Pipeline"], "labels": ["MIRI"], "assignees": ["AarynnCarter","mperrin","JarronL"]}, {"keywords": ["Image Tools"], "labels": ["image tools"], "assignees": ["kglidic","kammerje","AarynnCarter","wbalmer","kdlawson","JarronL"]}, {"keywords": ["PSF Subtraction"], "labels": ["PSF subtraction"], "assignees": ["kdlawson","wbalmer","AarynnCarter"]}, {"keywords": ["Analysis Tools"], "labels": ["analysis tools"], "assignees": ["kdlawson","wbalmer","AarynnCarter","juliengirard","kammerje","kglidic"]}, {"keywords": ["Other"], "labels": ["other"], "assignees": ["kdlawson","AarynnCarter","juliengirard","JarronL","kglidic"]}, {"keywords": ["Documentation"], "labels": ["documentation"], "assignees": ["AarynnCarter","mperrin","kglidic"]}]'
+          github-token: "${{ secrets.GITHUB_TOKEN }}"

@@ -213,4 +213,9 @@ tests/ultranest
 tests/species_*
 
 # setuptools-scm
+
+# PyCharm files
+.idea/
+
+
 spaceKLIP/_version.py

@@ -10,18 +10,24 @@ import os
 import pdb
 import sys
 
-import astropy.io.fits as pyfits
+import astropy.io.fits as fits
 import numpy as np
 
 from tqdm import trange
 
 from jwst.lib import reffile_utils
+from jwst.stpipe import Step
+from jwst import datamodels
 from jwst.datamodels import dqflags, RampModel, SaturationModel
 from jwst.pipeline import Detector1Pipeline, Image2Pipeline, Coron3Pipeline
 from .fnoise_clean import kTCSubtractStep, OneOverfStep
-
+from .expjumpramp import ExperimentalJumpRampStep
 from webbpsf_ext import robust
 
+from scipy.interpolate import interp1d
+from skimage.metrics import structural_similarity
+
+import warnings
 import logging
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -70,8 +76,10 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
         
         """
 
+        self.step_defs['mask_groups'] = MaskGroupsStep
         self.step_defs['subtract_ktc'] = kTCSubtractStep
         self.step_defs['subtract_1overf'] = OneOverfStep
+        self.step_defs['experimental_jumpramp'] = ExperimentalJumpRampStep
         
         # Initialize Detector1Pipeline class.
         super(Coron1Pipeline_spaceKLIP, self).__init__(**kwargs)
@@ -123,17 +131,17 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
             input = self.run_step(self.group_scale, input)
             input = self.run_step(self.dq_init, input)
             input = self.run_step(self.saturation, input)
-            input = self.run_step(self.ipc, input)
+            #input = self.run_step(self.ipc, input) Not run for MIRI
             input = self.run_step(self.firstframe, input)
             input = self.run_step(self.lastframe, input)
             input = self.run_step(self.reset, input)
             input = self.run_step(self.linearity, input)
             input = self.run_step(self.rscd, input)
             input = self.run_step(self.dark_current, input)
-            input = self.do_refpix(input)
-            input = self.run_step(self.charge_migration, input)
+            input = self.run_step(self.refpix, input)
+            #input = self.run_step(self.charge_migration, input) Not run for MIRI
             input = self.run_step(self.jump, input)
-            # TODO: Include same / similar subtract_1overf step???
+            input = self.run_step(self.mask_groups, input)
         else:
             input = self.run_step(self.group_scale, input)
             input = self.run_step(self.dq_init, input)
@@ -147,6 +155,7 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
             input = self.run_step(self.charge_migration, input)
             input = self.run_step(self.jump, input)
             input = self.run_step(self.subtract_ktc, input)
+            #1overf Only present in NIR data
             if 'groups' in self.stage_1overf:
                 input = self.run_step(self.subtract_1overf, input)
         
@@ -155,19 +164,28 @@ class Coron1Pipeline_spaceKLIP(Detector1Pipeline):
             self.save_model(input, suffix='ramp')
         
         # Run ramp fitting & gain scale correction.
-        res = self.run_step(self.ramp_fit, input, save_results=False)
-        rate, rateints = (res, None) if self.ramp_fit.skip else res
+        if not self.experimental_jumpramp.use:
+            # Use the default ramp fitting procedure
+            res = self.run_step(self.ramp_fit, input, save_results=False)
+            rate, rateints = (res, None) if self.ramp_fit.skip else res
+        else:
+            # Use the experimental fitting procedure
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', RuntimeWarning)
+                res = self.run_step(self.experimental_jumpramp, input)
+                rate, rateints = res
+        
         if self.rate_int_outliers and rateints is not None:
             # Flag additional outliers by comparing rateints and refit ramp
             input = self.apply_rateint_outliers(rateints, input)
             if input is None:
-                input, ints_model = (rate, rateints)
+                input, ints_model = rate, rateints
             else:
                 res = self.run_step(self.ramp_fit, input, save_results=False)
                 input, ints_model = (res, None) if self.ramp_fit.skip else res
         else:
             # input is the rate product, ints_model is the rateints product
-            input, ints_model = (rate, rateints)
+            input, ints_model = rate, rateints
 
         if input is None:
             self.ramp_fit.log.info('NoneType returned from ramp fitting. Gain scale correction skipped')
@@ -661,14 +679,14 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     # Skip dark current for subarray by default, but not full frame
     skip_dark     = kwargs.get('skip_dark', None)
     if skip_dark is None:
-        hdr0 = pyfits.getheader(fitspath, ext=0)
+        hdr0 = fits.getheader(fitspath, ext=0)
         is_full_frame = 'FULL' in hdr0['SUBARRAY']
         skip_dark = False if is_full_frame else True
     pipeline.dark_current.skip = skip_dark
 
     # Determine reference pixel correction parameters based on
     # instrument aperture name for NIRCam
-    hdr0 = pyfits.getheader(fitspath, 0)
+    hdr0 = fits.getheader(fitspath, 0)
     if hdr0['INSTRUME'] == 'NIRCAM':
         # Array of reference pixel borders [lower, upper, left, right]
         nb, nt, nl, nr = nrc_ref_info(hdr0['APERNAME'], orientation='sci')
@@ -702,6 +720,12 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     for key1 in steps.keys():
         for key2 in steps[key1].keys():
             setattr(getattr(pipeline, key1), key2, steps[key1][key2])
+
+    #Override jump & ramp if necessary
+    if pipeline.experimental_jumpramp.use:
+        log.info("Experimental jump/ramp fitting selected, regular jump and ramp will be skipped...")
+        pipeline.jump.skip = True
+        pipeline.ramp_fit.skip = True
     
     # Run Coron1Pipeline. Raise exception on error.
     # Ensure that pipeline is closed out.
@@ -714,7 +738,11 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
             '\nException: {}'.format(e)
         )
     finally:
-        pipeline.closeout()
+        try:
+            pipeline.closeout()
+        except AttributeError:
+            # Method deprecated as of stpipe version 0.6.0
+            pass
 
     if isinstance(res, list):
         res = res[0]
@@ -854,11 +882,13 @@ def run_obs(database,
     else:
         itervals = range(nkeys)
 
+    groupmaskflag = 0 # Set flag for group masking
+    skip_revert = False # Set flag for skipping a file
     # Loop through concatenations.
     for i in itervals:
         key = keys[i]
         if not quiet: log.info('--> Concatenation ' + key)
-        
+
         # Loop through FITS files.
         nfitsfiles = len(database.obs[key])
         jtervals = trange(nfitsfiles, desc='FITS files', leave=False) if quiet else range(nfitsfiles)
@@ -871,17 +901,403 @@ def run_obs(database,
                 if not quiet: log.info('  --> Coron1Pipeline: skipping non-stage 0 file ' + tail)
                 continue
 
+            # Need to do some preparation steps for group masking before running pipeline
+            steps['mask_groups'] = steps.setdefault('mask_groups', {})
+            if not steps['mask_groups']:
+                # If mask_groups unspecified or has no parameters, skip by default
+                steps['mask_groups']['skip'] = True
+            else:
+                # If mask_groups specified but skip isn't mentioned, set to False
+                steps['mask_groups'].setdefault('skip', False)
+            steps['mask_groups'].setdefault('mask_method', 'basic')
+            steps['mask_groups'].setdefault('types', ['REF', 'REF_BG'])
+
+            # Check if we are skipping the mask_groups, if not run routine.
+            if not steps['mask_groups']['skip']:
+                if ('mask_array' not in steps['mask_groups']) and (groupmaskflag == 0):
+                    # set a flag that we are running the group optimisation
+                    groupmaskflag = 1
+
+                # Even if we are not skipping the routine, at the moment it only works on
+                # REF/REF_BG data, and don't want to run on unspecified file types
+                file_type = database.obs[key]['TYPE'][j]
+                this_skip = file_type not in steps['mask_groups']['types']
+                if not this_skip and file_type not in ['REF', 'REF_BG']:
+                    log.info('  --> Group masking only works for reference images at this time! Skipping...')
+                    this_skip = True
+                    
+                # Don't run function prep function if we don't need to
+                if not this_skip:
+                    if steps['mask_groups']['mask_method'] == 'basic':
+                        steps = prepare_group_masking_basic(steps, 
+                                                            database.obs[key], 
+                                                            quiet)
+                    elif steps['mask_groups']['mask_method'] == 'advanced':
+                        fitstype = database.obs[key]['TYPE'][j]
+                        steps = prepare_group_masking_advanced(steps, 
+                                                               database.obs[key], 
+                                                               fitspath, 
+                                                               fitstype,
+                                                               quiet)
+                else:
+                    # Even though we are using mask_groups, this particular file will not have any groups masked
+                    # Instruct to skip the step, but keep a record using skip_revert so we can undo for the next file.
+                    steps['mask_groups']['skip'] = True
+                    skip_revert = True
+
             # Get expected output file name
             outfile_name = tail.replace('uncal.fits', 'rateints.fits')
             fitsout_path = os.path.join(output_dir, outfile_name)
 
             # Skip if file already exists and overwrite is False.
             if os.path.isfile(fitsout_path) and not overwrite:
-                if not quiet: log.info('  --> Coron1Pipeline: skipping already processed file ' + tail)
+                if not quiet: log.info('  --> Coron1Pipeline: skipping already processed file ' 
+                                        + tail)
             else:
                 if not quiet: log.info('  --> Coron1Pipeline: processing ' + tail)
                 _ = run_single_file(fitspath, output_dir, steps=steps, 
                                     verbose=verbose, **kwargs)
+
+            if skip_revert:
+                # Need to make sure we don't skip later files if we just didn't want to mask_groups for this file
+                steps['mask_groups']['skip'] = False
+                skip_revert = False
+
+            if (j == jtervals[-1]) and (groupmaskflag == 1):
+                '''This is the last file for this concatenation, and the groupmaskflag has been
+                set. This means we need to reset the mask_array back to original state, 
+                which was that it didn't exist, so that the routine is rerun. '''
+                groupmaskflag = 0
+
+                if steps['mask_groups']['mask_method'] == 'basic':
+                    del steps['mask_groups']['mask_array']
+                elif steps['mask_groups']['mask_method'] == 'advanced':
+                    del steps['mask_groups']['maxgrps_faint']
+                    del steps['mask_groups']['maxgrps_bright']
+
             
             # Update spaceKLIP database.
             database.update_obs(key, j, fitsout_path)
+
+def prepare_group_masking_basic(steps, observations, quiet=False):
+
+    if 'mask_array' not in steps['mask_groups']:
+        '''First time in the file loop, or groups_to_mask has been preset, 
+        run the optimisation and set groups to mask. '''
+        if not quiet: 
+            log.info('  --> Coron1Pipeline: Optimizing number of groups to mask in ramp,'
+                     ' this make take a few minutes.')
+
+        if 'cropwidth' not in steps['mask_groups']:
+            steps['mask_groups']['cropwidth'] = 20
+        if 'edgewidth' not in steps['mask_groups']:
+            steps['mask_groups']['edgewidth'] = 10
+
+        # Get crop width, part of image we care about
+        crop = steps['mask_groups']['cropwidth']
+        edge = steps['mask_groups']['edgewidth']
+
+        # Get our cropped science frames and reference cubes
+        sci_frames = []
+        ref_cubes = []
+        nfitsfiles = len(observations)
+        for j in range(nfitsfiles):
+            if observations['TYPE'][j] == 'SCI':
+                with fits.open(os.path.abspath(observations['FITSFILE'][j])) as hdul:
+                    sci_frame = hdul['SCI'].data[:, -1, :, :].astype(float)
+
+                    # Subtract a median so we focus on brightest pixels
+                    sci_frame -= np.nanmedian(sci_frame, axis=(1,2), keepdims=True)
+
+                    # Crop around CRPIX
+                    crpix_x, crpix_y = hdul["SCI"].header["CRPIX1"], hdul["SCI"].header["CRPIX2"]
+                    xlo = int(crpix_x) - crop
+                    xhi = int(crpix_x) + crop
+                    ylo = int(crpix_y) - crop
+                    yhi = int(crpix_y) + crop
+                    sci_frame = sci_frame[:, ylo:yhi, xlo:xhi]
+
+                    # Now going to set the core to 0, so we focus less on the highly variable
+                    # PSF core
+                    sci_frame[:, edge:-edge, edge:-edge] = np.nan
+
+                    sci_frames.append(sci_frame)
+            elif observations['TYPE'][j] == 'REF':
+                with fits.open(os.path.abspath(observations['FITSFILE'][j])) as hdul:
+                    ref_cube = hdul['SCI'].data.astype(float)
+                    ref_shape = ref_cube.shape
+
+                    # Subtract a median so we focus on brightest pixels
+                    ref_cube -= np.nanmedian(ref_cube, axis=(2,3), keepdims=True)
+
+                    # Crop around CRPIX
+                    crpix_x, crpix_y = hdul["SCI"].header["CRPIX1"], hdul["SCI"].header["CRPIX2"]
+                    xlo = int(crpix_x) - crop
+                    xhi = int(crpix_x) + crop
+                    ylo = int(crpix_y) - crop
+                    yhi = int(crpix_y) + crop
+                    ref_cube = ref_cube[:, :, ylo:yhi, xlo:xhi]
+
+                    # Now going to set the core to 0, so we focus less on the highly variable
+                    # PSF core
+                    ref_cube[:, :, edge:-edge, edge:-edge] = np.nan
+
+                    ref_cubes.append(ref_cube)
+
+        # Want to check against every integration of every science dataset to find whichever
+        # matches the best, then use that for the scaling. 
+        max_grp_to_use = []
+        for sci_i, sci_frame in enumerate(sci_frames):
+            for int_i, sci_last_group in enumerate(sci_frame):
+                # Compare every reference group to this integration
+                best_diff = np.inf
+                for ref_cube in ref_cubes:
+                    this_cube_diffs = []
+                    for ref_int in ref_cube:
+                        this_int_diffs = []
+                        for ref_group in ref_int:
+                            diff = np.abs(np.nansum(ref_group)-np.nansum(sci_last_group))
+                            this_int_diffs.append(diff)
+                        this_cube_diffs.append(this_int_diffs)
+                        
+                    # Is the median of these diffs better that other reference cubes?
+                    if np.nanmin(this_cube_diffs) < best_diff:
+                        # If yes, this reference cube is a better match to the science
+                        best_diff = np.nanmin(this_cube_diffs)
+                        best_maxgrp = np.median(np.argmin(this_cube_diffs, axis=1))
+                max_grp_to_use.append(best_maxgrp)
+
+        # Assemble array of groups to mask, starting one above the max group
+        final_max_grp_to_use = int(np.nanmedian(max_grp_to_use)) 
+        groups_to_mask = np.arange(final_max_grp_to_use+1, ref_cubes[0].shape[1])
+
+        # Make the mask array
+        mask_array = np.zeros(ref_shape, dtype=bool)
+        mask_array[:,groups_to_mask,:,:] = 1
+
+        # Assign to steps so this stage doesn't get repeated. 
+        steps['mask_groups']['mask_array'] = mask_array
+        print(mask_array)
+
+    return steps
+
+def prepare_group_masking_advanced(steps, observations, refpath, reftype, quiet=False):
+
+    '''
+    Advanced group masking method which computes the group mask on a pixel by pixel 
+    and reference cube by reference cube basis
+    '''
+
+    if 'cropwidth' not in steps['mask_groups']:
+        steps['mask_groups']['cropwidth'] = 30
+    if 'edgewidth' not in steps['mask_groups']:
+        steps['mask_groups']['edgewidth'] = 20
+    if 'threshold' not in steps['mask_groups']:
+        steps['mask_groups']['threshold'] = 85
+
+    # Get crop width, part of image we care about
+    crop = steps['mask_groups']['cropwidth']
+    edge = steps['mask_groups']['edgewidth']
+    threshold = steps['mask_groups']['threshold']
+
+
+    if ('maxgrps_faint' not in steps['mask_groups'] or
+        'maxgrps_bright' not in steps['mask_groups'] or
+        'cropmask' not in steps['mask_groups'] or
+        'refbg_maxcounts' not in steps['mask_groups']):
+        '''First time in the file loop, or groups_to_mask has been preset, 
+        run the optimisation and set groups to mask. '''
+
+        sci_frames = []
+        sci_crpixs = []
+        ref_cubes = []
+        ref_crpixs = []
+
+        nfitsfiles = len(observations)
+        for j in range(nfitsfiles):
+            if observations['TYPE'][j] == 'SCI':
+                with fits.open(os.path.abspath(observations['FITSFILE'][j])) as hdul:
+                    sci_frame = hdul['SCI'].data[:, -1, :, :].astype(float)
+                    sci_crpix_x, sci_crpix_y = hdul["SCI"].header["CRPIX1"], hdul["SCI"].header["CRPIX2"]
+                    sci_frames.append(sci_frame)
+                    sci_crpixs.append([sci_crpix_x, sci_crpix_y])
+            elif observations['TYPE'][j] == 'REF':
+                with fits.open(os.path.abspath(observations['FITSFILE'][j])) as hdul:
+                    ref_cube = hdul['SCI'].data.astype(float)
+                    ref_crpix_x, ref_crpix_y = hdul["SCI"].header["CRPIX1"], hdul["SCI"].header["CRPIX2"]
+                    ref_cubes.append(ref_cube)
+                    ref_crpixs.append([ref_crpix_x, ref_crpix_y])
+
+        # Crop and median science
+        sci_frames_cropped = []
+        for i, scif in enumerate(sci_frames):
+            crpix_x, crpix_y = sci_crpixs[i]
+            xlo = int(crpix_x) - crop
+            xhi = int(crpix_x) + crop
+            ylo = int(crpix_y) - crop
+            yhi = int(crpix_y) + crop
+            sci_frames_cropped.append(scif[:, ylo:yhi, xlo:xhi])
+
+        sci_frames_modified = np.nanmedian(sci_frames_cropped, axis=1) #Median over integrations
+
+        # Crop and median reference
+        ref_cubes_cropped = []
+        for i, refc in enumerate(ref_cubes):
+            crpix_x, crpix_y = ref_crpixs[i]
+            xlo = int(crpix_x) - crop
+            xhi = int(crpix_x) + crop
+            ylo = int(crpix_y) - crop
+            yhi = int(crpix_y) + crop
+            ref_cubes_cropped.append(refc[:, :, ylo:yhi, xlo:xhi])
+
+        ref_cubes_modified = np.nanmedian(ref_cubes_cropped, axis=1) #Median over integrations
+
+        # Median subtract the images
+        sci_frames_medsub = sci_frames_modified - np.nanmedian(sci_frames_modified, axis=(1,2), keepdims=True)
+        ref_cubes_medsub = ref_cubes_modified - np.nanmedian(ref_cubes_modified, axis=(2,3), keepdims=True)
+
+        # Flatten array and find indices above percentile threshold value
+        sci_frames_flat = np.reshape(sci_frames_medsub, (sci_frames_medsub.shape[0], -1))
+        per = np.percentile(sci_frames_flat, [threshold])
+        above_threshold_indices = np.where(sci_frames_medsub > per)
+
+        # Create an empty mask array
+        mask = np.zeros_like(sci_frames_medsub, dtype=bool)
+
+        # Define function to expand indices and update mask
+        def expand_and_update_mask(indices, mask, xpad=2, ypad=2):
+            for z, x, y in zip(*indices):
+                mask[z, max(0, x-xpad):min(mask.shape[1], x+xpad), max(0, y-ypad):min(mask.shape[2], y+ypad)] = True
+
+        # Expand indices and update mask for each 2D slice
+        for z_slice in range(sci_frames_medsub.shape[0]):
+            indices_slice = np.where(above_threshold_indices[0] == z_slice)
+            expand_and_update_mask((above_threshold_indices[0][indices_slice], above_threshold_indices[1][indices_slice], above_threshold_indices[2][indices_slice]), mask)
+
+        # Okay now make some hollowed out cropped frames, to focus on fainter, but still bright, pixels
+        sci_frames_hollow = sci_frames_medsub.copy()
+        sci_frames_hollow[:, edge:-edge, edge:-edge] = np.nan
+        sci_frames_hollow[~mask] = np.nan
+
+        ref_cubes_hollow = ref_cubes_medsub.copy()
+        ref_cubes_hollow[:, :, edge:-edge, edge:-edge] = np.nan
+
+        # Create a 4D mask with zeros for reference
+        ref_cubes_shape = ref_cubes_hollow.shape
+        mask_4d = np.zeros(ref_cubes_shape, dtype=bool)
+        mask_ref = np.tile(mask[0:1], (ref_cubes_shape[0],1,1))
+
+        for i in range(mask_4d.shape[1]):
+            temp = mask_4d[:,i,:,:]
+            temp[mask_ref] = True
+            mask_4d[:,i,:,:] = temp
+        ref_cubes_hollow[~mask_4d] = np.nan
+
+        # Now run the routine to figure out which groups to mask
+        best_faint_maxgrps = []
+        best_bright_maxgrps = []
+        ref_peak_pixels = []
+        for i, scif in enumerate(sci_frames_hollow):
+            for j, refc in enumerate(ref_cubes_hollow):
+                # Need to save the peak pixel from each reference, as we'll use this for 
+                # the REF_BG frame interpolations
+                if i == 0:
+                    ref_peak_pixels.append(np.nanmax(ref_cubes_medsub[j][-1]))
+                this_faint_diffs= []
+                this_bright_diffs = []
+                for refg in refc:
+                    faint_diff = np.abs(np.nanmedian(refg)-np.nanmedian(scif))
+                    this_faint_diffs.append(faint_diff)
+                for refg in ref_cubes_medsub[j]:
+                    bright_diff = np.abs(np.nanmax(refg)-np.nanmax(sci_frames_medsub[i]))
+                    this_bright_diffs.append(bright_diff)
+                    
+                best_faint_maxgrp = np.argmin(this_faint_diffs)
+                best_faint_maxgrps.append(best_faint_maxgrp)
+
+                best_bright_maxgrp = np.argmin(this_bright_diffs)
+                best_bright_maxgrps.append(best_bright_maxgrp)
+
+        maxgrps_faint = int(np.nanmedian(best_faint_maxgrps))
+        maxgrps_bright = int(np.nanmedian(best_bright_maxgrps))
+
+        steps['mask_groups']['maxgrps_faint'] = maxgrps_faint
+        steps['mask_groups']['maxgrps_bright'] = maxgrps_bright
+        steps['mask_groups']['cropmask'] = mask
+        steps['mask_groups']['refbg_maxcounts'] = np.nanmedian(ref_peak_pixels)
+
+    # Now read in the specific reference file we're looking at. 
+    with fits.open(refpath) as hdul:
+        refshape = hdul['SCI'].data.shape
+        ref_ints_slice = hdul['SCI'].data[:,-1,:,:].astype(float)
+        ref_slice = np.nanmedian(ref_ints_slice, axis=0)
+        ref_slice -= np.nanmedian(ref_slice)
+        ref_crpix_x, ref_crpix_y = hdul["SCI"].header["CRPIX1"], hdul["SCI"].header["CRPIX2"]
+    
+    # Get the peak pixel count in the last group, only look at the PSF core
+    xlo = int(ref_crpix_x) - crop
+    xhi = int(ref_crpix_x) + crop
+    ylo = int(ref_crpix_y) - crop
+    yhi = int(ref_crpix_y) + crop
+    ref_slice_cropped = ref_slice[ylo:yhi, xlo:xhi]
+
+    if 'BG' in reftype:
+        maxcounts = steps['mask_groups']['refbg_maxcounts']
+    else:
+        maxcounts = np.nanmax(ref_slice_cropped)
+
+    # Get the median pixel count in our mask area from earlier
+    ref_slice_hollow = ref_slice_cropped.copy()
+    ref_slice_hollow[edge:-edge, edge:-edge] = np.nan
+    all_mincounts = []
+    for saved_mask in steps['mask_groups']['cropmask']:
+        ref_slice_masked = ref_slice_hollow.copy()
+        ref_slice_masked[~saved_mask] = np.nan
+        all_mincounts.append(np.nanmedian(ref_slice_hollow))
+    mincounts = np.nanmedian(all_mincounts)
+
+    # Now make an interpolation connecting counts to the number of groups to be masked
+    maxgrps_interp = interp1d([maxcounts, mincounts], 
+                              [steps['mask_groups']['maxgrps_bright'],steps['mask_groups']['maxgrps_faint']], 
+                              kind='linear', 
+                              bounds_error=False, 
+                              fill_value=(steps['mask_groups']['maxgrps_bright'],steps['mask_groups']['maxgrps_faint']))
+
+    # Now use the interpolation to set the mask array, zero values will be included in the ramp fit
+    mask_array = np.zeros(refshape, dtype=bool)
+    for ri in range(mask_array.shape[2]):
+        for ci in range(mask_array.shape[3]):
+            if ref_slice[ri, ci] >= mincounts:
+                # Determine number of groups
+                this_grps = int(maxgrps_interp(ref_slice[ri, ci]))
+                groups_to_mask = np.arange(this_grps+1, refshape[1])
+                mask_array[:,groups_to_mask,ri,ci] = 1
+
+    # Assign the mask array to the steps dictionary
+    steps['mask_groups']['mask_array'] = mask_array
+
+    return steps
+
+class MaskGroupsStep(Step):
+    """
+    Mask particular groups prior to ramp fitting
+    """
+    class_alias = "maskgroups"
+
+    spec = """
+        mask_sigma_med = float(default=3) #Only mask pixels Nsigma above the median
+        mask_window = integer(default=2) #Also mask pixels within N pixels of a masked pixel
+    """
+
+    def process(self, input):
+        """Mask particular groups prior to ramp fitting"""
+        with datamodels.open(input) as input_model:
+            datamodel = input_model.copy()
+
+            # Set particular groups to DO_NOT_USE
+            datamodel.groupdq[self.mask_array] = 1
+
+        return datamodel
+
+
+
