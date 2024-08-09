@@ -1593,7 +1593,7 @@ class AnalysisTools():
                             fig.savefig(path)
                             plt.close(fig)
                             if convgauss:
-                                fig, result = best_convfit_and_residuals(fma,minmethod=None)
+                                fig, _ = best_convfit_and_residuals(fma,minmethod=None)
                                 path = os.path.join(output_dir_kl, key + '-model_conv_c%.0f' % (k + 1) + '.pdf')
                                 fig.savefig(path)
                                 plt.close(fig)
@@ -2014,6 +2014,7 @@ def best_convfit_and_residuals(fma,
                                  sigma_y=result.x[1],
                                  theta_degrees=result.x[2], n=6)
     else:
+        result = None
         # Convolve the PSF by a 2D gaussian
         kernel = gaussian_kernel(sigma_x=fma.fit_sigma_x.bestfit,
                                  sigma_y=fma.fit_sigma_y.bestfit,
