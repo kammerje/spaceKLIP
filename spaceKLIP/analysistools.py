@@ -1592,6 +1592,11 @@ class AnalysisTools():
                             fig = fma.best_fit_and_residuals()
                             fig.savefig(path)
                             plt.close(fig)
+                            if convgauss:
+                                fig, result = best_convfit_and_residuals(fma,minmethod=None)
+                                path = os.path.join(output_dir_kl, key + '-model_conv_c%.0f' % (k + 1) + '.pdf')
+                                fig.savefig(path)
+                                plt.close(fig)
                             
                             # Write the MCMC fit results into a table.
                             flux_jy = fma.fit_flux.bestfit * guess_flux
@@ -2002,11 +2007,18 @@ def best_convfit_and_residuals(fma,
     if fma.padding > 0:
         fm_bestfit = fm_bestfit[fma.padding:-fma.padding, fma.padding:-fma.padding]
 
-    result = estimate_extended(fma.data_stamp, fm_bestfit, bounds=bounds, initial_params=initial_params, method=minmethod)
-    # Convolve the PSF by a 2D gaussian
-    kernel = gaussian_kernel(sigma_x=result.x[0],
-                             sigma_y=result.x[1],
-                             theta_degrees=result.x[2], n=6)
+    if minmethod is not None:
+        result = estimate_extended(fma.data_stamp, fm_bestfit, bounds=bounds, initial_params=initial_params, method=minmethod)
+        # Convolve the PSF by a 2D gaussian
+        kernel = gaussian_kernel(sigma_x=result.x[0],
+                                 sigma_y=result.x[1],
+                                 theta_degrees=result.x[2], n=6)
+    else:
+        # Convolve the PSF by a 2D gaussian
+        kernel = gaussian_kernel(sigma_x=fma.fit_sigma_x.bestfit,
+                                 sigma_y=fma.fit_sigma_y.bestfit,
+                                 theta_degrees=fma.fit_theta.bestfit, n=6)
+
     fm_bestfit_convolved = convolve(fm_bestfit, kernel)
 
     # make residual map
