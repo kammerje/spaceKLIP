@@ -854,6 +854,7 @@ class AnalysisTools():
                            fitmethod='mcmc',
                            minmethod=None,
                            fitkernel='diag',
+                           convgauss=False,
                            subtract=True,
                            inject=False,
                            remove_background=False,
@@ -909,6 +910,9 @@ class AnalysisTools():
         fitkernel : str, optional
             Pyklip.fitpsf.FitPSF covariance kernel which shall be used for the
             Gaussian process regression. The default is 'diag'.
+        convgauss:  bool, optional
+            if is True, it will convolve the PSF by a 2D Gaussian function during the mcmc fit, and fit for the
+            sigma_x, sigma_y and theta parameters. The default is False.
         subtract : bool, optional
             If True, subtract each extracted companion from the pyKLIP dataset
             before fitting the next one in the list. The default is True.
@@ -1047,7 +1051,7 @@ class AnalysisTools():
                                           sp=sed,
                                           use_coeff=False)
 
-                # NOTE: if convgauss kwarg is True, it will enable the fit by a psf convolved by a 2D Gaussian
+                # NOTE: if convgauss is True, it will enable the fit by a psf convolved by a 2D Gaussian
                 # function during the mcmc fit.
                 if 'convgauss' in kwargs.keys():
                     convgauss = kwargs['convgauss']
