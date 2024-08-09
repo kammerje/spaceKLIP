@@ -1051,13 +1051,6 @@ class AnalysisTools():
                                           sp=sed,
                                           use_coeff=False)
 
-                # NOTE: if convgauss is True, it will enable the fit by a psf convolved by a 2D Gaussian
-                # function during the mcmc fit.
-                if 'convgauss' in kwargs.keys():
-                    convgauss = kwargs['convgauss']
-                else:
-                    convgauss = False
-
                 # NOTE: if minmethod not None, it will split the fit into a fitmethod (e.g. mcmc) for the estimation
                 # of position and flux, and a minmethod (e.g. Powel) to fit the extention of the source using a
                 # psf convolved by a 2D Gaussian and a minimization approach.
