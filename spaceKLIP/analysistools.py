@@ -31,6 +31,7 @@ import shutil
 from pyklip import klip, parallelized
 from pyklip.instruments.JWST import JWSTData
 from scipy.ndimage import fourier_shift, gaussian_filter, rotate
+import scipy.ndimage.interpolation as sinterp
 from scipy.optimize import minimize
 from scipy.ndimage import gaussian_filter, rotate, convolve
 from scipy.ndimage import shift as spline_shift
@@ -851,6 +852,7 @@ class AnalysisTools():
                            use_fm_psf=True,
                            highpass=False,
                            fitmethod='mcmc',
+                           minmethod=None,
                            fitkernel='diag',
                            subtract=True,
                            inject=False,
@@ -901,6 +903,9 @@ class AnalysisTools():
             dataset. The default is False.
         fitmethod : 'mcmc' or 'nested', optional
             Sampling algorithm which shall be used. The default is 'mcmc'.
+        minmethod: str, optional
+            scipy.optimize.minimize minimization method which shall be used to fit for the extension of the source.
+            The default is None.
         fitkernel : str, optional
             Pyklip.fitpsf.FitPSF covariance kernel which shall be used for the
             Gaussian process regression. The default is 'diag'.
@@ -1049,7 +1054,15 @@ class AnalysisTools():
                 else:
                     convgauss = False
 
-                if convgauss:
+                # NOTE: if minmethod not None, it will split the fit into a fitmethod (e.g. mcmc) for the estimation
+                # of position and flux, and a minmethod (e.g. Powel) to fit the extention of the source using a
+                # psf convolved by a 2D Gaussian and a minimization approach.
+                if minmethod is not None:
+                    split_fit = True
+                else:
+                    split_fit = False
+
+                if convgauss or split_fit:
                     if not all(x in kwargs.keys() for x in ['sigma_xrange', 'sigma_yrange', 'theta_range']):
                         gauss_param_bounds = [1,1,1]
                     else:
@@ -1634,6 +1647,46 @@ class AnalysisTools():
                                              fma.fit_theta.bestfit,
                                              fma.fit_theta.error,
                                              ))
+                            elif split_fit:
+                                # fit the sources with a 2D gaussian only to evaluate the sigma_x, sigma_y and theta
+                                fig, result = best_convfit_and_residuals(fma,
+                                                                         minmethod=minmethod,
+                                                                         initial_params=gauss_param_guesses)
+                                path = os.path.join(output_dir_kl, key + '-model_conv_c%.0f' % (k + 1) + '.pdf')
+                                fig.savefig(path)
+                                plt.close(fig)
+
+                                tab.add_row((k + 1,
+                                             fma.raw_RA_offset.bestfit * pxsc_arcsec,  # arcsec
+                                             fma.raw_RA_offset.error * pxsc_arcsec,  # arcsec
+                                             fma.raw_Dec_offset.bestfit * pxsc_arcsec,  # arcsec
+                                             fma.raw_Dec_offset.error * pxsc_arcsec,  # arcsec
+                                             flux_jy,
+                                             flux_jy_err,
+                                             flux_si,
+                                             flux_si_err,
+                                             flux_si_alt,
+                                             flux_si_alt_err,
+                                             fma.raw_flux.bestfit * guess_flux,
+                                             fma.raw_flux.error * guess_flux,
+                                             delmag,  # mag
+                                             delmag_err,  # mag
+                                             appmag,  # mag
+                                             appmag_err,  # mag
+                                             mstar[filt],  # mag
+                                             mstar_err_temp,  # mag
+                                             np.nan,
+                                             np.nan,
+                                             scale_factor_avg,
+                                             tp_comsubst,
+                                             fitsfile,
+                                             result.x[0],
+                                             np.nan,
+                                             result.x[1],
+                                             np.nan,
+                                             result.x[2],
+                                             np.nan,
+                                             ))
                             else:
                                 tab.add_row((k + 1,
                                              fma.raw_RA_offset.bestfit * pxsc_arcsec,  # arcsec
@@ -1904,6 +1957,96 @@ def loss_function(params,
 
     mse = np.mean((target_array - convolved_image) ** 2)
     return mse
+
+def best_convfit_and_residuals(fma,
+                               minmethod='Powell',
+                               bounds=None,
+                               initial_params=None,
+                               fig=None):
+    '''
+    Fit the companion with a 2D Gaussian using a minimization algorithm and evaluate the sigma_x, sigma_y and theta.
+    Then, generate a plot of the best fit FM compared with the data_stamp and also the residuals
+
+    Parameters
+    ----------
+    fma: fitpsf.FMAstrometry
+        FMAstronomy object with the desired properties
+    method: str
+        Minimization method. Default is 'Powell'.
+    bounds: list of 2-D arrays.
+        list of 3 elements, containing the min, max values for the sigma_x, sigma_y and theta_degrees parameters
+        for the 2-D gaussian kernel. Default is None.
+    initial_params: list of floats
+        list of initial guesses for the sigma_x, sigma_y and theta_degrees parameters
+        for the 2-D gaussian kernel. Default is None.
+    fig: matplotlib.Figure
+        if not None, a matplotlib Figure object, function will make a new one. Default is None.
+
+
+    Returns
+    -------
+    fig: matplotlib.Figure
+        the Figure object. If input fig is None, function will make a new one
+    result: array
+        Array containing the fitted  parameters from the minimization process
+    '''
+    if fig is None:
+        fig = plt.figure(figsize=(12, 4))
+
+    # create best fit FM
+    dx = fma.fit_x.bestfit - fma.data_stamp_x_center
+    dy = fma.fit_y.bestfit - fma.data_stamp_y_center
+
+    fm_bestfit = fma.fit_flux.bestfit * sinterp.shift(fma.fm_stamp, [dy, dx])
+
+    if fma.padding > 0:
+        fm_bestfit = fm_bestfit[fma.padding:-fma.padding, fma.padding:-fma.padding]
+
+    result = estimate_extended(fma.data_stamp, fm_bestfit, bounds=bounds, initial_params=initial_params, method=minmethod)
+    # Convolve the PSF by a 2D gaussian
+    kernel = gaussian_kernel(sigma_x=result.x[0],
+                             sigma_y=result.x[1],
+                             theta_degrees=result.x[2], n=6)
+    fm_bestfit_convolved = convolve(fm_bestfit, kernel)
+
+    # make residual map
+    residual_map = fma.data_stamp - fm_bestfit_convolved
+
+    # normalize all images to same scale
+    colornorm = matplotlib.colors.Normalize(vmin=np.nanpercentile(fma.data_stamp, 0.03),
+                                            vmax=np.nanpercentile(fma.data_stamp, 99.7))
+
+    # plot the data_stamp
+    ax1 = fig.add_subplot(131)
+    im1 = ax1.imshow(fma.data_stamp, interpolation='nearest', cmap='cubehelix',
+                     norm=colornorm)
+    ax1.invert_yaxis()
+    ax1.set_title("Data")
+    ax1.set_xlabel("X (pixels)")
+    ax1.set_ylabel("Y (pixels)")
+
+    ax2 = fig.add_subplot(132)
+    im2 = ax2.imshow(fm_bestfit_convolved, interpolation='nearest', cmap='cubehelix', norm=colornorm)
+    ax2.invert_yaxis()
+    ax2.set_title("Best-fit Model convolved\nby a 2D Gaussian")
+    ax2.set_xlabel("X (pixels)")
+
+    ax3 = fig.add_subplot(133)
+    im3 = ax3.imshow(residual_map, interpolation='nearest', cmap='cubehelix',
+                     norm=colornorm)
+    ax3.invert_yaxis()
+    ax3.set_title("Residuals")
+    ax3.set_xlabel("X (pixels)")
+
+    fig.subplots_adjust(right=0.82)
+    fig.subplots_adjust(hspace=0.4)
+    ax_pos = ax3.get_position()
+
+    cbar_ax = fig.add_axes([0.84, ax_pos.y0, 0.02, ax_pos.height])
+    cb = fig.colorbar(im1, cax=cbar_ax)
+    cb.set_label("Counts (DN)")
+
+    return fig, result
 
 def estimate_extended(target,
                      offset_psf,
