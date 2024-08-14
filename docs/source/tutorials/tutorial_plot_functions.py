@@ -33,9 +33,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from jwst.datamodels import CubeModel
 import shutil
 
-sys.path.append(os.path.abspath('../spaceKLIP/spaceKLIP'))
-
-import wcs_utils
+import spaceKLIP.wcs_utils
 import jwst.datamodels
 
 import logging
