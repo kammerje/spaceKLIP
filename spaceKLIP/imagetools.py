@@ -1036,7 +1036,7 @@ class ImageTools():
                         elif method_split[k] == 'custom':
                             log.info('  --> Method ' + method_split[k] + ': ' + tail)
                             if self.database.obs[key]['TYPE'][j] not in ['SCI_TA', 'REF_TA']:
-                                self.find_bad_pixels_custom(data, erro, pxdq_temp.astype(int), key, fitsfile, custom_kwargs)
+                                self.find_bad_pixels_custom(data, erro, pxdq_temp, key, fitsfile, custom_kwargs)
                             else:
                                 log.info('  --> Method ' + method_split[k] + ': skipped because TA file')
                         elif method_split[k] == 'timemed':
@@ -1238,7 +1238,7 @@ class ImageTools():
         """
         
         # Copy array of bad pixels using median of neighbors, passed as argument, for accounting purposes
-        pxdq_orig = pxdq.copy()
+        pxdq_orig = pxdq.astype(int).copy()
 
         # Check if input custom kwargs include a dictionary for bad pixel maps on per-exposure basis
         if isinstance(custom_kwargs[next(iter(custom_kwargs))],dict):
@@ -1280,8 +1280,7 @@ class ImageTools():
             else:
                 # Duplicate an existing slice (e.g., the first one) and extend the array
                 pxdq_custom = np.concatenate((pxdq_custom, pxdq_custom[0:1]), axis=0)
-                
-            pxdq[pxdq_custom == 1] = 1               
+                              
 
         # if pxdq_custom.ndim == pxdq.ndim - 1: # Enable 3D bad pixel map to flag individual frames
         #     # Check if custom map is a 2D array to avoid indexing errors when broadcasting:
@@ -1314,6 +1313,8 @@ class ImageTools():
 
         else:
             raise ValueError(f'Custom bad pixel map dimensions of {pxdq_custom.ndim} vs {pxdq.ndim} are incompatible.')
+        
+        pxdq[pxdq_custom == 1] = 1 
               
         log.info('  --> Method custom: flagged %.0f additional bad pixel(s) -- %.2f%%' % (np.sum(pxdq) - np.sum(pxdq_orig), 100. * (np.sum(pxdq) - np.sum(pxdq_orig)) / np.prod(pxdq.shape)))
         
