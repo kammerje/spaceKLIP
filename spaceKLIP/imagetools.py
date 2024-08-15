@@ -1036,7 +1036,7 @@ class ImageTools():
                         elif method_split[k] == 'custom':
                             log.info('  --> Method ' + method_split[k] + ': ' + tail)
                             if self.database.obs[key]['TYPE'][j] not in ['SCI_TA', 'REF_TA']:
-                                self.find_bad_pixels_custom(data, erro, pxdq_temp, key, custom_kwargs)
+                                self.find_bad_pixels_custom(data, erro, pxdq_temp, key, fitsfile, custom_kwargs)
                             else:
                                 log.info('  --> Method ' + method_split[k] + ': skipped because TA file')
                         elif method_split[k] == 'timemed':
@@ -1204,6 +1204,7 @@ class ImageTools():
                                erro,
                                pxdq,
                                key,
+                               fitsfile,
                                custom_kwargs={}):
         """
         Use a custom bad pixel map to flag additional bad pixels in the data.
@@ -1219,11 +1220,16 @@ class ImageTools():
             the routine to include the newly flagged bad pixels.
         key : str
             Database key of the observation to be updated.
+        fitsfile : str
+            Name of corresponding fitsfile to find matching bad pixel map.
         custom_kwargs : dict, optional
             Keyword arguments for the 'custom' method. The dictionary keys must
             match the keys of the observations database and the dictionary
             content must be binary bad pixel maps (1 = bad, 0 = good) with the
-            same shape as the corresponding data. The default is {}.
+            same shape as the corresponding data. If the first entry is a dictionary, 
+            then it is assumed there is a bad pixel map per exposure (*_badpixel_map.fits) 
+            and will match the map to the correct exposure using the filename keyword. 
+            The default is {}.
         
         Returns
         -------
@@ -1231,12 +1237,59 @@ class ImageTools():
         
         """
         
-        # Find bad pixels using median of neighbors.
+        # Copy array of bad pixels using median of neighbors, passed as argument, for accounting purposes
         pxdq_orig = pxdq.copy()
-        pxdq_custom = custom_kwargs[key] != 0
+
+        # Check if input custom kwargs include a dictionary for bad pixel maps on per-exposure basis
+        if isinstance(custom_kwargs[next(iter(custom_kwargs))],dict):
+            # Match corresponding map by filename
+            bpm_name = fitsfile.split('/')[-1].split('.')[-2] + '_badpixel_map.fits'
+            log.info('  --> Method custom: Applying individual bad pixel map per exposure -- using %s' % bpm_name)
+            pxdq_custom = custom_kwargs[key][bpm_name]
+            log.info(f'  --> ALERT: dimensions of pxdq_custom is.... {pxdq_custom.shape}')
+        
+        else:
+            pxdq_custom = custom_kwargs[key] != 0
+
         if pxdq_custom.ndim == pxdq.ndim - 1: # Enable 3D bad pixel map to flag individual frames
-            pxdq_custom = np.array([pxdq_custom] * pxdq.shape[0]) 
-        pxdq[pxdq_custom] = 1
+            # Check if custom map is a 2D array to avoid indexing errors when recasting:
+            if pxdq_custom.ndim == 2 and pxdq.shape[0] == 1:   
+                # Add a new axis to pxdq_custom to match pxdq's shape
+                pxdq_custom = np.expand_dims(pxdq_custom, axis=0)      
+                # Assign values using the expanded pxdq_custom
+                pxdq[pxdq_custom == 1] = 1            
+            else:
+            # pxdq array 0th axis > 1 is not an issue, so just extend axis:    
+                pxdq_custom = np.array([pxdq_custom] * pxdq.shape[0]) 
+                pxdq[pxdq_custom] = 1
+
+
+        elif pxdq_custom.ndim == pxdq.ndim:
+            log.info(f'  --> OMG WHY IS IT BROKEN {pxdq_custom.shape} and {pxdq.shape}')
+            if pxdq.shape[0] == 1:   
+                if pxdq_custom.shape[0] > pxdq.shape[0]: # if there is a map per integration, it is perhaps larger than the dq array
+                    pxdq = np.array([pxdq] * pxdq_custom.shape[0])
+                    pxdq[pxdq_custom] = 1                
+                else:
+                    pxdq_custom = np.expand_dims(pxdq_custom, axis=0)     
+                    pxdq[pxdq_custom == 1] = 1   
+            else:
+                pxdq[pxdq_custom] = 1
+
+        elif pxdq_custom.ndim > pxdq.ndim: 
+            pxdq = np.array([pxdq] * pxdq_custom.shape[0])
+            pxdq[pxdq_custom] = 1
+
+
+        else:
+            raise ValueError(f'Custom bad pixel map dimensions of {pxdq_custom.ndim} vs {pxdq.ndim} are incompatible.')
+        
+
+        # if pxdq_custom.ndim == pxdq.ndim - 1: # Enable 3D bad pixel map to flag individual frames
+            # pxdq_custom = np.array([pxdq_custom] * pxdq.shape[0])         
+
+
+        log.info(f' --> this should be fixed now...; {pxdq_custom.shape} and {pxdq.shape}') 
         log.info('  --> Method custom: flagged %.0f additional bad pixel(s) -- %.2f%%' % (np.sum(pxdq) - np.sum(pxdq_orig), 100. * (np.sum(pxdq) - np.sum(pxdq_orig)) / np.prod(pxdq.shape)))
         
         pass
