@@ -1036,7 +1036,7 @@ class ImageTools():
                         elif method_split[k] == 'custom':
                             log.info('  --> Method ' + method_split[k] + ': ' + tail)
                             if self.database.obs[key]['TYPE'][j] not in ['SCI_TA', 'REF_TA']:
-                                self.find_bad_pixels_custom(data, erro, pxdq_temp, key, fitsfile, custom_kwargs)
+                                self.find_bad_pixels_custom(data, erro, pxdq_temp.astype(int), key, fitsfile, custom_kwargs)
                             else:
                                 log.info('  --> Method ' + method_split[k] + ': skipped because TA file')
                         elif method_split[k] == 'timemed':
@@ -1245,51 +1245,76 @@ class ImageTools():
             # Match corresponding map by filename
             bpm_name = fitsfile.split('/')[-1].split('.')[-2] + '_badpixel_map.fits'
             log.info('  --> Method custom: Applying individual bad pixel map per exposure -- using %s' % bpm_name)
-            pxdq_custom = custom_kwargs[key][bpm_name]
-            log.info(f'  --> ALERT: dimensions of pxdq_custom is.... {pxdq_custom.shape}')
+            # Get directory to bad pixel maps (assume all are located in same directory)
+            directory = os.path.dirname(list(custom_kwargs[key].keys())[0]) + '/' # full path to maps
+            bpm_path = directory + bpm_name
+            # Check to ensure a map exists
+            if os.path.exists(bpm_path):
+                pass
+            else:
+                raise FileNotFoundError("No matching bad pixel map corresponding to input data file.")
+            
+            pxdq_custom = custom_kwargs[key][bpm_path]
         
         else:
             pxdq_custom = custom_kwargs[key] != 0
 
         if pxdq_custom.ndim == pxdq.ndim - 1: # Enable 3D bad pixel map to flag individual frames
-            # Check if custom map is a 2D array to avoid indexing errors when recasting:
-            if pxdq_custom.ndim == 2 and pxdq.shape[0] == 1:   
+            print('a')
+            # Check if custom map is a 2D array to avoid indexing errors when broadcasting:
+            if pxdq_custom.ndim == 2 and pxdq.shape[0] == 1:  
+                print('b')
                 # Add a new axis to pxdq_custom to match pxdq's shape
                 pxdq_custom = np.expand_dims(pxdq_custom, axis=0)      
                 # Assign values using the expanded pxdq_custom
                 pxdq[pxdq_custom == 1] = 1            
-            else:
-            # pxdq array 0th axis > 1 is not an issue, so just extend axis:    
-                pxdq_custom = np.array([pxdq_custom] * pxdq.shape[0]) 
+            else: # pxdq array 0th axis > 1 is not an issue, so just extend axis
+                print('c')
+                pxdq_custom = np.concatenate((pxdq_custom, pxdq_custom[0:1]), axis=0)
                 pxdq[pxdq_custom] = 1
 
 
         elif pxdq_custom.ndim == pxdq.ndim:
-            log.info(f'  --> OMG WHY IS IT BROKEN {pxdq_custom.shape} and {pxdq.shape}')
-            if pxdq.shape[0] == 1:   
-                if pxdq_custom.shape[0] > pxdq.shape[0]: # if there is a map per integration, it is perhaps larger than the dq array
-                    pxdq = np.array([pxdq] * pxdq_custom.shape[0])
-                    pxdq[pxdq_custom] = 1                
-                else:
-                    pxdq_custom = np.expand_dims(pxdq_custom, axis=0)     
-                    pxdq[pxdq_custom == 1] = 1   
+            if pxdq_custom.shape[0] > pxdq.shape[0]: 
+                pxdq_custom = pxdq_custom[:pxdq.shape[0]]
             else:
-                pxdq[pxdq_custom] = 1
+                # Duplicate an existing slice (e.g., the first one) and extend the array
+                pxdq_custom = np.concatenate((pxdq_custom, pxdq_custom[0:1]), axis=0)
+                
+            pxdq[pxdq_custom == 1] = 1               
 
-        elif pxdq_custom.ndim > pxdq.ndim: 
-            pxdq = np.array([pxdq] * pxdq_custom.shape[0])
-            pxdq[pxdq_custom] = 1
+        # if pxdq_custom.ndim == pxdq.ndim - 1: # Enable 3D bad pixel map to flag individual frames
+        #     # Check if custom map is a 2D array to avoid indexing errors when broadcasting:
+        #     if pxdq_custom.ndim == 2 and pxdq.shape[0] == 1:   
+        #         # Add a new axis to pxdq_custom to match pxdq's shape
+        #         pxdq_custom = np.expand_dims(pxdq_custom, axis=0)      
+        #         # Assign values using the expanded pxdq_custom
+        #         pxdq[pxdq_custom == 1] = 1            
+        #     else: # pxdq array 0th axis > 1 is not an issue, so just extend axis    
+        #         pxdq_custom = np.array([pxdq_custom] * pxdq.shape[0]) 
+        #         pxdq[pxdq_custom] = 1
+
+
+        # elif pxdq_custom.ndim == pxdq.ndim:
+        #     if pxdq.shape[0] == 1:   
+        #         # TODO: if there is a map per integration, it is perhaps larger than the dq array; check this scenario
+        #         if pxdq_custom.shape[0] > pxdq.shape[0]: 
+        #             pxdq = np.array([pxdq] * pxdq_custom.shape[0])
+        #             pxdq[pxdq_custom] = 1                
+        #         else:
+        #             pxdq_custom = np.expand_dims(pxdq_custom, axis=0)     
+        #             pxdq[pxdq_custom == 1] = 1   
+        #     else:
+        #         pxdq[pxdq_custom] = 1
+
+        # elif pxdq_custom.ndim > pxdq.ndim: 
+        #     pxdq = np.array([pxdq] * pxdq_custom.shape[0])
+        #     pxdq[pxdq_custom] = 1
 
 
         else:
             raise ValueError(f'Custom bad pixel map dimensions of {pxdq_custom.ndim} vs {pxdq.ndim} are incompatible.')
-        
-
-        # if pxdq_custom.ndim == pxdq.ndim - 1: # Enable 3D bad pixel map to flag individual frames
-            # pxdq_custom = np.array([pxdq_custom] * pxdq.shape[0])         
-
-
-        log.info(f' --> this should be fixed now...; {pxdq_custom.shape} and {pxdq.shape}') 
+              
         log.info('  --> Method custom: flagged %.0f additional bad pixel(s) -- %.2f%%' % (np.sum(pxdq) - np.sum(pxdq_orig), 100. * (np.sum(pxdq) - np.sum(pxdq_orig)) / np.prod(pxdq.shape)))
         
         pass
