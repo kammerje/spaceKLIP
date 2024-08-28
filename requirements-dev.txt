@@ -1,7 +1,6 @@
 -r requirements.txt
-sphinx
-pandoc
-nbsphinx
-sphinx-rtd-theme
-webbpsf_ext
-sphinx_automodapi
+sphinx>=7.2.6
+pandoc>=2.3
+nbsphinx>=0.9.3
+sphinx-rtd-theme>=2.0.0
+sphinx_automodapi>=0.17.0

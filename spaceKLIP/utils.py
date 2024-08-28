@@ -16,10 +16,11 @@ import numpy as np
 import importlib
 import scipy.ndimage.interpolation as sinterp
 
-from scipy.integrate import simps
+from scipy.integrate import simpson
 from scipy.ndimage import fourier_shift, gaussian_filter
 from scipy.ndimage import shift as spline_shift
 
+import pysiaf
 from webbpsf_ext.imreg_tools import get_coron_apname as nircam_apname
 from webbpsf_ext.image_manip import expand_mask
 
@@ -123,8 +124,14 @@ def read_obs(fitsfile,
     # Read FITS file.
     hdul = pyfits.open(fitsfile)
     data = hdul['SCI'].data
-    erro = hdul['ERR'].data
-    pxdq = hdul['DQ'].data
+    try:
+        erro = hdul['ERR'].data
+    except:
+        erro = np.sqrt(data)
+    try:
+        pxdq = hdul['DQ'].data
+    except:
+        pxdq = np.zeros_like(data).astype('int')
     head_pri = hdul[0].header
     head_sci = hdul['SCI'].header
     is2d = False
@@ -384,10 +391,10 @@ def write_fitpsf_images(fitpsf,
             pri.header[key] = 'NONE'
         else:
             pri.header[key] = row[key]
+    res = pyfits.ImageHDU(residual_image, name='RES')
     sci = pyfits.ImageHDU(fitpsf.data_stamp, name='SCI')
     mod = pyfits.ImageHDU(fm_bestfit, name='MOD')
-    res = pyfits.ImageHDU(residual_image, name='RES')
-    hdul = pyfits.HDUList([pri, sci, res, mod])
+    hdul = pyfits.HDUList([pri, res, sci, mod])
     hdul.writeto(fitsfile, output_verify='fix', overwrite=True)
     
     pass
@@ -654,8 +661,8 @@ def _get_tp_comsubst(instrume,
             # Compute COM substrate transmission averaged over the respective
             # filter profile.
             bandpass_throughput = np.interp(comsubst_wave, bandpass_wave, bandpass_throughput)
-            int_tp_bandpass = simps(bandpass_throughput, comsubst_wave)
-            int_tp_bandpass_comsubst = simps(bandpass_throughput * comsubst_throughput, comsubst_wave)
+            int_tp_bandpass = simpson(bandpass_throughput, comsubst_wave)
+            int_tp_bandpass_comsubst = simpson(bandpass_throughput * comsubst_throughput, comsubst_wave)
             tp_comsubst = int_tp_bandpass_comsubst / int_tp_bandpass
     
     # Return.
@@ -819,7 +826,7 @@ def get_filter_info(instrument, timeout=1, do_svo=True, return_more=False):
             'MIRI'  : webbpsf.MIRI,
         }
         inst = inst_func[iname_upper]()
-        filter_list = inst.filter_list
+        filter_list = inst.filter_list 
 
     wave, weff = ({}, {})
     if do_svo:
@@ -1026,6 +1033,32 @@ def cube_outlier_detection(data, sigma_cut=10, nint_min=10):
 
     return indbad
 
+def bg_minimize(par,X,Y,bgmaskfile):
+    """Simple minimisation function for Godoy background subtraction
+    
+    Parameters
+    ----------
+    par : int
+        Variable to scale background array
+    X : ndarray
+        Science / reference image
+    Y : ndarray
+        Background image
+    bgmaskfile : str
+        File which provides a mask to select which pixels
+        to compare during minimisation
+
+    Returns
+    -------
+    Sum of the squares of the residuals between images X and Y. 
+    """
+    mask = pyfits.getdata(bgmaskfile)
+    indices = np.where(mask == 1)
+    X0 = X[indices]
+    Y0 = Y[indices]
+    Z0 = X0 - Y0*par/100
+    return np.nansum(np.sqrt(Z0**2))
+
 def interpret_dq_value(dq_value):
     """Interpret DQ value using DQ definition
 
@@ -1045,6 +1078,38 @@ def interpret_dq_value(dq_value):
     if dq_value == 0:
         return {'GOOD'}
     return dqflags_to_mnemonics(dq_value, pixel)
+
+def gaussian_kernel(sigma_x=1, sigma_y=1, theta_degrees=0, n=6):
+    """
+    Generates a 2D Gaussian kernel with specified standard deviations and rotation.
+
+    Parameters:
+    sigma_x (float): Standard deviation of the Gaussian in the x direction.
+    sigma_y (float): Standard deviation of the Gaussian in the y direction.
+    theta_degrees (float): Rotation angle of the Gaussian kernel in degrees.
+
+    Returns:
+    numpy.ndarray: The generated Gaussian kernel.
+    """
+    # Ensure kernel size is at least 3x3 and odd
+    kernel_size_x = max(3, int(n * sigma_x + 1) | 1)  # Ensure odd size
+    kernel_size_y = max(3, int(n * sigma_y + 1) | 1)  # Ensure odd size
+
+    # Convert theta from degrees to radians
+    theta = np.deg2rad(theta_degrees)
+
+    # Create coordinate grids
+    x = np.linspace(-kernel_size_x // 2, kernel_size_x // 2, kernel_size_x)
+    y = np.linspace(-kernel_size_y // 2, kernel_size_y // 2, kernel_size_y)
+    x, y = np.meshgrid(x, y)
+
+    # Rotate the coordinates
+    x_rot = x * np.cos(theta) + y * np.sin(theta)
+    y_rot = -x * np.sin(theta) + y * np.cos(theta)
+
+    kernel = np.exp(-(x_rot ** 2 / (2 * sigma_x ** 2) + y_rot ** 2 / (2 * sigma_y ** 2)))
+    kernel /= kernel.sum()
+    return kernel
 
 def get_dqmask(dqarr, bitvalues):
     """Get DQ mask from DQ array
@@ -1075,3 +1140,38 @@ def get_dqmask(dqarr, bitvalues):
         dqmask = dqmask | (dqarr & bitval)
 
     return dqmask
+
+def pop_pxar_kw(filepaths):
+    """
+    
+    Populate the PIXAR_A2 SCI header keyword which is required by pyKLIP in
+    case it is not already available.
+
+    Parameters
+    ----------
+    filepaths : list or array
+        File paths of the FITS files whose headers shall be checked.
+    """
+    
+    for filepath in filepaths:
+        try:
+            pxar = pyfits.getheader(filepath, 'SCI')['PIXAR_A2']
+        except:
+            hdul = pyfits.open(filepath)
+            siaf_nrc = pysiaf.Siaf('NIRCam')
+            siaf_nis = pysiaf.Siaf('NIRISS')
+            siaf_mir = pysiaf.Siaf('MIRI')
+            if hdul[0].header['INSTRUME'] == 'NIRCAM':
+                ap = siaf_nrc[hdul[0].header['APERNAME']]
+            elif hdul[0].header['INSTRUME'] == 'NIRISS':
+                ap = siaf_nis[hdul[0].header['APERNAME']]
+            elif hdul[0].header['INSTRUME'] == 'MIRI':
+                ap = siaf_mir[hdul[0].header['APERNAME']]
+            else:
+                raise UserWarning('Data originates from unknown JWST instrument')
+            pix_scale = (ap.XSciScale + ap.YSciScale) / 2.
+            hdul['SCI'].header['PIXAR_A2'] = pix_scale**2
+            hdul.writeto(filepath, output_verify='fix', overwrite=True)
+            hdul.close()
+    
+    pass

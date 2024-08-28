@@ -20,8 +20,8 @@ import pysiaf
 import webbpsf, webbpsf_ext
 
 from astropy.table import Table
-from astroquery.svo_fps import SvoFps
 from jwst.pipeline import Detector1Pipeline, Image2Pipeline, Coron3Pipeline
+from stdatamodels.jwst import datamodels
 
 from .utils import nircam_apname, get_nrcmask_from_apname, get_filter_info
 
@@ -109,6 +109,7 @@ class Database():
                             datapaths,
                             psflibpaths=None,
                             bgpaths=None,
+                            cr_from_siaf=False,
                             assoc_using_targname=True):
         """
         Read JWST stage 0 (*uncal), 1 (*rate or *rateints), or 2 (*cal or
@@ -190,6 +191,7 @@ class Database():
         APERNAME = []
         PPS_APER = []
         PIXSCALE = []  # arcsec
+        PIXAR_SR = []  # sr
         BUNIT = []
         CRPIX1 = []  # pix
         CRPIX2 = []  # pix
@@ -273,9 +275,14 @@ class Database():
                 raise UserWarning('Data originates from unknown telescope')
             BLURFWHM += [head.get('BLURFWHM', np.nan)]
             head = hdul['SCI'].header
+            PIXAR_SR += [head.get('PIXAR_SR', np.nan)]
             BUNIT += [head.get('BUNIT', 'NONE')]
-            CRPIX1 += [head.get('CRPIX1', np.nan)]
-            CRPIX2 += [head.get('CRPIX2', np.nan)]
+            if cr_from_siaf:
+                CRPIX1 += [ap.XSciRef]
+                CRPIX2 += [ap.YSciRef]
+            else:
+                CRPIX1 += [head.get('CRPIX1', np.nan)]
+                CRPIX2 += [head.get('CRPIX2', np.nan)]
             VPARITY += [head.get('VPARITY', -1)]
             V3I_YANG += [head.get('V3I_YANG', 0.)]
             RA_REF += [head.get('RA_REF', np.nan)]
@@ -308,6 +315,7 @@ class Database():
         APERNAME = np.array(APERNAME)
         PPS_APER = np.array(PPS_APER)
         PIXSCALE = np.array(PIXSCALE)
+        PIXAR_SR = np.array(PIXAR_SR)
         BUNIT = np.array(BUNIT)
         CRPIX1 = np.array(CRPIX1)
         CRPIX2 = np.array(CRPIX2)
@@ -355,11 +363,11 @@ class Database():
                 ww_ref = []
                 for j in range(len(allpaths[ww])):
                     if allpaths[ww][j] in psflibpaths:
-                        ww_ref += [j]
+                        ww_ref.append(j)
                     else:
-                        ww_sci += [j]
-                ww_sci = np.array(ww_sci)
-                ww_ref = np.array(ww_ref)
+                        ww_sci.append(j)
+                ww_sci = np.array(ww_sci, dtype='int')
+                ww_ref = np.array(ww_ref, dtype='int')
             else:
                 is_psf = IS_PSF[ww]
                 exp_type = EXP_TYPE[ww]
@@ -405,6 +413,7 @@ class Database():
                                'APERNAME',
                                'PPS_APER',
                                'PIXSCALE',
+                               'PIXAR_SR',
                                'BUNIT',
                                'CRPIX1',
                                'CRPIX2',
@@ -437,6 +446,7 @@ class Database():
                                'float',
                                'object',
                                'object', 
+                               'float',
                                'float',
                                'object',
                                'float',
@@ -476,10 +486,9 @@ class Database():
                 maskfile = allpaths[ww][j].replace('.fits', '_psfmask.fits')
                 if not os.path.exists(maskfile):    
                     if EXP_TYPE[ww][j] == 'NRC_CORON':
-                        maskpath = APERNAME[ww][j] + '_' + FILTER[ww][j] + '.fits'
-                        maskfile = os.path.join(maskbase, maskpath)
-                        if not os.path.exists(maskfile):
-                            maskfile = 'NONE'
+                        pipeline = Detector1Pipeline()
+                        input = datamodels.open(allpaths[ww][j])
+                        maskfile = pipeline.get_reference_file(input, 'psfmask')
                     elif EXP_TYPE[ww][j] == 'MIR_4QPM' or EXP_TYPE[ww][j] == 'MIR_LYOT':
                         if APERNAME[ww][j] == 'MIRIM_MASK1065':
                             maskpath = 'JWST_MIRI_F1065C_transmission_webbpsf-ext_v2.fits'
@@ -516,6 +525,7 @@ class Database():
                              APERNAME[ww][j],
                              PPS_APER[ww][j],
                              PIXSCALE[ww][j],
+                             PIXAR_SR[ww][j],
                              BUNIT[ww][j],
                              CRPIX1[ww][j],
                              CRPIX2[ww][j],
@@ -571,7 +581,8 @@ class Database():
         pass
     
     def read_jwst_s3_data(self,
-                          datapaths):
+                          datapaths,
+                          cr_from_siaf=False):
         """
         Read JWST stage 3 data (this can be *i2d data from the official JWST
         pipeline, or data products from the pyKLIP and classical PSF
@@ -621,6 +632,7 @@ class Database():
         APERNAME = []
         PPS_APER = []
         PIXSCALE = []  # arcsec
+        PIXAR_SR = []  # sr
         MODE = []
         ANNULI = []
         SUBSECTS = []
@@ -717,9 +729,14 @@ class Database():
             BLURFWHM += [head.get('BLURFWHM', np.nan)]
             if TYPE[-1] == 'CORON3':
                 head = hdul['SCI'].header
+            PIXAR_SR += [head.get('PIXAR_SR', np.nan)]
             BUNIT += [head.get('BUNIT', 'NONE')]
-            CRPIX1 += [head.get('CRPIX1', np.nan)]
-            CRPIX2 += [head.get('CRPIX2', np.nan)]
+            if cr_from_siaf:
+                CRPIX1 += [ap.XSciRef]
+                CRPIX2 += [ap.YSciRef]
+            else:
+                CRPIX1 += [head.get('CRPIX1', np.nan)]
+                CRPIX2 += [head.get('CRPIX2', np.nan)]
             HASH += [TELESCOP[-1] + '_' + INSTRUME[-1] + '_' + DETECTOR[-1] + '_' + FILTER[-1] + '_' + PUPIL[-1] + '_' + CORONMSK[-1] + '_' + SUBARRAY[-1]]
             hdul.close()
         TYPE = np.array(TYPE)
@@ -743,6 +760,7 @@ class Database():
         APERNAME = np.array(APERNAME)
         PPS_APER = np.array(PPS_APER)
         PIXSCALE = np.array(PIXSCALE)
+        PIXAR_SR = np.array(PIXAR_SR)
         MODE = np.array(MODE)
         ANNULI = np.array(ANNULI)
         SUBSECTS = np.array(SUBSECTS)
@@ -784,6 +802,7 @@ class Database():
                                    'APERNAME',
                                    'PPS_APER',
                                    'PIXSCALE',
+                                   'PIXAR_SR',
                                    'MODE',
                                    'ANNULI',
                                    'SUBSECTS',
@@ -812,6 +831,7 @@ class Database():
                                    'object',
                                    'object',
                                    'object',
+                                   'float',
                                    'float',
                                    'object',
                                    'int',
@@ -848,6 +868,7 @@ class Database():
                              APERNAME[ww[j]],
                              PPS_APER[ww[j]],
                              PIXSCALE[ww[j]],
+                             PIXAR_SR[ww[j]],
                              MODE[ww[j]],
                              ANNULI[ww[j]],
                              SUBSECTS[ww[j]],
@@ -1011,8 +1032,10 @@ class Database():
             else:
                 print_tab.remove_columns(['TARG_RA', 'TARG_DEC', 'EXPSTART', 'APERNAME', 'PPS_APER', 
                                           'CRPIX1', 'CRPIX2', 'RA_REF', 'DEC_REF', 'FITSFILE', 'MASKFILE'])
+            print_tab['XOFFSET'] *= 1e3
             print_tab['XOFFSET'] = np.round(print_tab['XOFFSET'])
             print_tab['XOFFSET'][print_tab['XOFFSET'] == 0.] = 0.
+            print_tab['YOFFSET'] *= 1e3
             print_tab['YOFFSET'] = np.round(print_tab['YOFFSET'])
             print_tab['YOFFSET'][print_tab['YOFFSET'] == 0.] = 0.
             print_tab.pprint()
@@ -1092,7 +1115,8 @@ class Database():
                    yoffset=None,
                    crpix1=None,
                    crpix2=None,
-                   blurfwhm=None):
+                   blurfwhm=None,
+                   update_pxar=False):
         """
         Update the content of the observations database.
         
@@ -1128,6 +1152,9 @@ class Database():
         blurfwhm : float, optional
             New FWHM for the Gaussian filter blurring (pix) for the observation
             to be updated. The default is None.
+        update_pxar : bool, optional
+            Update the pixel area column of the database based on the FITS file
+            header information? The default is False.
         
         Returns
         -------
@@ -1164,6 +1191,12 @@ class Database():
         self.obs[key]['FITSFILE'][index] = fitsfile
         if maskfile is not None:
             self.obs[key]['MASKFILE'][index] = maskfile
+        if update_pxar:
+            try:
+                pxar = pyfits.getheader(self.obs[key]['FITSFILE'][index], 'SCI')['PIXAR_SR']
+                self.obs[key]['PIXAR_SR'][index] = pxar
+            except:
+                pass
         hdul.close()
         
         pass
@@ -1277,6 +1310,7 @@ def create_database(output_dir,
                     assoc_using_targname=True,
                     verbose=True,
                     readlevel='012',
+                    cr_from_siaf=False,
                     **kwargs):
 
     """ Create a spaceKLIP database from JWST data
@@ -1360,11 +1394,13 @@ def create_database(output_dir,
         db.read_jwst_s012_data(datapaths=datapaths,
                                psflibpaths=psflibpaths,
                                bgpaths=bgpaths,
+                               cr_from_siaf=cr_from_siaf,
                                assoc_using_targname=assoc_using_targname)
     elif str(readlevel) == '3':
         # the above get_files usage won't match KLIP outputsa, so find them here
         datapaths_klip = sorted(glob.glob(os.path.join(input_dir, "*KLmodes-all.fits")))
         db.read_jwst_s3_data(datapaths=datapaths+datapaths_klip,
+                             cr_from_siaf=cr_from_siaf,
                             )
     elif str(readlevel) == '4':
         db.read_jwst_s4_data(datapaths=datapaths,
