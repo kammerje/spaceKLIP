@@ -1068,7 +1068,7 @@ class AnalysisTools():
                     if not all(x in kwargs.keys() for x in ['sigma_xguess', 'sigma_yguess', 'theta_guess']):
                         gauss_param_guesses = [0.3,0.3,0]
                     else:
-                        gauss_param_guesses = [kwargs['sigma_xrange'], kwargs['sigma_yrange'], kwargs['theta_range']]
+                        gauss_param_guesses = [kwargs['sigma_xguess'], kwargs['sigma_yguess'], kwargs['theta_guess']]
 
 
                     # Loop through companions.
