@@ -1041,7 +1041,7 @@ class ImageTools():
                             log.info('  --> Unknown method ' + method_split[k] + ': skipped')
 
                 # The new DQ will just be the pxdq_temp we've been modifying
-                new_dq = pxdq_temp.astype(np.uint32) 
+                new_dq = pxdq_temp.astype(np.uint32)
 
                 # Write FITS file and PSF mask.
                 fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, new_dq, head_pri, head_sci, is2d, imshifts, maskoffs)
@@ -1382,7 +1382,9 @@ class ImageTools():
                 #ax.set_xscale('log')
                 ax.set_yscale('log')
                 ax.tick_params(which='both', direction='in', top=True, right=True, labelsize=12)
-
+                ax.set_xlabel("Pixel Value", fontsize=14)
+                ax.set_ylabel("Frequency", fontsize=12)
+                ax.set_title(f"{os.path.basename(fitsfile)} \n Original vs. Cleaned Data", fontsize=16)
                 output_file = os.path.join(output_dir, tail.replace('.fits','_hist.png'))
                 plt.savefig(output_file)
 
@@ -2857,7 +2859,8 @@ class ImageTools():
                             fov_pix=65,
                             oversample=2,
                             use_coeff=False,
-                            highpass=False):
+                            highpass=False,
+                            save_figures=True):
         """
         Find the star position behind the coronagraphic mask using a WebbPSF
         model.
@@ -2887,6 +2890,8 @@ class ImageTools():
         use_coeff : bool, optional
             Use pre-computed coefficients to generate the WebbPSF model. The
             default is False.
+        save_figures : bool, optional
+            Save the plots in a PDF?
 
         Returns
         -------
@@ -3025,8 +3030,9 @@ class ImageTools():
             output_file = os.path.join(output_dir, output_file)
             plt.savefig(output_file)
             log.info(f" Plot saved in {output_file}")
-            # plt.show()
-            plt.close(fig)
+            plt.show()
+            if save_figures:
+                plt.close(fig)
 
         # Return star position.
         return xc, yc, median_xshift, median_yshift
@@ -3041,7 +3047,8 @@ class ImageTools():
                      align_to_file=None,
                      scale_prior=False,
                      kwargs={},
-                     subdir='aligned'):
+                     subdir='aligned',
+                     save_figures=True):
         """
         Align all SCI and REF frames to the first SCI frame.
 
@@ -3072,6 +3079,8 @@ class ImageTools():
         subdir : str, optional
             Name of the directory where the data products shall be saved. The
             default is 'aligned'.
+        save_figures : bool, optional
+            Save the plots in a PDF?
 
         Returns
         -------
@@ -3312,7 +3321,9 @@ class ImageTools():
             output_file = os.path.join(output_dir, key + '_align_sci.pdf')
             plt.savefig(output_file)
             log.info(f" Plot saved in {output_file}")
-            plt.close(fig)
+            plt.show()
+            if save_figures:
+                plt.close(fig)
             
             # Plot reference frame alignment.
             if len(ww_ref) > 0:
@@ -3364,6 +3375,8 @@ class ImageTools():
                 output_file = os.path.join(output_dir, key + '_align_ref.pdf')
                 plt.savefig(output_file)
                 log.info(f" Plot saved in {output_file}")
-                plt.close(fig)
+                plt.show()
+                if save_figures:
+                    plt.close(fig)
 
 
