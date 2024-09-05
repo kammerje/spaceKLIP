@@ -3025,14 +3025,15 @@ class ImageTools():
             ax[2].legend(loc='upper right', fontsize=12)
             ax[2].set_title('Scene overview (1-indexed)')
             plt.tight_layout()
-            output_file = os.path.split(self.database.obs[key]['FITSFILE'][j])[1]
-            output_file = output_file.replace('.fits', '.pdf')
-            output_file = os.path.join(output_dir, output_file)
-            plt.savefig(output_file)
-            log.info(f" Plot saved in {output_file}")
-            plt.show()
             if save_figures:
-                plt.close(fig)
+                output_file = os.path.split(self.database.obs[key]['FITSFILE'][j])[1]
+                output_file = output_file.replace('.fits', '.pdf')
+                output_file = os.path.join(output_dir, output_file)
+                plt.savefig(output_file)
+                log.info(f" Plot saved in {output_file}")
+            plt.show()
+            plt.close(fig)
+
 
         # Return star position.
         return xc, yc, median_xshift, median_yshift
@@ -3318,12 +3319,12 @@ class ImageTools():
             ax.set_ylabel('y-shift [mas]')
             ax.legend(loc='upper right')
             ax.set_title(f'Science frame alignment\nfor {self.database.obs[key]["TARGPROP"][ww_sci[0]]}, {self.database.obs[key]["FILTER"][ww_sci[0]]}')
-            output_file = os.path.join(output_dir, key + '_align_sci.pdf')
-            plt.savefig(output_file)
-            log.info(f" Plot saved in {output_file}")
-            plt.show()
             if save_figures:
-                plt.close(fig)
+                output_file = os.path.join(output_dir, key + '_align_sci.pdf')
+                plt.savefig(output_file)
+                log.info(f" Plot saved in {output_file}")
+            plt.show()
+            plt.close(fig)
             
             # Plot reference frame alignment.
             if len(ww_ref) > 0:
@@ -3372,11 +3373,11 @@ class ImageTools():
                 ax.set_ylabel('y-shift [mas]')
                 ax.legend(loc='upper right', fontsize='small')
                 ax.set_title(f'Reference frame alignment\n showing {len(ww_ref)} PSF refs for {self.database.obs[key]["FILTER"][ww_ref[0]]}')
-                output_file = os.path.join(output_dir, key + '_align_ref.pdf')
-                plt.savefig(output_file)
-                log.info(f" Plot saved in {output_file}")
-                plt.show()
                 if save_figures:
-                    plt.close(fig)
+                    output_file = os.path.join(output_dir, key + '_align_ref.pdf')
+                    plt.savefig(output_file)
+                    log.info(f" Plot saved in {output_file}")
+                plt.show()
+                plt.close(fig)
 
 
