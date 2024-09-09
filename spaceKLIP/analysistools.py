@@ -1060,15 +1060,15 @@ class AnalysisTools():
                     split_fit = False
 
                 if convgauss or split_fit:
-                    if not all(x in kwargs.keys() for x in ['sigma_xrange', 'sigma_yrange', 'theta_range']):
-                        gauss_param_bounds = [1,1,1]
+                    if not all(x in kwargs.keys() for x in ['sigma_xrange', 'sigma_yrange', 'scale_range', 'theta_range']):
+                        gauss_param_bounds = [1,1,1,1]
                     else:
-                        gauss_param_bounds = [kwargs['sigma_xrange'], kwargs['sigma_yrange'], kwargs['theta_range']]
+                        gauss_param_bounds = [kwargs['sigma_xrange'], kwargs['sigma_yrange'], kwargs['scale_range'], kwargs['theta_range']]
 
-                    if not all(x in kwargs.keys() for x in ['sigma_xguess', 'sigma_yguess', 'theta_guess']):
-                        gauss_param_guesses = [0.3,0.3,0]
+                    if not all(x in kwargs.keys() for x in ['sigma_xguess', 'sigma_yguess',  'scale_guess', 'theta_guess']):
+                        gauss_param_guesses = [0.3,0.3,0,0]
                     else:
-                        gauss_param_guesses = [kwargs['sigma_xguess'], kwargs['sigma_yguess'], kwargs['theta_guess']]
+                        gauss_param_guesses = [kwargs['sigma_xguess'], kwargs['sigma_yguess'], kwargs['scale_guess'], kwargs['theta_guess']]
 
 
                     # Loop through companions.
@@ -1953,9 +1953,9 @@ def loss_function(params,
     '''
     Loss function for the minimization process in fit_for_extended_sources.
     '''
-    sigma_x, sigma_y, theta_degrees = params
+    sigma_x, sigma_y, theta_degrees, scale = params
     kernel = gaussian_kernel(sigma_x=sigma_x, sigma_y=sigma_y, theta_degrees=theta_degrees, n=6)
-    convolved_image = convolve(offset_psf, kernel)
+    convolved_image = convolve(offset_psf*10**scale, kernel)
 
     mse = np.mean((target_array - convolved_image) ** 2)
     return mse
@@ -2010,14 +2010,14 @@ def best_convfit_and_residuals(fma,
         kernel = gaussian_kernel(sigma_x=result.x[0],
                                  sigma_y=result.x[1],
                                  theta_degrees=result.x[2], n=6)
+        fm_bestfit_convolved = convolve(fm_bestfit * 10 ** result.x[3], kernel)
     else:
         result = None
         # Convolve the PSF by a 2D gaussian
         kernel = gaussian_kernel(sigma_x=fma.fit_sigma_x.bestfit,
                                  sigma_y=fma.fit_sigma_y.bestfit,
                                  theta_degrees=fma.fit_theta.bestfit, n=6)
-
-    fm_bestfit_convolved = convolve(fm_bestfit, kernel)
+        fm_bestfit_convolved = convolve(fm_bestfit*fma.fit_flux.bestfit, kernel)
 
     # make residual map
     residual_map = fma.data_stamp - fm_bestfit_convolved
@@ -2088,13 +2088,14 @@ def estimate_extended(target,
 
     '''
     if initial_params is None:
-        initial_params = [0.1, 0.1, 0]
+        initial_params = [0.1, 0.1, 0,1]
 
     if bounds is None:
         # Bounds for parameters (sigma_x, sigma_y, theta, intensity)
         bounds = [(0.01, 20),  # sigma_x should be positive and within a reasonable range
                   (0.01, 20),  # sigma_y should be positive and within a reasonable range
-                  (-180, 180)]  # theta should be between -180 and 180 degrees
+                  (-180, 180),  # theta should be between -180 and 180 degrees
+                  (-1, 1)]  # log flux range should be positive and within a reasonable range
 
     # Use partial to pass target_array as a fixed argument to the loss function
     loss_with_target = partial(loss_function, offset_psf=offset_psf, target_array=target)
