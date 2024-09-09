@@ -3545,7 +3545,7 @@ class ImageTools():
 
             db_tab = self.database.obs[key]
 
-            fwhm = db_tab['CWAVEL'][0] * 1e-6 / JWST_CIRCUMSCRIBED_DIAMETER * 180. / np.pi * 3600. / db_tab['PIXSCALE'][0]
+            fwhm = db_tab['CWAVEL'][0] * 1e-6 / 5.2 * 180. / np.pi * 3600. / db_tab['PIXSCALE'][0]
             blur_fwhm = db_tab['BLURFWHM'][0]
             if np.isfinite(blur_fwhm):
                 blur_sigma = blur_fwhm/np.sqrt(8.*np.log(2.))
