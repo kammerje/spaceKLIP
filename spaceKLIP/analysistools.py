@@ -854,7 +854,6 @@ class AnalysisTools():
                            fitmethod='mcmc',
                            minmethod=None,
                            fitkernel='diag',
-                           convgauss=False,
                            subtract=True,
                            inject=False,
                            remove_background=False,
@@ -910,9 +909,6 @@ class AnalysisTools():
         fitkernel : str, optional
             Pyklip.fitpsf.FitPSF covariance kernel which shall be used for the
             Gaussian process regression. The default is 'diag'.
-        convgauss:  bool, optional
-            if is True, it will convolve the PSF by a 2D Gaussian function during the mcmc fit, and fit for the
-            sigma_x, sigma_y and theta parameters. The default is False.
         subtract : bool, optional
             If True, subtract each extracted companion from the pyKLIP dataset
             before fitting the next one in the list. The default is True.
@@ -1059,12 +1055,7 @@ class AnalysisTools():
                 else:
                     split_fit = False
 
-                if convgauss or split_fit:
-                    if not all(x in kwargs.keys() for x in ['sigma_xrange', 'sigma_yrange', 'scale_range', 'theta_range']):
-                        gauss_param_bounds = [1,1,1,1]
-                    else:
-                        gauss_param_bounds = [kwargs['sigma_xrange'], kwargs['sigma_yrange'], kwargs['scale_range'], kwargs['theta_range']]
-
+                if split_fit:
                     if not all(x in kwargs.keys() for x in ['sigma_xguess', 'sigma_yguess',  'scale_guess', 'theta_guess']):
                         gauss_param_guesses = [0.3,0.3,0,0]
                     else:
@@ -1133,7 +1124,6 @@ class AnalysisTools():
                                        'float',
                                        'float'))
                 else:
-                    gauss_param_bounds=None
                     # Loop through companions.
                     tab = Table(names=('ID',
                                        'RA',
@@ -1533,10 +1523,6 @@ class AnalysisTools():
                             fma = fitpsf.FMAstrometry(guess_sep=guess_sep,
                                                       guess_pa=guess_pa,
                                                       fitboxsize=boxsize,
-                                                      convgauss=convgauss,
-                                                      guess_sigma_x=gauss_param_guesses[0],
-                                                      guess_sigma_y=gauss_param_guesses[1],
-                                                      guess_theta=gauss_param_guesses[2]
                                                       )
                             fma.generate_fm_stamp(fm_image=fm_frame,
                                                   fm_center=[fm_centx, fm_centy],
@@ -1547,7 +1533,7 @@ class AnalysisTools():
                                                     exclusion_radius=exclr)
                             corr_len_label = r'$l$'
                             fma.set_kernel(fitkernel, [corr_len_guess], [corr_len_label])
-                            fma.set_bounds(xrange, yrange, frange, [corr_len_range],gauss_param_bounds=gauss_param_bounds)
+                            fma.set_bounds(xrange, yrange, frange, [corr_len_range])
                             
                             # Make sure that the noise map is invertible.
                             noise_map_max = np.nanmax(fma.noise_map)
@@ -1582,19 +1568,14 @@ class AnalysisTools():
                             
                             # Plot the MCMC fit results.
                             path = os.path.join(output_dir_kl, key + '-corner_c%.0f' % (k + 1) + '.pdf')
-                            fig = fma.make_corner_plot(**kwargs)
+                            fig = fma.make_corner_plot()
                             fig.savefig(path)
                             plt.close(fig)
                             path = os.path.join(output_dir_kl, key + '-model_c%.0f' % (k + 1) + '.pdf')
                             fig = fma.best_fit_and_residuals()
                             fig.savefig(path)
                             plt.close(fig)
-                            if convgauss:
-                                fig, _ = best_convfit_and_residuals(fma,minmethod=None)
-                                path = os.path.join(output_dir_kl, key + '-model_conv_c%.0f' % (k + 1) + '.pdf')
-                                fig.savefig(path)
-                                plt.close(fig)
-                            
+
                             # Write the MCMC fit results into a table.
                             flux_jy = fma.fit_flux.bestfit * guess_flux
                             flux_jy *= fzero[filt] / 10**(mstar[filt] / 2.5)  # Jy
@@ -1617,39 +1598,8 @@ class AnalysisTools():
                             appmag = mstar[filt] + delmag  # vegamag
                             appmag_err = np.sqrt(mstar_err_temp**2 + delmag_err**2)
                             fitsfile = os.path.join(output_dir_kl, key + '-fitpsf_c%.0f' % (k + 1) + '.fits')
-                            if convgauss:
-                                tab.add_row((k + 1,
-                                             fma.raw_RA_offset.bestfit * pxsc_arcsec,  # arcsec
-                                             fma.raw_RA_offset.error * pxsc_arcsec,  # arcsec
-                                             fma.raw_Dec_offset.bestfit * pxsc_arcsec,  # arcsec
-                                             fma.raw_Dec_offset.error * pxsc_arcsec,  # arcsec
-                                             flux_jy,
-                                             flux_jy_err,
-                                             flux_si,
-                                             flux_si_err,
-                                             flux_si_alt,
-                                             flux_si_alt_err,
-                                             fma.raw_flux.bestfit * guess_flux,
-                                             fma.raw_flux.error * guess_flux,
-                                             delmag,  # mag
-                                             delmag_err,  # mag
-                                             appmag,  # mag
-                                             appmag_err,  # mag
-                                             mstar[filt],  # mag
-                                             mstar_err_temp,  # mag
-                                             np.nan,
-                                             np.nan,
-                                             scale_factor_avg,
-                                             tp_comsubst,
-                                             fitsfile,
-                                             fma.fit_sigma_x.bestfit,
-                                             fma.fit_sigma_x.error,
-                                             fma.fit_sigma_y.bestfit,
-                                             fma.fit_sigma_y.error,
-                                             fma.fit_theta.bestfit,
-                                             fma.fit_theta.error,
-                                             ))
-                            elif split_fit:
+
+                            if split_fit:
                                 # fit the sources with a 2D gaussian only to evaluate the sigma_x, sigma_y and theta
                                 fig, result = best_convfit_and_residuals(fma,
                                                                          minmethod=minmethod,
