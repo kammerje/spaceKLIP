@@ -3372,7 +3372,7 @@ class ImageTools():
     def subtract_nircam_coron_background(self,
                                         subdir='bgsub',
                                         mask_snr_threshold=2,
-                                        r_excl_nfwhm=50,
+                                        r_excl_nfwhm=40,
                                         q_clip=5.,
                                         align_wrapped=True,
                                         include_global_offset=True,
@@ -3549,7 +3549,6 @@ class ImageTools():
             blur_fwhm = db_tab['BLURFWHM'][0]
             if np.isfinite(blur_fwhm):
                 blur_sigma = blur_fwhm/np.sqrt(8.*np.log(2.))
-                fwhm = np.hypot(fwhm, blur_fwhm)
             else:
                 blur_sigma = None
 
