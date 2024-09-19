@@ -1314,7 +1314,7 @@ class Database():
                     print(summarystr)
 
 def create_database(output_dir, 
-                    pid, 
+                    pid=None, 
                     obsids=None,
                     input_dir=None,
                     psflibpaths=None, 
@@ -1384,15 +1384,18 @@ def create_database(output_dir,
     from webbpsf_ext.imreg_tools import get_files
 
     if input_dir is None:
-        mast_dir = os.getenv('JWSTDOWNLOAD_OUTDIR')
-        input_dir = os.path.join(mast_dir, f'{pid:05d}')
+        mast_dir = os.getenv('JWSTDOWNLOAD_OUTDIR')        
+        if pid is None:
+            raise ValueError("Must provide a pid if input_dir is not specified")
+        else:
+            input_dir = os.path.join(mast_dir, f'{pid:05d}')
 
     # Check if obsids is not a list, tuple, or numpy array
     if not isinstance(obsids, (list, tuple, np.ndarray)):
         obsids = [obsids]
 
     # Cycle through all obsids and get the files in a single list
-    fitsfiles = [get_files(input_dir, pid, obsid=oid, **kwargs) for oid in obsids]
+    fitsfiles = [get_files(input_dir, pid=pid, obsid=oid, **kwargs) for oid in obsids]
     fitsfiles = [f for sublist in fitsfiles for f in sublist]
     datapaths = [os.path.join(input_dir, f) for f in fitsfiles]
 
