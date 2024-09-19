@@ -1066,7 +1066,7 @@ class ImageTools():
                    subdir='bpcleaned',
                    restrict_to=None):
         """
-        **** DEPRECATED BY FIND_BAD_PIXELS() AND CLEAN_BAD_PIXELS() ****
+        **** TO BE DEPRECATED BY FIND_BAD_PIXELS() AND CLEAN_BAD_PIXELS() ****
         Identify and fix bad pixels.
 
         Parameters
@@ -1140,8 +1140,8 @@ class ImageTools():
         None.
 
         """
-        log.info('--> WARNING! The fix_bad_pixels() routine is deprecated, the ..........')
-        log.info('--> WARNING! find_bad_pixels() and clean_bad_pixels() are preferred!!!!')
+        # log.info('--> WARNING! The fix_bad_pixels() routine is deprecated, the ..........')
+        # log.info('--> WARNING! find_bad_pixels() and clean_bad_pixels() are preferred!!!!')
     
         # Set output directory.
         output_dir = os.path.join(self.database.output_dir, subdir)
@@ -3539,6 +3539,8 @@ class ImageTools():
             if ((restrict_to is not None) and (restrict_to not in key)) or not np.any(np.isin(self.database.obs[key]['TYPE'], ['SCI', 'REF'])):
                 continue
 
+            log.info('--> Concatenation ' + key)
+
             # Fill out dictionary of SB values, replacing None with a fixed value where fitting is not possible (SW filters with LW coronagraphs).
             if (key not in bg_sb_dict) or (bg_sb_dict[key] is None):
                 bg_sb_dict[key] = np.repeat(None, len(self.database.obs[key]))
@@ -3612,6 +3614,9 @@ class ImageTools():
                 if db_tab[j]['TYPE'] not in ['SCI', 'REF']:
                     continue
 
+                head, tail = os.path.split(f)
+                log.info('  --> NIRCam Background Subtraction: ' + tail)
+
                 # Assume alignment and background differences between integrations are negligible, so we can use the higher SNR coadded exposure
                 with fits.open(f) as hdul:
                     ints = hdul['SCI'].data
@@ -3684,6 +3689,8 @@ class ImageTools():
                 # Optimize the background model
                 result = lmfit.minimize(background_objective, p, args=(med, bg0_crop, psf0_crop, optmask, q_clip), method='powell')
                 pfin = result.params.valuesdict()
+                logstr = ', '.join([f"{key}:{value:.3f}" for key, value in pfin.items()])
+                log.info('  --> NIRCam Background Subtraction: ' + logstr)
 
                 # Compute the final background model and stellar PSF component:
                 bg = pfin['fbg']*bg0_crop + pfin['bg_offset']
