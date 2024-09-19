@@ -3732,4 +3732,7 @@ class ImageTools():
                     plt.savefig(output_dir+os.path.basename(os.path.normpath(f)).replace('.fits', '_background_model.pdf'), bbox_inches='tight')
                     plt.close(fig)
 
-                self.database.update_obs(key, j, f_out)
+                mask_in = db_tab['MASKFILE'][j]
+                mask = ut.read_msk(mask_in)
+                mask_out = ut.write_msk(mask_in, mask, f_out)
+                self.database.update_obs(key, j, f_out, mask_out)
