@@ -13,6 +13,7 @@ import sys
 import astropy.io.fits as pyfits
 import astropy.stats
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 import numpy as np
 
 import json
@@ -26,6 +27,7 @@ from pyklip import parallelized
 from scipy.ndimage import gaussian_filter, median_filter, fourier_shift, rotate
 from scipy.ndimage import shift as spline_shift
 from scipy.optimize import leastsq, minimize
+from scipy.interpolate import griddata
 from skimage.registration import phase_cross_correlation
 from spaceKLIP import utils as ut
 from spaceKLIP.psf import JWST_PSF
@@ -44,6 +46,7 @@ from webbpsf.constants import JWST_CIRCUMSCRIBED_DIAMETER
 from astropy.io import fits
 from spaceKLIP.starphot import get_stellar_magnitudes, read_spec_file
 import scipy.ndimage
+import lmfit
 
 import logging
 log = logging.getLogger(__name__)
@@ -913,18 +916,157 @@ class ImageTools():
 
         pass
 
+    
+    def find_bad_pixels(self,
+                        method='dqarr',
+                        overwrite_dq=True,
+                        dqarr_kwargs={},
+                        sigclip_kwargs={},
+                        custom_kwargs={},
+                        timeints_kwargs={},
+                        gradient_kwargs={},
+                        types=['SCI', 'SCI_TA', 'SCI_BG', 'REF', 'REF_TA', 'REF_BG'],
+                        subdir='bpfound',
+                        restrict_to=None):
+        """
+        Identify bad pixels for cleaning
+
+        Parameters
+        ----------
+        method : str, optional
+            Sequence of bad pixel cleaning methods to be run on the data. 
+            Different methods must be joined by a '+' sign without
+            whitespace. Available methods are:
+        
+            - dqarr: uses DQ array to identify bad pixels
+            
+            - sigclip: use sigma clipping to identify additional bad pixels.
+
+            - custom: use a custom bad pixel map
+
+            The default is 'dqarr'.
+        overwrite_dq : bool, optional
+            Toggle to start a new empty DQ array, or built upon the existing array.
+
+            The default is True
+        dqarr_kwargs : dict, optional
+            Keyword arguments for the 'dqarr' identification method. Available keywords are:
+            
+            The default is {}.
+        sigclip_kwargs : dict, optional
+            Keyword arguments for the 'sigclip' identification methods. Available keywords are:
+
+            - sigma: float, optional
+                Sigma clipping threshold. The default is 5.
+            - shift_x : list of int, optional
+                Pixels in x-direction to which each pixel shall be compared to.
+                The default is [-1, 0, 1].
+            - shift_y : list of int, optional
+                Pixels in y-direction to which each pixel shall be compared to.
+                The default is [-1, 0, 1].
+
+            The default is {}.
+        custom_kwargs : dict, optional
+            Keyword arguments for the 'custom' method. The dictionary keys must
+            match the keys of the observations database and the dictionary
+            content must be binary bad pixel maps (1 = bad, 0 = good) with the
+            same shape as the corresponding data. The default is {}.
+
+            The default is {}.
+        types : list of str, optional
+            List of data types for which bad pixels shall be identified. 
+            The default is ['SCI', 'SCI_TA', 'SCI_BG', 'REF', 'REF_TA', 'REF_BG'].
+        subdir : str, optional
+            Name of the directory where the data products shall be saved. The
+            default is 'bpfound'.
+
+        Returns
+        -------
+        None
+
+        """
+        # Set output directory.
+        output_dir = os.path.join(self.database.output_dir, subdir)
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        
+        # Loop through concatenations.
+        for i, key in enumerate(self.database.obs.keys()):
+            # if we limit to only processing some concatenations, 
+            # check whether this concatenation matches the pattern
+            if (restrict_to is not None) and (restrict_to not in key):
+                continue
+
+            log.info('--> Concatenation ' + key)
+            
+            # Loop through FITS files.
+            nfitsfiles = len(self.database.obs[key])
+            for j in range(nfitsfiles):
+                
+                # Read FITS file and PSF mask.
+                fitsfile = self.database.obs[key]['FITSFILE'][j]
+                data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs = ut.read_obs(fitsfile)
+                maskfile = self.database.obs[key]['MASKFILE'][j]
+                mask = ut.read_msk(maskfile)
+
+                if overwrite_dq:
+                    # Make copy of DQ array filled with zeros, i.e. all good pixels
+                    pxdq_temp = np.zeros_like(pxdq)
+                else:
+                    pxdq_temp = pxdq.copy()
+                
+                # Skip file types that are not in the list of types.
+                if self.database.obs[key]['TYPE'][j] in types:
+                    # Call bad pixel identification routines.
+                    method_split = method.split('+')
+                    for k in range(len(method_split)):
+                        head, tail = os.path.split(fitsfile)
+                        if method_split[k] == 'dqarr':
+                            log.info('  --> Method ' + method_split[k] + ': ' + tail)
+                            # Flag any pixels marked as DO_NOT_USE that aren't NONSCIENCE
+                            pxdq_temp = (np.isnan(data) | (pxdq_temp & 1 == 1)) \
+                                         & np.logical_not(pxdq_temp & 512 == 512)
+                        elif method_split[k] == 'sigclip':
+                            log.info('  --> Method ' + method_split[k] + ': ' + tail)
+                            self.find_bad_pixels_sigclip(data, erro, pxdq_temp, pxdq & 512 == 512, sigclip_kwargs)
+                        elif method_split[k] == 'custom':
+                            log.info('  --> Method ' + method_split[k] + ': ' + tail)
+                            if self.database.obs[key]['TYPE'][j] not in ['SCI_TA', 'REF_TA']:
+                                self.find_bad_pixels_custom(data, erro, pxdq_temp, key, custom_kwargs)
+                            else:
+                                log.info('  --> Method ' + method_split[k] + ': skipped because TA file')
+                        elif method_split[k] == 'timeints':
+                            self.find_bad_pixels_timeints(data, erro, pxdq_temp, key, timeints_kwargs)
+                        elif method_split[k] == 'gradient':
+                            self.find_bad_pixels_gradient(data, erro, pxdq_temp, key, gradient_kwargs)
+                        else:
+                            log.info('  --> Unknown method ' + method_split[k] + ': skipped')
+
+                # The new DQ will just be the pxdq_temp we've been modifying
+                new_dq = pxdq_temp.astype(np.uint32)
+
+                # Write FITS file and PSF mask.
+                fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, new_dq, head_pri, head_sci, is2d, imshifts, maskoffs)
+                maskfile = ut.write_msk(maskfile, mask, fitsfile)
+                
+                # Update spaceKLIP database.
+                self.database.update_obs(key, j, fitsfile, maskfile)
+
+        pass
+      
 
     def fix_bad_pixels(self,
-                       method='timemed+dqmed+medfilt',
-                       bpclean_kwargs={},
-                       custom_kwargs={},
-                       timemed_kwargs={},
-                       dqmed_kwargs={},
-                       medfilt_kwargs={},
-                       types=['SCI', 'SCI_TA', 'SCI_BG', 'REF', 'REF_TA', 'REF_BG'],
-                       subdir='bpcleaned',
-                       restrict_to=None):
+                   method='timemed+localmed+medfilt',
+                   sigclip_kwargs={},
+                   custom_kwargs={},
+                   timemed_kwargs={},
+                   localmed_kwargs={},
+                   medfilt_kwargs={},
+                   types=['SCI', 'SCI_TA', 'SCI_BG', 'REF', 'REF_TA', 'REF_BG'],
+                   subdir='bpcleaned',
+                   restrict_to=None):
         """
+        **** TO BE DEPRECATED BY FIND_BAD_PIXELS() AND CLEAN_BAD_PIXELS() ****
         Identify and fix bad pixels.
 
         Parameters
@@ -934,17 +1076,17 @@ class ImageTools():
             on the data. Different methods must be joined by a '+' sign without
             whitespace. Available methods are:
 
-            - bpclean: use sigma clipping to identify additional bad pixels.
+            - sigclip: use sigma clipping to identify additional bad pixels.
             - custom: use a custom bad pixel map.
             - timemed: replace pixels which are only bad in some frames with
                        their median value from the good frames.
-            - dqmed: replace bad pixels with the median value of their
+            - localmed: replace bad pixels with the median value of their
                      surrounding good pixels.
             - medfilt: replace bad pixels with an image plane median filter.
 
-            The default is 'timemed+dqmed+medfilt'.
-        bpclean_kwargs : dict, optional
-            Keyword arguments for the 'bpclean' method. Available keywords are:
+            The default is 'timemed+localmed+medfilt'.
+        sigclip_kwargs : dict, optional
+            Keyword arguments for the 'sigclip' method. Available keywords are:
 
             - sigclip : float, optional
                 Sigma clipping threshold. The default is 5.
@@ -967,8 +1109,8 @@ class ImageTools():
             - n/a
 
             The default is {}.
-        dqmed_kwargs : dict, optional
-            Keyword arguments for the 'dqmed' method. Available keywords are:
+        localmed_kwargs : dict, optional
+            Keyword arguments for the 'localmed' method. Available keywords are:
 
             - shift_x : list of int, optional
                 Pixels in x-direction from which the median shall be computed.
@@ -998,7 +1140,9 @@ class ImageTools():
         None.
 
         """
-
+        # log.info('--> WARNING! The fix_bad_pixels() routine is deprecated, the ..........')
+        # log.info('--> WARNING! find_bad_pixels() and clean_bad_pixels() are preferred!!!!')
+    
         # Set output directory.
         output_dir = os.path.join(self.database.output_dir, subdir)
         if not os.path.exists(output_dir):
@@ -1034,9 +1178,9 @@ class ImageTools():
                     method_split = method.split('+')
                     for k in range(len(method_split)):
                         head, tail = os.path.split(fitsfile)
-                        if method_split[k] == 'bpclean':
+                        if method_split[k] == 'sigclip':
                             log.info('  --> Method ' + method_split[k] + ': ' + tail)
-                            self.find_bad_pixels_bpclean(data, erro, pxdq_temp, pxdq & 512 == 512, bpclean_kwargs)
+                            self.find_bad_pixels_sigclip(data, erro, pxdq_temp, pxdq & 512 == 512, sigclip_kwargs)
                         elif method_split[k] == 'custom':
                             log.info('  --> Method ' + method_split[k] + ': ' + tail)
                             if self.database.obs[key]['TYPE'][j] not in ['SCI_TA', 'REF_TA']:
@@ -1046,9 +1190,9 @@ class ImageTools():
                         elif method_split[k] == 'timemed':
                             log.info('  --> Method ' + method_split[k] + ': ' + tail)
                             self.fix_bad_pixels_timemed(data, erro, pxdq_temp, timemed_kwargs)
-                        elif method_split[k] == 'dqmed':
+                        elif method_split[k] == 'localmed':
                             log.info('  --> Method ' + method_split[k] + ': ' + tail)
-                            self.fix_bad_pixels_dqmed(data, erro, pxdq_temp, dqmed_kwargs)
+                            self.fix_bad_pixels_localmed(data, erro, pxdq_temp, localmed_kwargs)
                         elif method_split[k] == 'medfilt':
                             log.info('  --> Method ' + method_split[k] + ': ' + tail)
                             self.fix_bad_pixels_medfilt(data, erro, pxdq_temp, medfilt_kwargs)
@@ -1079,12 +1223,188 @@ class ImageTools():
 
         pass
 
-    def find_bad_pixels_bpclean(self,
+
+    def clean_bad_pixels(self,
+                       method='timemed+localmed+medfilt',
+                       timemed_kwargs={},
+                       localmed_kwargs={},
+                       medfilt_kwargs={},
+                       interp2d_kwargs={},
+                       types=['SCI', 'SCI_TA', 'SCI_BG', 'REF', 'REF_TA', 'REF_BG'],
+                       subdir='bpcleaned',
+                       restrict_to=None):
+        """
+        Clean bad pixels.
+
+        Parameters
+        ----------
+        method : str, optional
+            Sequence of bad pixel cleaning methods to be run on the data. 
+            Different methods must be joined by a '+' sign without
+            whitespace. Available methods are:
+
+            - timemed: replace pixels which are only bad in some frames with
+                       their median value from the good frames.
+
+            - localmed: replace bad pixels with the median value of their
+                        surrounding good pixels.
+
+            - medfilt: replace bad pixels with an image plane median filter.
+
+            - interp2d: replace bad pixels with an interpolation of neighbouring pixels.
+
+            The default is 'timemed+localmed+medfilt'.
+        timemed_kwargs : dict, optional
+            Keyword arguments for the 'timemed' method. Available keywords are:
+
+            - n/a
+
+            The default is {}.
+        localmed_kwargs: dict, optional
+            Keyword arguments for the 'localmed' method. Available keywords are:
+
+            - shift_x : list of int, optional
+                Pixels in x-direction from which the median shall be computed.
+                The default is [-1, 0, 1].
+            - shift_y : list of int, optional
+                Pixels in y-direction from which the median shall be computed.
+                The default is [-1, 0, 1].
+
+            The default is {}.
+        medfilt_kwargs : dict, optional
+            Keyword arguments for the 'medfilt' method. Available keywords are:
+
+            - size : int, optional
+                Kernel size of the median filter to be used. The default is 4.
+
+            The default is {}.
+        interp2d_kwargs: dict, optional
+            Keyword arguments for the 'interp2d' method. Available keywords are:
+
+            - size : int, optional
+                Kernel size of the median filter to be used. The default is 4.
+
+            The default is {}.
+
+        types : list of str, optional
+            List of data types for which bad pixels shall be identified and
+            fixed. The default is ['SCI', 'SCI_TA', 'SCI_BG', 'REF', 'REF_TA',
+            'REF_BG'].
+        subdir : str, optional
+            Name of the directory where the data products shall be saved. The
+            default is 'bpcleaned'.
+        
+        Returns
+        -------
+        None.
+
+        """
+        
+        # Set output directory.
+        output_dir = os.path.join(self.database.output_dir, subdir)
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        
+        # Loop through concatenations.
+        for i, key in enumerate(self.database.obs.keys()):
+            # if we limit to only processing some concatenations, check whether this concatenation matches the pattern
+            if (restrict_to is not None) and (restrict_to not in key):
+                continue
+
+            log.info('--> Concatenation ' + key)
+            
+            # Loop through FITS files.
+            nfitsfiles = len(self.database.obs[key])
+            for j in range(nfitsfiles):
+                
+                # Read FITS file and PSF mask.
+                fitsfile = self.database.obs[key]['FITSFILE'][j]
+                data, erro, pxdq, head_pri, head_sci, is2d, imshifts, maskoffs = ut.read_obs(fitsfile)
+                maskfile = self.database.obs[key]['MASKFILE'][j]
+                mask = ut.read_msk(maskfile)
+
+                fig = plt.figure()
+                ax = plt.gca()
+                ax.hist(data.flatten(), 
+                        bins=int(np.sqrt(len(data.flatten()))),
+                        histtype='step',
+                        label='Pre Cleaning')
+
+                # Make copy of DQ array
+                pxdq_temp = pxdq.copy()
+
+                # Don't want to clean anything that isn't bad or is a non-science pixel
+                pxdq_temp = (np.isnan(data) | (pxdq_temp & 1 == 1)) & np.logical_not(pxdq_temp & 512 == 512)
+                
+                # Skip file types that are not in the list of types.
+                if self.database.obs[key]['TYPE'][j] in types:
+                    method_split = method.split('+')
+
+                    spatial = ['localmed', 'medfilt', 'interp2d']
+                    # If localmed and medfilt in cleaning, can't run both
+                    if len(set(method_split) & set(spatial)) > 1:
+                        log.info('  --> WARNING: Multiple spatial cleaning routines detected!')
+                        log.info('  --> The localmed/medfilt/interp2d methods clean data in a similar manner!')
+                        log.info('  --> medfilt and interp2d are redundant')
+                        log.info('      --> only the first method listed will affect the data')
+                        log.info('  --> localmed is partially redundant with other methods')
+                        log.info('      --> if run first, large clusters of bad pixels may not be fully cleaned.')
+
+                    # Loop over methods
+                    for k in range(len(method_split)):
+                        head, tail = os.path.split(fitsfile)
+                        log.info('  --> Method ' + method_split[k] + ': ' + tail)
+                        if method_split[k] == 'timemed':
+                            self.fix_bad_pixels_timemed(data, erro, pxdq_temp, timemed_kwargs)
+                        elif method_split[k] == 'localmed':
+                            self.fix_bad_pixels_localmed(data, erro, pxdq_temp, localmed_kwargs)
+                        elif method_split[k] == 'medfilt':
+                            self.fix_bad_pixels_medfilt(data, erro, pxdq_temp, medfilt_kwargs)
+                        elif method_split[k] == 'interp2d':
+                            self.fix_bad_pixels_interp2d(data, erro, pxdq_temp, interp2d_kwargs)
+                        else:
+                            log.info('  --> Unknown method ' + method_split[k] + ': skipped')
+                
+                # update the pixel DQ bit flags for the output files.
+                #  The pxdq variable here is effectively just the DO_NOT_USE flag, discarding other bits.
+                #  We want to make a new dq which retains the other bits as much as possible.
+                #  first, retain all the other bits (bits greater than 1), then add in the new/cleaned DO_NOT_USE bit
+                do_not_use = jwst.datamodels.dqflags.pixel['DO_NOT_USE']
+                new_dq = np.bitwise_and(pxdq.copy(), np.invert(do_not_use))  # retain all other bits except the do_not_use bit
+                new_dq = np.bitwise_or(new_dq, pxdq_temp)  # add in the do_not_use bit from the cleaned version
+                new_dq = new_dq.astype(np.uint32)   # ensure correct output type for saving
+                                                    # (the bitwise steps otherwise return np.int64 which isn't FITS compatible)
+
+                # Finish figure for this file
+                ax.hist(data.flatten(), 
+                        bins=int(np.sqrt(len(data.flatten()))),
+                        histtype='step',
+                        label='Post Cleaning')
+                ax.legend()
+                #ax.set_xscale('log')
+                ax.set_yscale('log')
+                ax.tick_params(which='both', direction='in', top=True, right=True, labelsize=12)
+                ax.set_xlabel("Pixel Value", fontsize=14)
+                ax.set_ylabel("Frequency", fontsize=12)
+                ax.set_title(f"{os.path.basename(fitsfile)} \n Original vs. Cleaned Data", fontsize=16)
+                output_file = os.path.join(output_dir, tail.replace('.fits','_hist.png'))
+                plt.savefig(output_file)
+
+                # Write FITS file and PSF mask.
+                fitsfile = ut.write_obs(fitsfile, output_dir, data, erro, new_dq, head_pri, head_sci, is2d, imshifts, maskoffs)
+                maskfile = ut.write_msk(maskfile, mask, fitsfile)
+                
+                # Update spaceKLIP database.
+                self.database.update_obs(key, j, fitsfile, maskfile)
+        
+        pass
+    
+    def find_bad_pixels_sigclip(self,
                                 data,
                                 erro,
                                 pxdq,
                                 NON_SCIENCE,
-                                bpclean_kwargs={}):
+                                sigclip_kwargs={}):
         """
         Use an iterative sigma clipping algorithm to identify additional bad
         pixels in the data.
@@ -1101,11 +1421,13 @@ class ImageTools():
         NON_SCIENCE : 3D-array
             Input binary non-science pixel maps (1 = bad, 0 = good). Will not
             be modified by the routine.
-        bpclean_kwargs : dict, optional
-            Keyword arguments for the 'bpclean' method. Available keywords are:
+        sigclip_kwargs : dict, optional
+            Keyword arguments for the 'sigclip' method. Available keywords are:
 
-            - sigclip : float, optional
+            - sigma : float, optional
                 Sigma clipping threshold. The default is 5.
+            - neg_sigma : float, optional
+                Sigma clipping threshold for negative outliers. The default is 1. 
             - shift_x : list of int, optional
                 Pixels in x-direction to which each pixel shall be compared to.
                 The default is [-1, 0, 1].
@@ -1122,26 +1444,28 @@ class ImageTools():
         """
 
         # Check input.
-        if 'sigclip' not in bpclean_kwargs.keys():
-            bpclean_kwargs['sigclip'] = 5.
-        if 'shift_x' not in bpclean_kwargs.keys():
-            bpclean_kwargs['shift_x'] = [-1, 0, 1]
-        if 'shift_y' not in bpclean_kwargs.keys():
-            bpclean_kwargs['shift_y'] = [-1, 0, 1]
-        if 0 not in bpclean_kwargs['shift_x']:
-            bpclean_kwargs['shift_x'] += [0]
-        if 0 not in bpclean_kwargs['shift_y']:
-            bpclean_kwargs['shift_y'] += [0]
-
+        if 'sigma' not in sigclip_kwargs.keys():
+            sigclip_kwargs['sigma'] = 5.
+        if 'neg_sigma' not in sigclip_kwargs.keys():
+            sigclip_kwargs['neg_sigma'] = 1.
+        if 'shift_x' not in sigclip_kwargs.keys():
+            sigclip_kwargs['shift_x'] = [-1, 0, 1]
+        if 'shift_y' not in sigclip_kwargs.keys():
+            sigclip_kwargs['shift_y'] = [-1, 0, 1]
+        if 0 not in sigclip_kwargs['shift_x']:
+            sigclip_kwargs['shift_x'] += [0]
+        if 0 not in sigclip_kwargs['shift_y']:
+            sigclip_kwargs['shift_y'] += [0]
+        
         # Pad data.
-        pad_left = np.abs(np.min(bpclean_kwargs['shift_x']))
-        pad_right = np.abs(np.max(bpclean_kwargs['shift_x']))
+        pad_left = np.abs(np.min(sigclip_kwargs['shift_x']))
+        pad_right = np.abs(np.max(sigclip_kwargs['shift_x']))
         if pad_right == 0:
             right = None
         else:
             right = -pad_right
-        pad_bottom = np.abs(np.min(bpclean_kwargs['shift_y']))
-        pad_top = np.abs(np.max(bpclean_kwargs['shift_y']))
+        pad_bottom = np.abs(np.min(sigclip_kwargs['shift_y']))
+        pad_top = np.abs(np.max(sigclip_kwargs['shift_y']))
         if pad_top == 0:
             top = None
         else:
@@ -1165,30 +1489,55 @@ class ImageTools():
             bg_std = robust.medabsdev(data_temp[i][bg_ind])
 
             # Create initial mask of large negative values.
-            ww[i] = ww[i] | (data[i] < bg_med - bpclean_kwargs['sigclip'] * bg_std)
-
+            ww[i] = ww[i] | (data[i] < bg_med - sigclip_kwargs['neg_sigma'] * bg_std)
+            ww[i][NON_SCIENCE[i]] = 0
+            
             # Loop through max 10 iterations.
             for it in range(10):
                 data_temp[i][ww[i]] = np.nan
                 erro_temp[i][ww[i]] = np.nan
-
-                # Shift data.
+                
+                # Shift data and calculate median and standard deviation of neighbours
                 pad_data = np.pad(data_temp[i], pad_vals, mode='edge')
                 pad_erro = np.pad(erro_temp[i], pad_vals, mode='edge')
                 data_arr = []
                 erro_arr = []
-                for ix in bpclean_kwargs['shift_x']:
-                    for iy in bpclean_kwargs['shift_y']:
+                for ix in sigclip_kwargs['shift_x']:
+                    for iy in sigclip_kwargs['shift_y']:
                         if ix != 0 or iy != 0:
                             data_arr += [np.roll(pad_data, (iy, ix), axis=(0, 1))]
                             erro_arr += [np.roll(pad_erro, (iy, ix), axis=(0, 1))]
                 data_arr = np.array(data_arr)
-                data_arr = data_arr[:, pad_bottom:top, pad_left:right]
-                data_med = np.nanmedian(data_arr, axis=0)
+                data_arr_trim = data_arr[:, pad_bottom:top, pad_left:right]
+                data_med = np.nanmedian(data_arr_trim, axis=0)
                 diff = data[i] - data_med
-                data_std = np.nanstd(data_arr, axis=0)
-                # data_std = robust.medabsdev(data_arr, axis=0)
-                mask_new = diff > bpclean_kwargs['sigclip'] * data_std
+
+                data_std = np.nanstd(data_arr_trim, axis=0)
+
+                # # Do the same for the diff array we just made
+                # pad_diff = np.pad(diff, pad_vals, mode='edge')
+                # diff_arr = []
+                # for ix in sigclip_kwargs['shift_x']:
+                #     for iy in sigclip_kwargs['shift_y']:
+                #         if ix != 0 or iy != 0:
+                #             diff_arr += [np.roll(pad_diff, (iy, ix), axis=(0, 1))]
+                # diff_arr = np.array(diff_arr)
+                # diff_arr = diff_arr[:, pad_bottom:top, pad_left:right]
+                # diff_med = np.nanmedian(diff_arr, axis=0)
+                # doublediff = data[i] - data_med - diff_med
+                # diff_std = np.nanstd(diff_arr, axis=0)
+
+                # Find values N standard deviations above the mean of neighbors
+                threshold = sigclip_kwargs['sigma'] * data_std
+                mask_new = diff > threshold
+
+                data_temp[i][mask_new] = np.nan
+
+                # fig, ax = plt.subplots(1, 2)
+                # ax[0].imshow(data_temp[i])
+                # ax[1].imshow(data_std)
+                # plt.show()
+
                 nmask_new = np.sum(mask_new & np.logical_not(ww[i]))
                 # print('Iteration %.0f: %.0f bad pixels identified, %.0f are new' % (it + 1, np.sum(mask_new), nmask_new))
                 sys.stdout.write('\rFrame %.0f/%.0f, iteration %.0f' % (i + 1, ww.shape[0], it + 1))
@@ -1199,9 +1548,165 @@ class ImageTools():
             ww[i][NON_SCIENCE[i]] = 0
             pxdq[i][ww[i]] = 1
         print('')
-        log.info('  --> Method bpclean: identified %.0f additional bad pixel(s) -- %.2f%%' % (np.sum(pxdq) - np.sum(pxdq_orig), 100. * (np.sum(pxdq) - np.sum(pxdq_orig)) / np.prod(pxdq.shape)))
+        log.info('  --> Method sigclip: identified %.0f additional bad pixel(s) -- %.2f%%' % (np.sum(pxdq) - np.sum(pxdq_orig), 100. * (np.sum(pxdq) - np.sum(pxdq_orig)) / np.prod(pxdq.shape)))
+        
+        pass
+
+    def find_bad_pixels_timeints(self,
+                            data,
+                            erro,
+                            pxdq,
+                            NON_SCIENCE,
+                            timeints_kwargs={}):
+        """
+        Identify bad pixels from temporal variations across integrations.
+        
+        Parameters
+        ----------
+        data : 3D-array
+            Input images.
+        erro : 3D-array
+            Input image uncertainties.
+        pxdq : 3D-array
+            Input binary bad pixel maps (1 = bad, 0 = good). Will be updated by
+            the routine to include the newly identified bad pixels.
+        NON_SCIENCE : 3D-array
+            Input binary non-science pixel maps (1 = bad, 0 = good). Will not
+            be modified by the routine.
+        timeints_kwargs : dict, optional
+            Keyword arguments for the 'timeints' method. Available keywords are:
+            
+            - sigma : float, optional
+                Sigma clipping threshold. The default is 5.
+            The default is {}.
+        
+        Returns
+        -------
+        None.
+
+        """
+
+        # Check input.
+        if 'sigma' not in timeints_kwargs.keys():
+            timeints_kwargs['sigma'] = 10.
+
+        pxdq_orig = pxdq.copy()
+        ww = pxdq != 0
+        data_temp = data.copy()
+        data_temp[ww] = np.nan
+        
+        # Find bad pixels across the cube
+
+        med_ints = np.nanmedian(data_temp, axis=0)
+        std_ints = np.nanstd(data_temp, axis=0)
+
+        std2_ints = robust.medabsdev(data_temp, axis=0)
+
+        diff = np.abs((data_temp - med_ints)) / std2_ints
+
+        mask_new = diff > timeints_kwargs['sigma']
+
+
+        # data_temp[mask_new] = 9999
+        # plt.imshow(data_temp[1])
+        # plt.show()
+        # plt.hist(diff.flatten(), 
+        #         bins=int(np.sqrt(len(diff.flatten()))),
+        #         histtype='step',
+        #         label='Pre Cleaning')
+        # plt.yscale('log')
+        # plt.show()
+
+        
+        ww = ww | mask_new
+        pxdq[ww] = 1
+        print('')
+        log.info('  --> Method timeints: identified %.0f additional bad pixel(s) -- %.2f%%' % (np.sum(pxdq) - np.sum(pxdq_orig), 100. * (np.sum(pxdq) - np.sum(pxdq_orig)) / np.prod(pxdq.shape)))
 
         pass
+
+    def find_bad_pixels_gradient(self,
+                                 data,
+                                 erro,
+                                 pxdq,
+                                 key,
+                                 gradient_kwargs={}):
+        print('')
+        log.info('  --> Warning!: This routine has not been thoroughly tested and requires further development')
+        # Check input.
+        if 'sigma' not in gradient_kwargs.keys():
+            gradient_kwargs['sigma'] = 0.5
+        if 'threshold' not in gradient_kwargs.keys():
+            gradient_kwargs['threshold'] = 0.05
+        if 'negative' not in gradient_kwargs.keys():
+            gradient_kwargs['negative'] = True
+
+        sig = gradient_kwargs['sigma']
+        threshold = gradient_kwargs['threshold']
+        negative = gradient_kwargs['negative'] 
+
+        pxdq_orig = pxdq.copy()
+        ww = pxdq != 0
+        data_temp = data.copy()
+        data_temp[ww] = np.nan
+
+        # Loop over the images
+        for i in range(ww.shape[0]):
+            image = data_temp[i]
+
+            ### remove nans
+            x=np.arange(0, image.shape[1])
+            y=np.arange(0, image.shape[0])
+
+            xx, yy = np.meshgrid(x, y)
+
+            # mask nans
+            image = np.ma.masked_invalid(image)
+
+            xvalid=xx[~image.mask]
+            yvalid=yy[~image.mask]
+
+            newimage=image[~image.mask]
+
+            image_no_nans = griddata((xvalid, yvalid), 
+                                    newimage.ravel(),
+                                    (xx, yy),
+                                    method='linear')
+            
+            ### get smooth image
+            smimage=gaussian_filter(image_no_nans, sigma=sig)
+
+            ### get sharp image
+            shimage=image_no_nans-smimage
+            
+            ### get gradients
+            image_to_gradient=shimage/smimage
+
+            gr=np.gradient((image_to_gradient))
+            gr_dx=gr[1]
+            gr_dy=gr[0]
+
+            ### pad gradient adding 1 extra pixel at beginning and end
+            gr_dxp=np.pad(gr_dx,(1,1))
+            gr_dyp=np.pad(gr_dy,(1,1))
+
+            ### identify bad pixels
+            # positive
+            bad_pixels = (gr_dxp[1:-1,2:]<-threshold) & (gr_dxp[1:-1,:-2]>threshold) & (gr_dyp[2:,1:-1]<-threshold) & (gr_dyp[:-2,1:-1]>threshold)
+            # negative
+            if negative:
+                bad_pixels_n = (gr_dxp[1:-1,2:]>threshold) & (gr_dxp[1:-1,:-2]<-threshold) & (gr_dyp[2:,1:-1]>threshold) & (gr_dyp[:-2,1:-1]<threshold)
+                bad_pixels=bad_pixels | bad_pixels_n
+
+            image[bad_pixels] = np.nan
+
+            # Flag DQ array
+            ww[i] = ww[i] | bad_pixels
+            pxdq[i][ww[i]] = 1
+        print('')
+        log.info('  --> Method gradient: identified %.0f additional bad pixel(s) -- %.2f%%' % (np.sum(pxdq) - np.sum(pxdq_orig), 100. * (np.sum(pxdq) - np.sum(pxdq_orig)) / np.prod(pxdq.shape)))
+        pass
+
 
     def find_bad_pixels_custom(self,
                                data,
@@ -1287,11 +1792,12 @@ class ImageTools():
 
         pass
 
-    def fix_bad_pixels_dqmed(self,
+    
+    def fix_bad_pixels_localmed(self,
                              data,
                              erro,
                              pxdq,
-                             dqmed_kwargs={}):
+                             localmed_kwargs={}):
         """
         Replace bad pixels with the median value of their surrounding good
         pixels.
@@ -1305,8 +1811,8 @@ class ImageTools():
         pxdq : 3D-array
             Input binary bad pixel maps (1 = bad, 0 = good). Will be updated by
             the routine to exclude the fixed bad pixels.
-        dqmed_kwargs : dict, optional
-            Keyword arguments for the 'dqmed' method. Available keywords are:
+        localmed_kwargs : dict, optional
+            Keyword arguments for the 'localmed' method. Available keywords are:
 
             - shift_x : list of int, optional
                 Pixels in x-direction from which the median shall be computed.
@@ -1324,24 +1830,24 @@ class ImageTools():
         """
 
         # Check input.
-        if 'shift_x' not in dqmed_kwargs.keys():
-            dqmed_kwargs['shift_x'] = [-1, 0, 1]
-        if 'shift_y' not in dqmed_kwargs.keys():
-            dqmed_kwargs['shift_y'] = [-1, 0, 1]
-        if 0 not in dqmed_kwargs['shift_x']:
-            dqmed_kwargs['shift_x'] += [0]
-        if 0 not in dqmed_kwargs['shift_y']:
-            dqmed_kwargs['shift_y'] += [0]
-
+        if 'shift_x' not in localmed_kwargs.keys():
+            localmed_kwargs['shift_x'] = [-1, 0, 1]
+        if 'shift_y' not in localmed_kwargs.keys():
+            localmed_kwargs['shift_y'] = [-1, 0, 1]
+        if 0 not in localmed_kwargs['shift_x']:
+            localmed_kwargs['shift_x'] += [0]
+        if 0 not in localmed_kwargs['shift_y']:
+            localmed_kwargs['shift_y'] += [0]
+        
         # Pad data.
-        pad_left = np.abs(np.min(dqmed_kwargs['shift_x']))
-        pad_right = np.abs(np.max(dqmed_kwargs['shift_x']))
+        pad_left = np.abs(np.min(localmed_kwargs['shift_x']))
+        pad_right = np.abs(np.max(localmed_kwargs['shift_x']))
         if pad_right == 0:
             right = None
         else:
             right = -pad_right
-        pad_bottom = np.abs(np.min(dqmed_kwargs['shift_y']))
-        pad_top = np.abs(np.max(dqmed_kwargs['shift_y']))
+        pad_bottom = np.abs(np.min(localmed_kwargs['shift_y']))
+        pad_top = np.abs(np.max(localmed_kwargs['shift_y']))
         if pad_top == 0:
             top = None
         else:
@@ -1359,8 +1865,8 @@ class ImageTools():
         for i in range(ww.shape[0]):
             data_arr = []
             erro_arr = []
-            for ix in dqmed_kwargs['shift_x']:
-                for iy in dqmed_kwargs['shift_y']:
+            for ix in localmed_kwargs['shift_x']:
+                for iy in localmed_kwargs['shift_y']:
                     if ix != 0 or iy != 0:
                         data_arr += [np.roll(pad_data[i], (iy, ix), axis=(0, 1))]
                         erro_arr += [np.roll(pad_erro[i], (iy, ix), axis=(0, 1))]
@@ -1374,8 +1880,7 @@ class ImageTools():
             erro_med = np.nanmedian(erro_arr, axis=0)
             erro[i][ww[i]] = erro_med[ww[i]]
             pxdq[i][ww[i]] = 0
-        log.info('  --> Method dqmed: fixing %.0f bad pixel(s) -- %.2f%%' % (np.sum(ww), 100. * np.sum(ww) / np.prod(ww.shape)))
-
+        log.info('  --> Method localmed: fixing %.0f bad pixel(s) -- %.2f%%' % (np.sum(ww), 100. * np.sum(ww) / np.prod(ww.shape)))
         pass
 
     def fix_bad_pixels_medfilt(self,
@@ -1425,6 +1930,113 @@ class ImageTools():
             erro[i][ww[i]] = median_filter(erro_temp[i], **medfilt_kwargs)[ww[i]]
             pxdq[i][ww[i]] = 0
 
+        pass
+
+    def fix_bad_pixels_interp2d(self,
+                                data,
+                                erro,
+                                pxdq,
+                                interp2d_kwargs={}):
+        """
+        Replace bad pixels with an interpolation of neighbouring pixels.
+        
+        Parameters
+        ----------
+        data : 3D-array
+            Input images.
+        erro : 3D-array
+            Input image uncertainties.
+        pxdq : 3D-array
+            Input binary bad pixel maps (1 = bad, 0 = good). Will be updated by
+            the routine to exclude the fixed bad pixels.
+        interp2d_kwargs : dict, optional
+            Keyword arguments for the 'interp2d' method. Available keywords are:
+
+            - size : int, optional
+                Kernel size of the median filter to be used. The default is 4.
+
+            The default is {}.
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        # Check input.
+        if 'size' not in interp2d_kwargs.keys():
+            interp2d_kwargs['size'] = 5
+        
+        # Fix bad pixels using interpolation of neighbors.
+        ww = (pxdq != 0) & np.logical_not(pxdq & 512 == 512)
+        log.info('  --> Method interp2d: fixing %.0f bad pixel(s) -- %.2f%%' % (np.sum(ww), 100. * np.sum(ww) / np.prod(ww.shape)))
+        
+        # NaN pixels to be replaced with interpolation
+        data_temp = data.copy()
+        data_temp[np.where(np.isnan(data_temp))] = 0
+        data_temp[ww] = np.nan
+        erro_temp = erro.copy()
+        erro_temp[np.where(np.isnan(erro_temp))] = 0
+        erro_temp[ww] = np.nan
+
+        rows, cols = data_temp[0].shape
+        half_box = interp2d_kwargs['size'] // 2
+        for i in range(ww.shape[0]):
+            for ri in range(rows):
+                for ci in range(cols):
+                    if np.isnan(data_temp[i][ri, ci]):
+                        # Calculate the indices of the NxN box centered around the NaN pixel
+                        x_min = max(0, ci - half_box)
+                        x_max = min(cols, ci + half_box + 1)
+                        y_min = max(0, ri - half_box)
+                        y_max = min(rows, ri + half_box + 1)
+
+                        # Extract a NxN box within the valid range
+                        box = data_temp[i][y_min:y_max, x_min:x_max]
+                        ebox = erro_temp[i][y_min:y_max, x_min:x_max]
+
+                        # Extract coordinates and values from the box
+                        box_coords = np.array(np.where(~np.isnan(box))).T \
+                                     + np.array([[x_min, y_min]])
+                        box_values = box[~np.isnan(box)]
+
+                        ebox_coords = np.array(np.where(~np.isnan(ebox))).T \
+                                     + np.array([[x_min, y_min]])
+                        ebox_values = ebox[~np.isnan(ebox)]
+
+                        # Perform interpolation if there are valid values in the box
+                        if len(box_values) > interp2d_kwargs['size'] \
+                           and len(ebox_values) > interp2d_kwargs['size']:
+                            # Extract x and y coordinates of valid values, same coords for 
+                            # data and err
+                            x_coords = box_coords[:, 0]
+                            y_coords = box_coords[:, 1]
+                            ex_coords = ebox_coords[:, 0]
+                            ey_coords = ebox_coords[:, 1]
+
+                            # Perform interpolation of data
+                            data_interp = griddata((x_coords, y_coords), 
+                                                    box_values, 
+                                                    (ci, ri), 
+                                                    method='linear',
+                                                    fill_value=np.nan)
+
+                            # Replace data pixel with interpolated value
+                            data[i][ri, ci] = data_interp
+
+                            # Perform interpolation of error
+                            err_interp = griddata((ex_coords, ey_coords), 
+                                                   ebox_values, 
+                                                   (ci, ri), 
+                                                   method='linear',
+                                                   fill_value=np.nan)
+
+                            # Replace error pixel
+                            erro[i][ri, ci] = err_interp
+
+
+                            pxdq[i][ww[i]] = 0
+        
         pass
 
     def replace_nans(self,
@@ -2249,7 +2861,8 @@ class ImageTools():
                             fov_pix=65,
                             oversample=2,
                             use_coeff=False,
-                            highpass=False):
+                            highpass=False,
+                            save_figures=True):
         """
         Find the star position behind the coronagraphic mask using a WebbPSF
         model.
@@ -2279,6 +2892,8 @@ class ImageTools():
         use_coeff : bool, optional
             Use pre-computed coefficients to generate the WebbPSF model. The
             default is False.
+        save_figures : bool, optional
+            Save the plots in a PDF?
 
         Returns
         -------
@@ -2412,13 +3027,15 @@ class ImageTools():
             ax[2].legend(loc='upper right', fontsize=12)
             ax[2].set_title('Scene overview (1-indexed)')
             plt.tight_layout()
-            output_file = os.path.split(self.database.obs[key]['FITSFILE'][j])[1]
-            output_file = output_file.replace('.fits', '.pdf')
-            output_file = os.path.join(output_dir, output_file)
-            plt.savefig(output_file)
-            log.info(f" Plot saved in {output_file}")
-            # plt.show()
+            if save_figures:
+                output_file = os.path.split(self.database.obs[key]['FITSFILE'][j])[1]
+                output_file = output_file.replace('.fits', '.pdf')
+                output_file = os.path.join(output_dir, output_file)
+                plt.savefig(output_file)
+                log.info(f" Plot saved in {output_file}")
+            plt.show()
             plt.close(fig)
+
 
         # Return star position.
         return xc, yc, median_xshift, median_yshift
@@ -2433,7 +3050,8 @@ class ImageTools():
                      align_to_file=None,
                      scale_prior=False,
                      kwargs={},
-                     subdir='aligned'):
+                     subdir='aligned',
+                     save_figures=True):
         """
         Align all SCI and REF frames to the first SCI frame.
 
@@ -2464,6 +3082,8 @@ class ImageTools():
         subdir : str, optional
             Name of the directory where the data products shall be saved. The
             default is 'aligned'.
+        save_figures : bool, optional
+            Save the plots in a PDF?
 
         Returns
         -------
@@ -2701,9 +3321,11 @@ class ImageTools():
             ax.set_ylabel('y-shift [mas]')
             ax.legend(loc='upper right')
             ax.set_title(f'Science frame alignment\nfor {self.database.obs[key]["TARGPROP"][ww_sci[0]]}, {self.database.obs[key]["FILTER"][ww_sci[0]]}')
-            output_file = os.path.join(output_dir, key + '_align_sci.pdf')
-            plt.savefig(output_file)
-            log.info(f" Plot saved in {output_file}")
+            if save_figures:
+                output_file = os.path.join(output_dir, key + '_align_sci.pdf')
+                plt.savefig(output_file)
+                log.info(f" Plot saved in {output_file}")
+            plt.show()
             plt.close(fig)
             
             # Plot reference frame alignment.
@@ -2753,9 +3375,371 @@ class ImageTools():
                 ax.set_ylabel('y-shift [mas]')
                 ax.legend(loc='upper right', fontsize='small')
                 ax.set_title(f'Reference frame alignment\n showing {len(ww_ref)} PSF refs for {self.database.obs[key]["FILTER"][ww_ref[0]]}')
-                output_file = os.path.join(output_dir, key + '_align_ref.pdf')
-                plt.savefig(output_file)
-                log.info(f" Plot saved in {output_file}")
+                if save_figures:
+                    output_file = os.path.join(output_dir, key + '_align_ref.pdf')
+                    plt.savefig(output_file)
+                    log.info(f" Plot saved in {output_file}")
+                plt.show()
                 plt.close(fig)
+                
+    @plt.style.context('spaceKLIP.sk_style')
+    def subtract_nircam_coron_background(self,
+                                        subdir='bgsub',
+                                        mask_snr_threshold=2,
+                                        r_excl_nfwhm=40,
+                                        q_clip=5.,
+                                        align_wrapped=True,
+                                        include_global_offset=True,
+                                        include_stellar_psf_component=True,
+                                        generate_plot=True,
+                                        save_model=False,
+                                        use_jbt_background=False,
+                                        bgmodel_dir=None, 
+                                        background_sb={},
+                                        restrict_to=None):
+        """
+        Fits and subtracts the astrophysical background in NIRCam coronagraphic
+        data following the procedure described in Lawson et al. (2024).
+        
+        Note: This step should only be applied to data that has already been
+        aligned. Otherwise, it will crash.
+        
+        For SW filters using a LW coronagraph, the field of view excludes the
+        neutral density squares. In this case, the astrophysical background and
+        the artificial background offset that we fit are fully degenerate in
+        the regions we consider (away from the coronagraph). Since SW
+        backgrounds should be low anyway, the default is to assume an
+        astrophysical background of zero here. Alternatively, the JWST
+        Backgrounds Tool can be used to estimate the background for affected
+        data instead (if use_jbt_background=True and the JWST Backgrounds Tool
+        is installed).
 
+        Parameters
+        ----------
+        subdir : str, optional
+            Name of the sub-directory where the data products will be saved.
+            The default is 'bgsub'.
+        mask_snr_threshold : float, optional
+            SNR threshold for features to be masked during fitting of the
+            background. SNR is estimated using the ERR FITS extension. The
+            default is 2.
+        r_excl_nfwhm : float, optional
+            Radius (in units of the effective PSF FWHM) of the region around
+            the star to exclude from the fit. The default is 50.
+        q_clip : float, optional
+            After computing BG model residuals, exclude q_clip% of pixels from
+            both ends of the residual distribution before computing chisq. This
+            is intended to avoid over-/under-estimation of the background due
+            to unmasked sources or artifacts. Default is 5.
+        align_wrapped : bool, optional 
+            Whether input data were aligned using a Fourier shift without
+            padding first (such that values wrapped at the edges). Default is
+            True.
+        include_global_offset : bool, optional
+            Whether to fit a uniform background offset along with the
+            astrophysical background model. This corrects for offsets induced
+            by ramp fitting or use of the median subtraction step. Default is
+            True.
+        include_stellar_psf_component : bool, optional
+            Whether to include a stellar PSF model component when optimizing
+            the background model. Default is True.
+        generate_plot : bool, optional 
+            Whether to generate a plot showing the data before and after
+            subtraction along with the model and masked residuals. Default is
+            True.
+        save_model : bool, optional
+            Whether to save the optimized background model. Default is False.
+        use_jbt_background : bool, optional
+            Whether to use the JWST Backgrounds Tool to estimate the background
+            surface brightness for data without coverage of ND squares.
+            Requires that jwst_backgrounds is installed. Default is False.
+        bgmodel_dir : str, optional
+            Path to the directory containing the normalized background model
+            component FITS files to use (or to which they should be
+            downloaded). If None, uses spaceKLIP/resources/nircam_bg_models/.
+            Default is None.
+        background_sb : dict, optional
+            A dictionary of fixed background surface brightness (SB) values (in
+            the same units as the data) to adopt for any included concatenation
+            keys. For each key in database.obs, if background_sb[key] is None
+            or if the key is not in background_sb, the background SB will be
+            fit for all observations of that concatenation if possible.
+            Otherwise, background_sb[key] should be an array-like of float or
+            None having the same length as database.obs[key]. If
+            background_sb[key][j] is None, the jth frame's background SB will
+            be fit, otherwise it will be fixed to the value
+            background_sb[key][j]. Default is {}.
+        restrict_to : str or None, optional
+            Restrict the background subtraction to a specific key in the
+            database. Default is None.
+        """
 
+        def get_jbt_background_est(t, ra, dec, wavelength):
+            """
+            Uses the JWST Backgrounds tool to estimate the background surface
+            brightness at a given time, position, and wavelength. 
+            """
+            from jwst_backgrounds import jbt
+            from astropy.time import Time
+            tobs = Time(t, format='mjd')
+            bkg = jbt.background(ra, dec, wavelength)
+            calendar = bkg.bkg_data['calendar']
+            tobs0 = Time(f'{tobs.datetime.year}-01-01T00:00:00')
+            thisday = int(np.round((tobs.mjd-tobs0.mjd)+1))
+            Fbg = bkg.bathtub['total_thiswave'][np.where(thisday == calendar)[0][0]]
+            return Fbg
+        
+        def background_objective(p, im, bg0, psf0, optmask, q=5):
+            """
+            Objective function for fitting the multi-component background model
+            using LMFit.
+            """
+            fbg, bg_offset, fpsf = [p[key] for key in p]
+            res = (im - fbg*bg0 - bg_offset - fpsf*psf0)[optmask]
+            low, upp = np.nanpercentile(res, [q, 100.-q])
+            return np.abs(res[(res >= low) & (res <= upp)])
+    
+        def get_stellar_model_path(key, bgmodel_dir):
+            """
+            Searches for the correct stellar model component on disk and
+            fetches from an online repository if needed. Returns the path to
+            the FITS file.
+            """
+            psffile = f'{bgmodel_dir}{key}_psf0.fits'
+            if not os.path.exists(psffile):
+                with fits.open(f'https://github.com/kdlawson/nircam_bgsub_go4050/raw/main/nominal_bgmodels/{key}_psf0.fits') as hdul:
+                    hdul.writeto(psffile)
+            return psffile
+
+        def get_background_model_path(key, bgmodel_dir):
+            """
+            Searches for the correct background model component on disk and
+            fetches from an online repository if needed. Returns the path to
+            the FITS file.
+            """
+            bgfile = f'{bgmodel_dir}{key}_background0.fits'
+            if not os.path.exists(bgfile):
+                with fits.open(f'https://github.com/kdlawson/nircam_bgsub_go4050/raw/main/nominal_bgmodels/{key}_background0.fits') as hdul:
+                    hdul.writeto(bgfile)
+            return bgfile
+
+        output_dir = os.path.join(self.database.output_dir, subdir+'/')
+        if not os.path.isdir(output_dir):
+            os.makedirs(output_dir)
+            
+        if bgmodel_dir is None:
+            bgmodel_dir = os.path.join(os.path.split(os.path.abspath(__file__))[0], 'resources/nircam_bg_models/')
+        if not os.path.exists(bgmodel_dir):
+            os.makedirs(bgmodel_dir)
+
+        # Copy input SB dictionary so we can fill out / change values as needed.
+        bg_sb_dict = background_sb.copy()
+
+        for key in self.database.obs:
+            if ((restrict_to is not None) and (restrict_to not in key)) or not np.any(np.isin(self.database.obs[key]['TYPE'], ['SCI', 'REF'])):
+                continue
+
+            log.info('--> Concatenation ' + key)
+
+            # Fill out dictionary of SB values, replacing None with a fixed value where fitting is not possible (SW filters with LW coronagraphs).
+            if (key not in bg_sb_dict) or (bg_sb_dict[key] is None):
+                bg_sb_dict[key] = np.repeat(None, len(self.database.obs[key]))
+            for j,entry in enumerate(self.database.obs[key]):
+                if (entry['DETECTOR'] == 'NRCA2') and (entry['CORONMSK'] in ['MASK335R', 'MASK430R', 'MASKLWB']) and (entry['SUBARRAY'] != 'FULL') and (bg_sb_dict[key][j] is None): 
+                    if use_jbt_background:
+                        try:
+                            bg_sb_dict[key][j] = get_jbt_background_est(entry['EXPSTART'], entry['TARG_RA'], entry['TARG_DEC'], entry['CWAVEL'])
+                        except ModuleNotFoundError:
+                            raise ModuleNotFoundError("""
+                            JBT background estimation requires
+                            the jwst_backgrounds package. Either
+                            install jwst_backgrounds or rerun
+                            with use_jbt_background=False.
+                            """)
+                    else:
+                        bg_sb_dict[key][j] = 0.
+
+            db_tab = self.database.obs[key]
+
+            fwhm = db_tab['CWAVEL'][0] * 1e-6 / 5.2 * 180. / np.pi * 3600. / db_tab['PIXSCALE'][0]
+            blur_fwhm = db_tab['BLURFWHM'][0]
+            if np.isfinite(blur_fwhm):
+                blur_sigma = blur_fwhm/np.sqrt(8.*np.log(2.))
+            else:
+                blur_sigma = None
+
+            # Load the normalized stellar PSF model component
+            if include_stellar_psf_component:
+                psffile = get_stellar_model_path(key, bgmodel_dir=bgmodel_dir)
+                with fits.open(psffile) as hdul:
+                    psf0_osamp, hpsf0 = hdul['OVERSAMP'].data, hdul['OVERSAMP'].header
+                osamp = hpsf0['OSAMP']
+                c_psf0_osamp = np.array([hpsf0['CRPIX1'], hpsf0['CRPIX2']])-1
+                if blur_sigma is not None:
+                    psf0_osamp = gaussian_filter(psf0_osamp, blur_sigma*osamp)
+
+            # Load the normalized BG model component
+            if not np.all(bg_sb_dict[key] == 0):
+                bgfile = get_background_model_path(key, bgmodel_dir=bgmodel_dir)
+                with fits.open(bgfile) as hdul:
+                    bg0_osamp, hbg0 = hdul['OVERSAMP'].data, hdul['OVERSAMP'].header
+                c_coron_bg0 = np.array([hbg0['CRPIX1'], hbg0['CRPIX2']])-1
+                osamp = hbg0['OSAMP']
+                # Apply any blurring used for the data:
+                if blur_sigma is not None:
+                    bg0_osamp = gaussian_filter(bg0_osamp, blur_sigma*osamp)
+
+            files = db_tab['FITSFILE']
+
+            c_star = np.array([db_tab['CRPIX1'][0], db_tab['CRPIX2'][0]])-1
+
+            h1 = fits.getheader(files[0], ext=1)
+            ny, nx = h1['NAXIS2'], h1['NAXIS1']
+
+            rmap = np.sqrt((np.arange(0, nx, dtype=np.float32)-c_star[0])**2 + (np.arange(0, ny, dtype=np.float32)-c_star[1])[:, np.newaxis]**2)
+            rmap_nfwhm = rmap/fwhm # Map of each pixel's distance from the location of the star in units of the effective PSF FWHM
+
+            # With no alignment wrapping, the stellar PSF model should be the same for all frames, so we'll just set it up once outside the loop over files.
+            if not align_wrapped:
+                if include_stellar_psf_component:
+                    c_star_osamp = c_star*osamp + 0.5*(osamp-1)
+                    psf0_osamp_crop = webbpsf_ext.image_manip.crop_image(psf0_osamp, [ny*osamp, nx*osamp], 
+                                                                        xyloc=c_psf0_osamp, delx=c_star_osamp[0]-(nx*osamp-1)/2.,
+                                                                        dely=c_star_osamp[1]-(ny*osamp-1)/2.)
+                    psf0_crop = webbpsf_ext.image_manip.frebin(psf0_osamp_crop, scale=1/osamp, total=False)
+                else:
+                    psf0_crop = np.zeros((ny,nx), dtype=np.float32)
+                            
+            for j,f in enumerate(files):
+                if db_tab[j]['TYPE'] not in ['SCI', 'REF']:
+                    continue
+
+                head, tail = os.path.split(f)
+                log.info('  --> NIRCam Background Subtraction: ' + tail)
+
+                # Assume alignment and background differences between integrations are negligible, so we can use the higher SNR coadded exposure
+                with fits.open(f) as hdul:
+                    ints = hdul['SCI'].data
+                    errs = hdul['ERR'].data
+                    h1 = hdul['SCI'].header
+                    mask_offset = np.nanmedian(hdul['MASKOFFS'].data, axis=0)
+                    imshift = np.nanmedian(hdul['IMSHIFTS'].data, axis=0)
+
+                if np.ndim(ints) == 3:
+                    med = np.nanmedian(ints, axis=0)
+                    nsample = np.sum(np.isfinite(ints), axis=0)
+                    err = np.sqrt(np.nansum(errs**2, axis=0))/nsample
+                else: # In case using coadded data saved with only two dims
+                    med, err = ints, errs
+
+                c_coron = c_star - mask_offset # post-alignment mask center position
+
+                if align_wrapped:
+                    if bg_sb_dict[key][j] == 0:
+                        bg0_crop = np.zeros_like(med)
+                    else:
+                        c_coron_osamp_preshift = (c_coron-imshift)*osamp + 0.5*(osamp-1)
+                        bg0_osamp_crop = webbpsf_ext.image_manip.crop_image(bg0_osamp, [ny*osamp, nx*osamp], 
+                                                                            xyloc=c_coron_bg0, delx=c_coron_osamp_preshift[0]-(nx*osamp-1)/2.,
+                                                                            dely=c_coron_osamp_preshift[1]-(ny*osamp-1)/2.)
+                        bg0_osamp_crop = ut.imshift(bg0_osamp_crop, imshift*osamp, pad=False)
+                        bg0_crop = webbpsf_ext.image_manip.frebin(bg0_osamp_crop, scale=1/osamp, total=False) # Downsample to detector resolution
+
+                    if include_stellar_psf_component:
+                        c_star_osamp_preshift = (c_star-imshift)*osamp + 0.5*(osamp-1)
+                        psf0_osamp_crop = webbpsf_ext.image_manip.crop_image(psf0_osamp, [ny*osamp, nx*osamp], 
+                                                                            xyloc=c_psf0_osamp, delx=c_star_osamp_preshift[0]-(nx*osamp-1)/2.,
+                                                                            dely=c_star_osamp_preshift[1]-(ny*osamp-1)/2.)
+                        psf0_osamp_crop = ut.imshift(psf0_osamp_crop, imshift*osamp, pad=False)
+                        psf0_crop = webbpsf_ext.image_manip.frebin(psf0_osamp_crop, scale=1/osamp, total=False)
+                    else:
+                        psf0_crop = np.zeros_like(med)
+                else:
+                    if bg_sb_dict[key][j] == 0:
+                        bg0_crop = np.zeros_like(med)
+                    else:
+                        c_coron_osamp = c_coron*osamp + 0.5*(osamp-1)
+                        bg0_osamp_crop = webbpsf_ext.image_manip.crop_image(bg0_osamp, [ny*osamp, nx*osamp], 
+                                                                            xyloc=c_coron_bg0, delx=c_coron_osamp[0]-(nx*osamp-1)/2.,
+                                                                            dely=c_coron_osamp[1]-(ny*osamp-1)/2.)
+                        bg0_crop = webbpsf_ext.image_manip.frebin(bg0_osamp_crop, scale=1/osamp, total=False) # Downsample to detector resolution
+
+                if bg_sb_dict[key][j] is None:
+                    fbg0 = 1
+                    fbg_vary = True
+                else:
+                    fbg0 = bg_sb_dict[key][j]
+                    fbg_vary = False
+
+                optmask = rmap_nfwhm > r_excl_nfwhm
+                snr = med/err # SNR estimate using FITS ERR extension 
+                med_snr = np.nanmedian(snr[optmask]) # Median SNR in the nominal background area
+                low_snr = snr <= (med_snr+mask_snr_threshold) # High SNR features are those more than mask_snr_threshold sigma above the approximate BG SNR
+                optmask = optmask & low_snr
+
+                bg_offset0 = 0
+                fpsf0 = 1. if not include_stellar_psf_component else np.nansum((med-np.nanmedian(med[optmask])) * psf0_crop) / np.nansum((psf0_crop ** 2))
+
+                # Prepare the lmfit Parameters object with default values and sensible bounds
+                p = lmfit.Parameters()
+                p.add('fbg', value=fbg0, min=0, max=np.inf, vary=fbg_vary)
+                p.add('bg_offset', value=bg_offset0, min=-np.inf, max=0, vary=include_global_offset)
+                p.add('fpsf', value=fpsf0, min=0, max=fpsf0*10, vary=include_stellar_psf_component)
+
+                # Optimize the background model
+                result = lmfit.minimize(background_objective, p, args=(med, bg0_crop, psf0_crop, optmask, q_clip), method='powell')
+                pfin = result.params.valuesdict()
+                logstr = ', '.join([f"{key}:{value:.3f}" for key, value in pfin.items()])
+                log.info('  --> NIRCam Background Subtraction: ' + logstr)
+
+                # Compute the final background model and stellar PSF component:
+                bg = pfin['fbg']*bg0_crop + pfin['bg_offset']
+                psf = psf0_crop*pfin['fpsf']
+
+                f_out = output_dir+os.path.basename(os.path.normpath(f))
+
+                with fits.open(f) as hdul:
+                    hdul[1].data -= bg # Subtract the BG model from the original file
+                    hdul.writeto(f_out, overwrite=True) # Save to disk in the output directory
+                    if save_model:
+                        f_model = f_out.replace('.fits', '_background_model.fits')
+                        hdu1 = fits.ImageHDU(bg, name='BG')
+                        hdul_model = fits.HDUList([hdul[0], hdu1])
+                        if include_stellar_psf_component:
+                            hdul_model.append(fits.ImageHDU(psf, name='STELLAR_PSF'))
+
+                        # Add fit params to header
+                        hdul_model[0].header.update(pfin) 
+
+                        # Add all relevant settings to the header
+                        hdul_model[0].header.update(dict(include_global_offset=include_global_offset,
+                                                         mask_snr_threshold=mask_snr_threshold, r_excl_nfwhm=r_excl_nfwhm, q=q_clip,
+                                                         include_stellar_psf_component=include_stellar_psf_component))
+                        hdul_model.writeto(f_model, overwrite=True)
+                        hdul_model.close()
+
+                if generate_plot:
+                    res = med - bg
+                    res_psfsub = res - psf
+                    low, upp = np.nanpercentile((res_psfsub)[optmask], [q_clip, 100.-q_clip])
+                    res_inliers = np.where((res_psfsub >= low) & (res_psfsub <= upp) & optmask, res_psfsub, np.nan)
+                    cmap = copy.copy(mpl.colormaps.get_cmap('RdBu_r'))
+                    cmap.set_bad('white')
+                    clim = np.array([-1,1])*np.nanpercentile(np.abs(med), 90)
+                    plot_mask = np.isfinite(med)
+                    plot_ims = np.where(plot_mask, [med, bg, res_inliers, med-bg], np.nan)
+                    fig,axes = plt.subplots(1,4,figsize=(15,3.5), sharex=True, sharey=True)
+                    labels = ['Data', 'BG Model', 'Masked Residuals', 'Data (BG-subtracted)']
+                    norm = mpl.colors.Normalize(*clim)
+                    for ind,ax in enumerate(axes):
+                        ax.imshow(plot_ims[ind], norm=norm, interpolation='None', origin='lower', cmap=cmap)
+                        ax.set_title(labels[ind], pad=10)
+                    fig.tight_layout(w_pad=1.00)
+                    fig.colorbar(mpl.cm.ScalarMappable(norm, cmap), ax=axes, pad=0.015, label='[MJy / Sr]')     
+                    plt.savefig(output_dir+os.path.basename(os.path.normpath(f)).replace('.fits', '_background_model.pdf'), bbox_inches='tight')
+                    plt.close(fig)
+
+                mask_in = db_tab['MASKFILE'][j]
+                mask = ut.read_msk(mask_in)
+                mask_out = ut.write_msk(mask_in, mask, f_out)
+                self.database.update_obs(key, j, f_out, mask_out)
