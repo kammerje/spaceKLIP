@@ -1048,7 +1048,7 @@ class AnalysisTools():
                                           use_coeff=False)
 
                 # NOTE: if minmethod not None, it will split the fit into a fitmethod (e.g. mcmc) for the estimation
-                # of position and flux, and a minmethod (e.g. Powel) to fit the extention of the source using a
+                # of position and flux, and a minmethod (e.g. Powell) to fit the extension of the source using a
                 # psf convolved by a 2D Gaussian and a minimization approach.
                 if minmethod is not None:
                     split_fit = True
@@ -1484,7 +1484,7 @@ class AnalysisTools():
                                 nthreads = kwargs['nthreads']
 
                             # Run the MCMC fit.
-                            chain_output = os.path.join(output_dir_kl, key + '-bka_chain_c%.0f' % (k + 1) + '.pkl')
+                            chain_output = os.path.join(output_dir_comp, key + '-bka_chain_c%.0f' % (k + 1) + '.pkl')
                             fma.fit_astrometry(nwalkers=nwalkers,
                                                nburn=nburn,
                                                nsteps=nsteps,
@@ -1559,7 +1559,7 @@ class AnalysisTools():
                                 nthreads = kwargs['nthreads']
 
                             # Run the MCMC fit.
-                            chain_output = os.path.join(output_dir_kl, key + '-bka_chain_c%.0f' % (k + 1) + '.pkl')
+                            chain_output = os.path.join(output_dir_comp, key + '-bka_chain_c%.0f' % (k + 1) + '.pkl')
                             fma.fit_astrometry(nwalkers=nwalkers,
                                                nburn=nburn,
                                                nsteps=nsteps,
@@ -1567,11 +1567,11 @@ class AnalysisTools():
                                                chain_output=chain_output)
                             
                             # Plot the MCMC fit results.
-                            path = os.path.join(output_dir_kl, key + '-corner_c%.0f' % (k + 1) + '.pdf')
+                            path = os.path.join(output_dir_comp, key + '-corner_c%.0f' % (k + 1) + '.pdf')
                             fig = fma.make_corner_plot()
                             fig.savefig(path)
                             plt.close(fig)
-                            path = os.path.join(output_dir_kl, key + '-model_c%.0f' % (k + 1) + '.pdf')
+                            path = os.path.join(output_dir_comp, key + '-model_c%.0f' % (k + 1) + '.pdf')
                             fig = fma.best_fit_and_residuals()
                             fig.savefig(path)
                             plt.close(fig)
@@ -1597,14 +1597,14 @@ class AnalysisTools():
                                 mstar_err_temp = mstar_err
                             appmag = mstar[filt] + delmag  # vegamag
                             appmag_err = np.sqrt(mstar_err_temp**2 + delmag_err**2)
-                            fitsfile = os.path.join(output_dir_kl, key + '-fitpsf_c%.0f' % (k + 1) + '.fits')
+                            fitsfile = os.path.join(output_dir_comp, key + '-fitpsf_c%.0f' % (k + 1) + '.fits')
 
                             if split_fit:
                                 # fit the sources with a 2D gaussian only to evaluate the sigma_x, sigma_y and theta
                                 fig, result = best_convfit_and_residuals(fma,
                                                                          minmethod=minmethod,
                                                                          initial_params=gauss_param_guesses)
-                                path = os.path.join(output_dir_kl, key + '-model_conv_c%.0f' % (k + 1) + '.pdf')
+                                path = os.path.join(output_dir_comp, key + '-model_conv_c%.0f' % (k + 1) + '.pdf')
                                 fig.savefig(path)
                                 plt.close(fig)
 
@@ -1670,7 +1670,7 @@ class AnalysisTools():
                         
                         # Nested sampling.
                         elif fitmethod == 'nested':
-                            output_dir_ns = os.path.join(output_dir_kl, 'temp-multinest/')
+                            output_dir_ns = os.path.join(output_dir_comp, 'temp-multinest/')
                             
                             # Initialize PlanetEvidence module.
                             try:
@@ -1706,13 +1706,13 @@ class AnalysisTools():
                             evidence_ratio = fm_evidence - null_evidence
                             
                             # Plot the pymultinest fit results.
-                            path = os.path.join(output_dir_kl, key + '-corner_c%.0f' % (k + 1) + '.pdf')
+                            path = os.path.join(output_dir_comp, key + '-corner_c%.0f' % (k + 1) + '.pdf')
                             corn, nullcorn = fit.fit_plots()
                             plt.close()
                             corn
                             plt.savefig(path)
                             plt.close()
-                            path = os.path.join(output_dir_kl, key + '-model_c%.0f' % (k + 1) + '.pdf')
+                            path = os.path.join(output_dir_comp, key + '-model_c%.0f' % (k + 1) + '.pdf')
                             fit.fm_residuals()
                             plt.savefig(path)
                             plt.close()
@@ -1738,7 +1738,7 @@ class AnalysisTools():
                                 mstar_err_temp = mstar_err
                             appmag = mstar[filt] + delmag  # vegamag
                             appmag_err = np.sqrt(mstar_err_temp**2 + delmag_err**2)
-                            fitsfile = os.path.join(output_dir_kl, key + '-fitpsf_c%.0f' % (k + 1) + '.fits')
+                            fitsfile = os.path.join(output_dir_comp, key + '-fitpsf_c%.0f' % (k + 1) + '.fits')
                             tab.add_row((k + 1,
                                          -(fit.fit_x.bestfit - data_centx) * pxsc_arcsec,  # arcsec
                                          fit.fit_x.error * pxsc_arcsec,  # arcsec
@@ -1801,7 +1801,7 @@ class AnalysisTools():
                             text.set_path_effects([PathEffects.withStroke(linewidth=3, foreground='white')])
                             ax[3].set_title('Residuals after bg. subtraction')
                             plt.tight_layout()
-                            path = os.path.join(output_dir_kl, key + '-bgest_c%.0f' % (k + 1) + '.pdf')
+                            path = os.path.join(output_dir_comp, key + '-bgest_c%.0f' % (k + 1) + '.pdf')
                             plt.savefig(path)
                             plt.close()
 
@@ -1894,7 +1894,12 @@ class AnalysisTools():
 
                 # Update source database.
                 self.database.update_src(key, j, tab)
-        
+
+                # Save the results table.
+                output_ecsv_path = os.path.join(output_dir_comp, mode + '_NANNU' + str(annuli) + '_NSUBS' + str(
+                    subsections) + '_' + key + '-results_c%.0f' % (k + 1) + '.ecsv')
+                tab.write(output_ecsv_path, format='ascii.ecsv', overwrite=True)
+                print(f'Table saved to {output_ecsv_path}')
         pass
 
 def loss_function(params,
