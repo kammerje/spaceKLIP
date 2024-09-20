@@ -93,6 +93,7 @@ class AnalysisTools():
                      subdir='rawcon',
                      output_filetype='npy',
                      plot_xlim=(0,10),
+                     save_figures=True,
                      **kwargs):
         """
         Compute the raw contrast relative to the provided host star flux.
@@ -120,6 +121,8 @@ class AnalysisTools():
         output_filetype : str
             File type to save the raw contrast information to. Options are 'ecsv'
             or 'npy'.
+        save_figures : bool, optional
+            Save the plots in a PDF?
         
         Returns
         -------
@@ -359,7 +362,11 @@ class AnalysisTools():
                                         transform=ax.transAxes, color='black', verticalalignment='top', fontsize=9)
                     plt.colorbar(mappable=ax.images[0], label=self.database.red[key]['BUNIT'][j])
                     plt.tight_layout()
-                    plt.savefig(fitsfile[:-5] + '_masked.pdf')
+                    if save_figures:
+                        output_file = fitsfile[:-5] + '_masked.pdf'
+                        plt.savefig(output_file)
+                        log.info(f" Plot saved in {output_file}")
+                    plt.show()
                     plt.close(fig)
 
                 # Plot raw contrast.
@@ -387,7 +394,11 @@ class AnalysisTools():
                             title_fontsize=10)
                     ax.set_title(f'Raw contrast in {filt}, {psfsub_strategy}')
                     plt.tight_layout()
-                    plt.savefig(fitsfile[:-5] + '_rawcon.pdf')
+                    if save_figures:
+                        output_file = fitsfile[:-5] + '_rawcon.pdf'
+                        plt.savefig(output_file)
+                        log.info(f" Plot saved in {output_file}")
+                    plt.show()
                     plt.close(fig)
 
                 if output_filetype.lower()=='ecsv':
@@ -780,9 +791,8 @@ class AnalysisTools():
                     KLmodes = klip_args['numbasis'][ci]
                     ax.plot(rawseps[ci], corr, label='KL = {}'.format(KLmodes))
                 ax.legend(ncol=3, fontsize=10)
-                standardize_plots_annotate_save(ax, title=f'Injected companions in {filt}, {psfsub_strategy}, all KL modes',
-                                                ylabel='Throughput',
-                                                filename=save_string + '_allKL_throughput.pdf')
+                standardize_plots_annotate_save(ax, title=f'Injected companions in {filt}, {psfsub_strategy}, all KL modes', ylabel='Throughput',
+                    filename=save_string + '_allKL_throughput.pdf')
                 plt.close(fig)
 
 
@@ -860,6 +870,7 @@ class AnalysisTools():
                            save_preklip=False,
                            overwrite=True,
                            subdir='companions',
+                           save_figures=True,
                            **kwargs):
         """
         Extract the best fit parameters of a number of companions from each
@@ -928,6 +939,8 @@ class AnalysisTools():
         subdir : str, optional
             Name of the directory where the data products shall be saved. The
             default is 'companions'.
+        save_figures : bool, optional
+            Save the plots in a PDF?
         
         Returns
         -------
@@ -1060,7 +1073,6 @@ class AnalysisTools():
                         gauss_param_guesses = [0.3,0.3,0,0]
                     else:
                         gauss_param_guesses = [kwargs['sigma_xguess'], kwargs['sigma_yguess'], kwargs['scale_guess'], kwargs['theta_guess']]
-
 
                     # Loop through companions.
                     tab = Table(names=('ID',
@@ -1318,8 +1330,8 @@ class AnalysisTools():
                     
                     # Compute the FM dataset if it does not exist yet, or if
                     # overwrite is True.
-                    fmdataset = os.path.join(output_dir_fm, 'FM-' + key + '-fmpsf-KLmodes-all.fits')
-                    klipdataset = os.path.join(output_dir_fm, 'FM-' + key + '-klipped-KLmodes-all.fits')
+                    fmdataset = os.path.join(output_dir_fm, 'FM-' + mode + '_NANNU' + str(annuli) + '_NSUBS' + str(subsections) + '_' + key + '-fmpsf-KLmodes-all.fits')
+                    klipdataset = os.path.join(output_dir_fm, 'FM-' + mode + '_NANNU' + str(annuli) + '_NSUBS' + str(subsections) + '_' + key + '-klipped-KLmodes-all.fits')
                     if overwrite or (not os.path.exists(fmdataset) or not os.path.exists(klipdataset)):
                         
                         # Initialize the pyKLIP FM class. Use sep/pa relative
@@ -1357,7 +1369,7 @@ class AnalysisTools():
                                         fm_class=fm_class,
                                         mode=mode,
                                         outputdir=output_dir_fm,
-                                        fileprefix='FM-' + key,
+                                        fileprefix='FM-' + mode + '_NANNU' + str(annuli) + '_NSUBS' + str(subsections) + '_' + key,
                                         annuli=annuli,
                                         subsections=subsections,
                                         movement=1.,
@@ -1484,7 +1496,7 @@ class AnalysisTools():
                                 nthreads = kwargs['nthreads']
 
                             # Run the MCMC fit.
-                            chain_output = os.path.join(output_dir_comp, key + '-bka_chain_c%.0f' % (k + 1) + '.pkl')
+                            chain_output = os.path.join(output_dir_comp, mode + '_NANNU' + str(annuli) + '_NSUBS' + str(subsections) + '_' + key + '-bka_chain_c%.0f' % (k + 1) + '.pkl')
                             fma.fit_astrometry(nwalkers=nwalkers,
                                                nburn=nburn,
                                                nsteps=nsteps,
@@ -1559,7 +1571,7 @@ class AnalysisTools():
                                 nthreads = kwargs['nthreads']
 
                             # Run the MCMC fit.
-                            chain_output = os.path.join(output_dir_comp, key + '-bka_chain_c%.0f' % (k + 1) + '.pkl')
+                            chain_output = os.path.join(output_dir_comp, mode + '_NANNU' + str(annuli) + '_NSUBS' + str(subsections) + '_' + key + '-bka_chain_c%.0f' % (k + 1) + '.pkl')
                             fma.fit_astrometry(nwalkers=nwalkers,
                                                nburn=nburn,
                                                nsteps=nsteps,
@@ -1567,13 +1579,17 @@ class AnalysisTools():
                                                chain_output=chain_output)
                             
                             # Plot the MCMC fit results.
-                            path = os.path.join(output_dir_comp, key + '-corner_c%.0f' % (k + 1) + '.pdf')
-                            fig = fma.make_corner_plot()
-                            fig.savefig(path)
+                            if save_figures:
+                                path = os.path.join(output_dir_comp, mode + '_NANNU' + str(annuli) + '_NSUBS' + str(subsections) + '_' + key + '-corner_c%.0f' % (k + 1) + '.pdf')
+                                fig.suptitle(mode + '_NANNU' + str(annuli) + '_NSUBS' + str(subsections) + '_' + key)
+                                fig.savefig(path)
+                            plt.show()
                             plt.close(fig)
-                            path = os.path.join(output_dir_comp, key + '-model_c%.0f' % (k + 1) + '.pdf')
-                            fig = fma.best_fit_and_residuals()
-                            fig.savefig(path)
+                            if save_figures:
+                                path = os.path.join(output_dir_comp, mode + '_NANNU' + str(annuli) + '_NSUBS' + str(subsections) + '_' + key + '-model_c%.0f' % (k + 1) + '.pdf')
+                                fig.suptitle(mode + '_NANNU' + str(annuli) + '_NSUBS' + str(subsections) + '_' + key)
+                                fig.savefig(path)
+                            plt.show()
                             plt.close(fig)
 
                             # Write the MCMC fit results into a table.
@@ -1597,15 +1613,19 @@ class AnalysisTools():
                                 mstar_err_temp = mstar_err
                             appmag = mstar[filt] + delmag  # vegamag
                             appmag_err = np.sqrt(mstar_err_temp**2 + delmag_err**2)
-                            fitsfile = os.path.join(output_dir_comp, key + '-fitpsf_c%.0f' % (k + 1) + '.fits')
+                            fitsfile = os.path.join(output_dir_comp, mode + '_NANNU' + str(annuli) + '_NSUBS' + str(subsections) + '_' + key + '-fitpsf_c%.0f' % (k + 1) + '.fits')
 
                             if split_fit:
                                 # fit the sources with a 2D gaussian only to evaluate the sigma_x, sigma_y and theta
                                 fig, result = best_convfit_and_residuals(fma,
                                                                          minmethod=minmethod,
                                                                          initial_params=gauss_param_guesses)
-                                path = os.path.join(output_dir_comp, key + '-model_conv_c%.0f' % (k + 1) + '.pdf')
-                                fig.savefig(path)
+
+                                if save_figures:
+                                    path = os.path.join(output_dir_comp, mode + '_NANNU' + str(annuli) + '_NSUBS' + str(subsections) + '_' + key + '-model_conv_c%.0f' % (k + 1) + '.pdf')
+                                    fig.suptitle(mode + '_NANNU' + str(annuli) + '_NSUBS' + str(subsections) + '_' + key)
+                                    fig.savefig(path)
+                                plt.show()
                                 plt.close(fig)
 
                                 tab.add_row((k + 1,
@@ -1706,16 +1726,19 @@ class AnalysisTools():
                             evidence_ratio = fm_evidence - null_evidence
                             
                             # Plot the pymultinest fit results.
-                            path = os.path.join(output_dir_comp, key + '-corner_c%.0f' % (k + 1) + '.pdf')
-                            corn, nullcorn = fit.fit_plots()
-                            plt.close()
-                            corn
-                            plt.savefig(path)
-                            plt.close()
-                            path = os.path.join(output_dir_comp, key + '-model_c%.0f' % (k + 1) + '.pdf')
+                            fit.fit_plots()
+                            if save_figres:
+                                path = os.path.join(output_dir_comp, mode + '_NANNU' + str(annuli) + '_NSUBS' + str(subsections) + '_' + key + '-corner_c%.0f' % (k + 1) + '.pdf')
+                                plt.savefig(path)
+                            plt.show()
+                            plt.close(fig)
+
                             fit.fm_residuals()
-                            plt.savefig(path)
-                            plt.close()
+                            if save_figres:
+                                path = os.path.join(output_dir_comp, mode + '_NANNU' + str(annuli) + '_NSUBS' + str(subsections) + '_' + key + '-model_c%.0f' % (k + 1) + '.pdf')
+                                plt.savefig(path)
+                            plt.show()
+                            plt.close(fig)
                             
                             # Write the pymultinest fit results into a table.
                             flux_jy = fit.fit_flux.bestfit * guess_flux
@@ -1738,7 +1761,7 @@ class AnalysisTools():
                                 mstar_err_temp = mstar_err
                             appmag = mstar[filt] + delmag  # vegamag
                             appmag_err = np.sqrt(mstar_err_temp**2 + delmag_err**2)
-                            fitsfile = os.path.join(output_dir_comp, key + '-fitpsf_c%.0f' % (k + 1) + '.fits')
+                            fitsfile = os.path.join(output_dir_comp, mode + '_NANNU' + str(annuli) + '_NSUBS' + str(subsections) + '_' + key + '-fitpsf_c%.0f' % (k + 1) + '.fits')
                             tab.add_row((k + 1,
                                          -(fit.fit_x.bestfit - data_centx) * pxsc_arcsec,  # arcsec
                                          fit.fit_x.error * pxsc_arcsec,  # arcsec
@@ -1800,10 +1823,12 @@ class AnalysisTools():
                             text = ax[3].text(0.99, 0.99, 'Contrast = %.3e' % con, ha='right', va='top', transform=ax[3].transAxes)
                             text.set_path_effects([PathEffects.withStroke(linewidth=3, foreground='white')])
                             ax[3].set_title('Residuals after bg. subtraction')
-                            plt.tight_layout()
-                            path = os.path.join(output_dir_comp, key + '-bgest_c%.0f' % (k + 1) + '.pdf')
-                            plt.savefig(path)
-                            plt.close()
+                            plt.show()
+                            if save_figures:
+                                path = os.path.join(output_dir_comp, mode + '_NANNU' + str(annuli) + '_NSUBS' + str(subsections) + '_' + key + '-bgest_c%.0f' % (k + 1) + '.pdf')
+                                plt.savefig(path)
+                                log.info(f" Plot saved in {path}")
+                                plt.close()
 
                     # Subtract companion before fitting the next one.
                     if subtract or inject:
@@ -1816,13 +1841,13 @@ class AnalysisTools():
                             dec = companions[k][1]  # arcsec
                             con = companions[k][2]
                             inputflux = con * np.array(all_offsetpsfs_nohpf)  # positive to inject companion
-                            fileprefix = 'INJECTED-' + key
+                            fileprefix = 'INJECTED-' + mode + '_NANNU' + str(annuli) + '_NSUBS' + str(subsections) + '_' + key
                         else:
                             ra = tab[-1]['RA']  # arcsec
                             dec = tab[-1]['DEC']  # arcsec
                             con = tab[-1]['CON']
                             inputflux = -con * np.array(all_offsetpsfs_nohpf)  # negative to remove companion
-                            fileprefix = 'KILLED-' + key
+                            fileprefix = 'KILLED-' + mode + '_NANNU' + str(annuli) + '_NSUBS' + str(subsections) + '_' + key
                         sep = np.sqrt(ra**2 + dec**2) / pxsc_arcsec  # pix
                         pa = np.rad2deg(np.arctan2(ra, dec))  # deg
                         thetas = [pa + 90. - all_pa for all_pa in all_pas]
