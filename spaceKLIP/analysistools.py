@@ -1598,14 +1598,14 @@ class AnalysisTools():
                             
                             # Plot the pymultinest fit results.
                             corn, nullcorn = fit.fit_plots()
-                            if save_figres:
+                            if save_figures:
                                 path = os.path.join(output_dir_comp, mode + '_NANNU' + str(annuli) + '_NSUBS' + str(subsections) + '_' + key + '-corner_c%.0f' % (k + 1) + '.pdf')
                                 plt.savefig(path)
                             plt.show()
                             plt.close(fig)
                             
                             fit.fm_residuals()
-                            if save_figres:
+                            if save_figures:
                                 path = os.path.join(output_dir_comp, mode + '_NANNU' + str(annuli) + '_NSUBS' + str(subsections) + '_' + key + '-model_c%.0f' % (k + 1) + '.pdf')
                                 plt.savefig(path)
                             plt.show()
