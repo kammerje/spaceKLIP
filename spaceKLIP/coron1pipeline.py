@@ -714,7 +714,7 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
     pipeline.ramp_fit.suppress_one_group = kwargs.get('suppress_one_group', False)
     # Number of processor cores to use during ramp fitting process
     # 'none', 'quarter', 'half', or 'all'
-    pipeline.ramp_fit.maximum_cores      = kwargs.get('maximum_cores', 'quarter')
+    pipeline.ramp_fit.maximum_cores      = kwargs.get('maximum_cores', 'none')
 
     # Set parameters from step dictionary
     for key1 in steps.keys():
