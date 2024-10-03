@@ -598,7 +598,7 @@ def run_single_file(fitspath, output_dir, steps={}, verbose=False, **kwargs):
             Default: False.
         - ramp_fit/maximum_cores : str, optional
             max number of parallel processes to create during ramp fitting.
-            'none', 'quarter', 'half', or 'all'. Default: 'quarter'.
+            'none', 'quarter', 'half', or 'all'. Default: 'none'.
 
         The default is {}. 
     
