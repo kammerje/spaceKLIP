@@ -208,10 +208,13 @@ class Database():
         else:
             allpaths = np.array(datapaths)
         Nallpaths = len(allpaths)
+
         for i in range(Nallpaths):
             hdul = pyfits.open(allpaths[i])
             head = hdul[0].header
-            data = hdul['SCI'].data
+            # Only read in the data if needed.
+            data = hdul['SCI'].data if not head.get('NINTS') else None
+
             if 'uncal' in allpaths[i]:
                 DATAMODL += ['STAGE0']
             elif 'rate' in allpaths[i] or 'rateints' in allpaths[i]:
@@ -248,7 +251,7 @@ class Database():
                 raise UserWarning('Data originates from unknown telescope')
             EXP_TYPE += [head.get('EXP_TYPE', 'UNKNOWN')]
             EXPSTART += [head.get('EXPSTART', np.nan)]
-            NINTS += [head.get('NINTS', data.shape[0] if data.ndim == 3 else 1)]
+            NINTS += [head.get('NINTS', data.shape[0] if data is not None and data.ndim == 3 else 1)]
             EFFINTTM += [head.get('EFFINTTM', np.nan)]
             IS_PSF += [head.get('IS_PSF', 'NONE')]
             SELFREF += [head.get('SELFREF', 'NONE')]
