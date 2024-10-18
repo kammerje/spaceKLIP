@@ -1330,6 +1330,10 @@ class AnalysisTools():
                     
                     # Compute the FM dataset if it does not exist yet, or if
                     # overwrite is True.
+                    # Compute the FM dataset.
+                    mode = self.database.red[key]['MODE'][j]
+                    annuli = int(self.database.red[key]['ANNULI'][j])
+                    subsections = int(self.database.red[key]['SUBSECTS'][j])
                     fmdataset = os.path.join(output_dir_fm, 'FM-' + mode + '_NANNU' + str(annuli) + '_NSUBS' + str(subsections) + '_' + key + '-fmpsf-KLmodes-all.fits')
                     klipdataset = os.path.join(output_dir_fm, 'FM-' + mode + '_NANNU' + str(annuli) + '_NSUBS' + str(subsections) + '_' + key + '-klipped-KLmodes-all.fits')
                     if overwrite or (not os.path.exists(fmdataset) or not os.path.exists(klipdataset)):
@@ -1350,11 +1354,7 @@ class AnalysisTools():
                                                      spectrallib_units='contrast',
                                                      field_dependent_correction=None,
                                                      input_psfs_pas=all_pas)
-                        
-                        # Compute the FM dataset.
-                        mode = self.database.red[key]['MODE'][j]
-                        annuli = int(self.database.red[key]['ANNULI'][j])
-                        subsections = int(self.database.red[key]['SUBSECTS'][j])
+
                         if not isinstance(highpass, bool):
                             if k == 0:
                                 highpass_temp = float(highpass)
@@ -1579,12 +1579,14 @@ class AnalysisTools():
                                                chain_output=chain_output)
                             
                             # Plot the MCMC fit results.
+                            fig = fma.make_corner_plot()
                             if save_figures:
                                 path = os.path.join(output_dir_comp, mode + '_NANNU' + str(annuli) + '_NSUBS' + str(subsections) + '_' + key + '-corner_c%.0f' % (k + 1) + '.pdf')
                                 fig.suptitle(mode + '_NANNU' + str(annuli) + '_NSUBS' + str(subsections) + '_' + key)
                                 fig.savefig(path)
                             plt.show()
                             plt.close(fig)
+                            fig = fma.best_fit_and_residuals()
                             if save_figures:
                                 path = os.path.join(output_dir_comp, mode + '_NANNU' + str(annuli) + '_NSUBS' + str(subsections) + '_' + key + '-model_c%.0f' % (k + 1) + '.pdf')
                                 fig.suptitle(mode + '_NANNU' + str(annuli) + '_NSUBS' + str(subsections) + '_' + key)
@@ -2068,12 +2070,12 @@ def estimate_extended(target,
 
     '''
     if initial_params is None:
-        initial_params = [0.1, 0.1, 0,1]
+        initial_params = [0.1, 0.1, 0, 0]
 
     if bounds is None:
         # Bounds for parameters (sigma_x, sigma_y, theta, intensity)
-        bounds = [(0.01, 20),  # sigma_x should be positive and within a reasonable range
-                  (0.01, 20),  # sigma_y should be positive and within a reasonable range
+        bounds = [(0.01, 5),  # sigma_x should be positive and within a reasonable range
+                  (0.01, 5),  # sigma_y should be positive and within a reasonable range
                   (-180, 180),  # theta should be between -180 and 180 degrees
                   (-1, 1)]  # log flux range should be positive and within a reasonable range
 
