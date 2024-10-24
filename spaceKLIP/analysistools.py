@@ -1939,7 +1939,7 @@ def loss_function(params,
     kernel = gaussian_kernel(sigma_x=sigma_x, sigma_y=sigma_y, theta_degrees=theta_degrees, n=6)
     convolved_image = convolve(offset_psf*10**scale, kernel)
 
-    mse = np.mean((target_array - convolved_image) ** 2)
+    mse = np.nanmean((target_array - convolved_image) ** 2)
     return mse
 
 def best_convfit_and_residuals(fma,
